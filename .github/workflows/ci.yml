@@ -48,3 +48,5 @@ jobs:
         run: main-review verify-standard --pretty
       - name: Prove final gate
         run: main-review final-proof --pretty
+      - name: Prove end-to-end review suite
+        run: main-review proof-suite --pretty
