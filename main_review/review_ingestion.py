@@ -14,7 +14,7 @@ from typing import Literal
 
 Classification = Literal["correct", "suggestion", "reject", "save_pattern", "unclassified"]
 
-CLASSIFICATION_ALIASES = {
+CLASSIFICATION_ALIASES: dict[str, Classification] = {
     "green": "correct",
     "correct": "correct",
     "fix": "correct",
@@ -65,28 +65,64 @@ class IngestionSummary:
 def normalize_classification(value: str | None) -> Classification:
     if not value:
         return "unclassified"
-    normalized = value.strip().lower().replace(" ", "_").replace("🟢", "green").replace("🟡", "yellow").replace("🔴", "red").replace("🧠", "brain")
-    return CLASSIFICATION_ALIASES.get(normalized, "unclassified")  # type: ignore[return-value]
+    normalized = (
+        value.strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("🟢", "green")
+        .replace("🟡", "yellow")
+        .replace("🔴", "red")
+        .replace("🧠", "brain")
+    )
+    return CLASSIFICATION_ALIASES.get(normalized, "unclassified")
+
+
+def _raw_comments_from_payload(payload: object) -> list[dict[str, object]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        comments = payload.get("comments", [])
+        if isinstance(comments, list):
+            return [item for item in comments if isinstance(item, dict)]
+    return []
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def load_external_comments(path: str | Path) -> list[ExternalReviewComment]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    raw_comments = payload.get("comments", payload if isinstance(payload, list) else [])
+    raw_comments = _raw_comments_from_payload(payload)
     comments: list[ExternalReviewComment] = []
     for item in raw_comments:
+        raw_tags = item.get("tags", [])
+        tags = [str(tag) for tag in raw_tags] if isinstance(raw_tags, list) else []
         comments.append(
             ExternalReviewComment(
                 source=str(item.get("source", "external-review")),
                 body=str(item.get("body", "")).strip(),
                 repository=str(item.get("repository", "")),
-                pr_number=item.get("pr_number"),
-                path=item.get("path"),
-                line=item.get("line"),
-                author=item.get("author"),
-                url=item.get("url"),
-                classification=normalize_classification(item.get("classification")),
+                pr_number=_optional_int(item.get("pr_number")),
+                path=_optional_str(item.get("path")),
+                line=_optional_int(item.get("line")),
+                author=_optional_str(item.get("author")),
+                url=_optional_str(item.get("url")),
+                classification=normalize_classification(_optional_str(item.get("classification"))),
                 reason=str(item.get("reason", "")),
-                tags=list(item.get("tags", [])),
+                tags=tags,
             )
         )
     return comments
