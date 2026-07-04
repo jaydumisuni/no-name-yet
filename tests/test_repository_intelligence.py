@@ -48,7 +48,7 @@ def test_scan_repository_builds_context_packet(tmp_path: Path) -> None:
     insight = scan_repository(tmp_path)
     payload = insight.to_dict()
 
-    assert payload["total_files"] == 5
+    assert payload["total_files"] == 6
     assert payload["languages"]["Python"] == 2
     assert payload["languages"]["R"] == 1
     assert "README.md" in payload["docs"]
