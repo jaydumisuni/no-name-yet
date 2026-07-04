@@ -11,6 +11,7 @@ from .evidence import collect_evidence
 from .github_collector import collect_github_comments_file
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
 from .memory_ingestion import write_learning_candidates_to_memory
+from .review_batch import batch_summary, run_review_learning_batch
 from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
 from .verdict import review_repository
@@ -43,6 +44,17 @@ def build_parser() -> argparse.ArgumentParser:
     collect_parser.add_argument("--repository", default="", help="Repository full name to attach when missing from comments.")
     collect_parser.add_argument("--pr-number", type=int, default=None, help="PR number to attach when missing from comments.")
     collect_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+
+    batch_parser = subparsers.add_parser("review-batch", help="Run collect -> ingest -> optional memory write for PR comments.")
+    batch_parser.add_argument("path", help="JSON file containing GitHub PR comments/timeline payload.")
+    batch_parser.add_argument("--root", default=".", help="Repository root containing .main-review/memory.json.")
+    batch_parser.add_argument("--repository", default="", help="Repository full name to attach when missing from comments.")
+    batch_parser.add_argument("--pr-number", type=int, default=None, help="PR number to attach when missing from comments.")
+    batch_parser.add_argument("--write-memory", action="store_true", help="Write learning candidates to Review Memory.")
+    batch_parser.add_argument("--status", default="proposed", choices=["proposed", "verified", "superseded", "rejected"])
+    batch_parser.add_argument("--tag", action="append", default=[], help="Only write candidates matching at least one tag. Can be repeated.")
+    batch_parser.add_argument("--summary-only", action="store_true", help="Print compact batch summary only.")
+    batch_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     ingest_parser = subparsers.add_parser("ingest-review", help="Ingest exported external reviewer comments for classification and learning.")
     ingest_parser.add_argument("path", help="JSON file containing external review comments.")
@@ -124,6 +136,19 @@ def main(argv: list[str] | None = None) -> int:
             ),
             pretty=args.pretty,
         )
+        return 0
+
+    if args.command == "review-batch":
+        payload = run_review_learning_batch(
+            Path(args.path),
+            root=Path(args.root),
+            repository=args.repository,
+            pr_number=args.pr_number,
+            write_memory=args.write_memory,
+            status=args.status,
+            only_tags=args.tag,
+        )
+        _print_json(batch_summary(payload) if args.summary_only else payload, pretty=args.pretty)
         return 0
 
     if args.command == "ingest-review":
