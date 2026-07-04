@@ -12,6 +12,7 @@ from .final_proof import assert_final_proof, run_final_proof
 from .github_collector import collect_github_comments_file
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
 from .memory_ingestion import write_learning_candidates_to_memory
+from .proof_suite import assert_end_to_end_proof, run_end_to_end_proof
 from .review_batch import batch_summary, run_review_learning_batch
 from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
@@ -43,6 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
     final_parser.add_argument("path", nargs="?", default=".", help="Repository path to prove.")
     final_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
     final_parser.add_argument("--no-fail", action="store_true", help="Return JSON without exiting non-zero on failed proof.")
+
+    suite_parser = subparsers.add_parser("proof-suite", help="Run end-to-end proof across local review phases.")
+    suite_parser.add_argument("path", nargs="?", default=".", help="Repository path to prove.")
+    suite_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+    suite_parser.add_argument("--no-fail", action="store_true", help="Return JSON without exiting non-zero on failed proof.")
 
     diff_parser = subparsers.add_parser("diff-review", help="Review a changed-file list without executing project code.")
     diff_source = diff_parser.add_mutually_exclusive_group(required=True)
@@ -136,6 +142,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "final-proof":
         payload = run_final_proof(Path(args.path)) if args.no_fail else assert_final_proof(Path(args.path))
+        _print_json(payload, pretty=args.pretty)
+        return 0
+
+    if args.command == "proof-suite":
+        payload = run_end_to_end_proof(Path(args.path)) if args.no_fail else assert_end_to_end_proof(Path(args.path))
         _print_json(payload, pretty=args.pretty)
         return 0
 
