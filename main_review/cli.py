@@ -9,6 +9,7 @@ from pathlib import Path
 from .diff_review import parse_changed_files_text, review_changed_files, review_changed_files_file
 from .evidence import collect_evidence
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
+from .memory_ingestion import write_learning_candidates_to_memory
 from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
 from .verdict import review_repository
@@ -39,6 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser = subparsers.add_parser("ingest-review", help="Ingest exported external reviewer comments for classification and learning.")
     ingest_parser.add_argument("path", help="JSON file containing external review comments.")
     ingest_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+
+    learn_parser = subparsers.add_parser("learn-review", help="Write accepted external review learning candidates into Review Memory.")
+    learn_parser.add_argument("path", help="JSON file containing external review comments.")
+    learn_parser.add_argument("--root", default=".", help="Repository root containing .main-review/memory.json.")
+    learn_parser.add_argument("--status", default="proposed", choices=["proposed", "verified", "superseded", "rejected"])
+    learn_parser.add_argument("--tag", action="append", default=[], help="Only write candidates matching at least one tag. Can be repeated.")
+    learn_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     memory_parser = subparsers.add_parser("memory", help="Manage review memory records.")
     memory_subparsers = memory_parser.add_subparsers(dest="memory_command", required=True)
@@ -102,6 +110,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ingest-review":
         _print_json(ingest_external_review_file(Path(args.path)), pretty=args.pretty)
+        return 0
+
+    if args.command == "learn-review":
+        _print_json(
+            write_learning_candidates_to_memory(
+                Path(args.path),
+                root=Path(args.root),
+                status=args.status,
+                only_tags=args.tag,
+            ),
+            pretty=args.pretty,
+        )
         return 0
 
     if args.command == "memory":
