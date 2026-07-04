@@ -9,6 +9,7 @@ from pathlib import Path
 from .diff_review import parse_changed_files_text, review_changed_files, review_changed_files_file
 from .evidence import collect_evidence
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
+from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
 from .verdict import review_repository
 
@@ -34,6 +35,10 @@ def build_parser() -> argparse.ArgumentParser:
     diff_source.add_argument("--files", help="Comma-separated or newline-like changed-file list.")
     diff_source.add_argument("--file-list", help="Path to a file containing changed-file names, such as git diff --name-only output.")
     diff_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+
+    ingest_parser = subparsers.add_parser("ingest-review", help="Ingest exported external reviewer comments for classification and learning.")
+    ingest_parser.add_argument("path", help="JSON file containing external review comments.")
+    ingest_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     memory_parser = subparsers.add_parser("memory", help="Manage review memory records.")
     memory_subparsers = memory_parser.add_subparsers(dest="memory_command", required=True)
@@ -93,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             payload = review_changed_files(parse_changed_files_text(args.files))
         _print_json(payload, pretty=args.pretty)
+        return 0
+
+    if args.command == "ingest-review":
+        _print_json(ingest_external_review_file(Path(args.path)), pretty=args.pretty)
         return 0
 
     if args.command == "memory":
