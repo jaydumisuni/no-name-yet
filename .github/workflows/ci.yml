@@ -46,3 +46,5 @@ jobs:
         run: main-review review --pretty
       - name: Prove THETECHGUY verification standard
         run: main-review verify-standard --pretty
+      - name: Prove final gate
+        run: main-review final-proof --pretty
