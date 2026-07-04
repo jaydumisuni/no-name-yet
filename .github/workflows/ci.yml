@@ -22,3 +22,27 @@ jobs:
         run: python -m pip install --upgrade pip pytest
       - name: Run tests
         run: pytest -q
+
+  clean-clone-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package in editable mode
+        run: |
+          python -m pip install --upgrade pip pytest
+          python -m pip install -e .
+      - name: Run tests
+        run: pytest -q
+      - name: Prove CLI scan
+        run: main-review scan --pretty
+      - name: Prove CLI evidence
+        run: main-review evidence --pretty
+      - name: Prove CLI review
+        run: main-review review --pretty
+      - name: Prove THETECHGUY verification standard
+        run: main-review verify-standard --pretty
