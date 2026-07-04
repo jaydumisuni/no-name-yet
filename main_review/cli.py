@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .diff_review import parse_changed_files_text, review_changed_files, review_changed_files_file
 from .evidence import collect_evidence
+from .github_collector import collect_github_comments_file
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
 from .memory_ingestion import write_learning_candidates_to_memory
 from .review_ingestion import ingest_external_review_file
@@ -36,6 +37,12 @@ def build_parser() -> argparse.ArgumentParser:
     diff_source.add_argument("--files", help="Comma-separated or newline-like changed-file list.")
     diff_source.add_argument("--file-list", help="Path to a file containing changed-file names, such as git diff --name-only output.")
     diff_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+
+    collect_parser = subparsers.add_parser("collect-github-comments", help="Normalize exported GitHub PR comments into ingestion JSON.")
+    collect_parser.add_argument("path", help="JSON file containing GitHub PR comments/timeline payload.")
+    collect_parser.add_argument("--repository", default="", help="Repository full name to attach when missing from comments.")
+    collect_parser.add_argument("--pr-number", type=int, default=None, help="PR number to attach when missing from comments.")
+    collect_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     ingest_parser = subparsers.add_parser("ingest-review", help="Ingest exported external reviewer comments for classification and learning.")
     ingest_parser.add_argument("path", help="JSON file containing external review comments.")
@@ -106,6 +113,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             payload = review_changed_files(parse_changed_files_text(args.files))
         _print_json(payload, pretty=args.pretty)
+        return 0
+
+    if args.command == "collect-github-comments":
+        _print_json(
+            collect_github_comments_file(
+                Path(args.path),
+                repository=args.repository,
+                pr_number=args.pr_number,
+            ),
+            pretty=args.pretty,
+        )
         return 0
 
     if args.command == "ingest-review":
