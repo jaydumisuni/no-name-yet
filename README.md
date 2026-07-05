@@ -1,8 +1,18 @@
 # Sergeant
 
-Sergeant is the THETECHGUY/Hunter engineering reviewer.
+Sergeant is an open-source engineering reviewer.
 
-It is not a patch writer. It does not edit code by itself. Its job is to understand a repository, inspect a pull request or change set, compare the work against project standards, and return one of three outcomes:
+It can be used inside THETECHGUY/Hunter, but the public repository is not limited to THETECHGUY. The public version focuses on reusable review infrastructure:
+
+- repository and diff inspection
+- review intelligence
+- evidence consensus
+- verified learning
+- graduation benchmarking
+- squad-style specialist reports
+- read-only GitHub PR comment ingestion
+
+Sergeant is not a patch writer. It does not edit code by itself. Its job is to understand a repository, inspect a pull request or change set, compare the work against standards, and return one of three outcomes:
 
 ```text
 PASS
@@ -10,24 +20,68 @@ NEEDS WORK
 BLOCK
 ```
 
-## Role inside Hunter
+## Public boundary
 
-Hunter is the wider engineering brain and orchestrator.
+The public repository must stay useful to other engineering teams without leaking private THETECHGUY/Hunter rules or operational details.
 
-Sergeant is Hunter's engineering review division:
+Public:
 
-- it inspects before merge
-- it challenges assumptions
-- it compares claims against implementation
-- it checks tests, documentation, boundaries, security, maintainability, and project fit
-- it learns from accepted reviewer and human feedback
-- it treats CodeRabbit, Qodo, PR-Agent, reviewdog, Semgrep, and CodeQL as optional evidence sources, not authorities
+- review engine
+- app bridge
+- static analysis
+- evidence consensus
+- verified learning framework
+- squad orchestration
+- read-only GitHub comment fetch
+
+Private/project-specific:
+
+- THETECHGUY/Hunter private standards
+- private repository memory
+- customer/client evidence
+- deployment secrets
+- write-token GitHub bot operations
+
+## What Sergeant refuses to do
+
+Sergeant reviews evidence. It must not become an unsafe execution engine.
+
+It refuses to:
+
+- execute pull-request-controlled code
+- run shell commands from PR content
+- use write tokens during analysis
+- silently fake success after a failed live fetch
+- treat external reviewers as authorities
+- write patches as part of review
 
 ## Core principle
 
 > The reviewer must understand danger, but must not execute danger.
 
-This comes directly from the CodeRabbit/PwnedRabbit security lessons: reviewer systems become dangerous when they execute untrusted pull-request-controlled code, load untrusted tool configuration, or run with powerful secrets/tokens in the same environment.
+This comes directly from CodeRabbit/PwnedRabbit security lessons: reviewer systems become dangerous when they execute untrusted pull-request-controlled code, load untrusted tool configuration, or run with powerful secrets/tokens in the same environment.
+
+## Current capabilities
+
+- Tier 1: Capability Engine
+- Tier 2: Review Intelligence
+- Tier 3: Evidence Consensus
+- Tier 4: Verified Learning Loop
+- Tier 5: Graduation Benchmark
+- Tier 6: Squad Intelligence
+- App bridge for integrations
+- Read-only live GitHub PR comment fetch
+- Public safety boundary checks
+
+## Useful commands
+
+```bash
+main-review review . --pretty
+main-review app-review . --mode pull_request --files "src/app.py,tests/test_app.py" --pretty
+main-review live-github-comments owner/repo 12 --pretty
+main-review boundary execute_pr_code --pretty
+main-review visibility-policy --pretty
+```
 
 ## Status
 
@@ -47,18 +101,6 @@ A complete self-check returns:
   "next_actions": []
 }
 ```
-
-## Intended product behavior
-
-Sergeant should behave like the final engineering standard before merge:
-
-- It understands code and architecture.
-- It checks documentation, tests, public/private boundaries, security, maintainability, and project fit.
-- It studies external systems for ideas but does not depend on them.
-- It can use static analyzers as evidence, but it does not blindly trust them.
-- It does not execute untrusted code unless isolated by a hardened sandbox.
-- It does not hold write tokens during analysis.
-- It gives clear reasons when it says `NEEDS WORK` or `BLOCK`.
 
 ## Research sources
 
