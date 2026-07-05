@@ -22,6 +22,11 @@ Instead of writing code, Sergeant focuses on understanding it—analyzing change
 - Documentation vs implementation verification
 - Multi-language support
 - Evidence-based review reports
+- Live GitHub read-only fetch
+- CLI review workflow
+- App Bridge review handoff
+- IDE Bench contract for VS Code, JetBrains, and AI handoff
+- Battle-test benchmark framework
 
 ---
 
@@ -42,8 +47,11 @@ Sergeant fits naturally into existing development workflows.
 Platforms:
 
 - GitHub
-- VS Code *(coming soon)*
-- JetBrains IDEs *(coming soon)*
+- CLI
+- App Bridge
+- IDE Bench contract for VS Code and JetBrains handoff
+- VS Code *(contract ready)*
+- JetBrains IDEs *(contract ready)*
 
 Compatible with:
 
@@ -125,10 +133,13 @@ Documentation includes:
 - Installation
 - CLI Reference
 - GitHub Integration
-- IDE Bench *(coming soon)*
+- IDE Bench
 - Security
 - Architecture
 - Contributing
+- Hackathon submission brief: `docs/hackathon-submission.md`
+- Submission proof: `docs/submission-proof.md`
+- Submission readiness gate: `SUBMISSION_READY.md`
 
 ---
 
@@ -147,6 +158,34 @@ Current capabilities include:
 - Verified learning
 - Squad-based review intelligence
 - Read-only GitHub review ingestion
+- CLI integration
+- App Bridge integration
+- IDE Bench contract
+- CI and clean-clone proof
+- Battle-test framework with Requests and Flask architecture benchmarks
+
+### Submission proof status
+
+The current sprint completed:
+
+- Live GitHub read-only fetch
+- CLI integration
+- App Bridge integration
+- IDE Bench contract
+- Mocked tests
+- CI proof
+- Clean-clone proof
+- Battle-test framework
+- Requests benchmark
+- Flask architecture benchmark
+- Battle-test validator
+- Release proof through PR where CI and Main Review are green
+
+Honest proof boundary:
+
+- Secret detection is genuinely proven with a planted temporary-file positive case.
+- GitHub PR comment payload ingestion is verified using GitHub-shaped fixtures.
+- Full live GitHub API ingestion should be claimed only after a real API call is captured and saved.
 
 ---
 
