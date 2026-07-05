@@ -6,16 +6,17 @@ The default learning state remains proposed.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .memory import ReviewMemoryRecord, ReviewMemoryStore, default_memory_path
+from .memory import MemoryRecord, ReviewMemoryStore, default_memory_path
 
 
 VALID_STATUSES = {"proposed", "verified", "superseded", "rejected"}
 
 
-def _record_to_dict(record: ReviewMemoryRecord) -> dict[str, Any]:
+def _record_to_dict(record: MemoryRecord) -> dict[str, Any]:
     return record.__dict__.copy()
 
 
@@ -31,26 +32,14 @@ def set_memory_status(
         raise ValueError(f"Unsupported memory status: {status}")
     store = ReviewMemoryStore(default_memory_path(root))
     records = store.load()
-    updated: list[ReviewMemoryRecord] = []
-    changed: ReviewMemoryRecord | None = None
+    updated: list[MemoryRecord] = []
+    changed: MemoryRecord | None = None
     for record in records:
         if record.id == record_id:
             new_reason = record.reason
             if reason:
                 new_reason = f"{record.reason}\n\nVerification note: {reason}".strip()
-            changed = ReviewMemoryRecord(
-                id=record.id,
-                kind=record.kind,
-                title=record.title,
-                summary=record.summary,
-                reason=new_reason,
-                status=status,  # type: ignore[arg-type]
-                scope=record.scope,
-                evidence=record.evidence,
-                tags=record.tags,
-                applies_to=record.applies_to,
-                confidence=record.confidence,
-            )
+            changed = replace(record, reason=new_reason, status=status)  # type: ignore[arg-type]
             updated.append(changed)
         else:
             updated.append(record)
