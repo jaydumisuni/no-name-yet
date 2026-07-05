@@ -50,9 +50,11 @@ def _applies_to(finding: dict[str, Any]) -> list[str]:
     path = _text(finding.get("path"))
     if path:
         paths.append(path)
-    for item in finding.get("related_paths", []) if isinstance(finding.get("related_paths"), list) else []:
-        if _text(item):
-            paths.append(_text(item))
+    related_paths = finding.get("related_paths", [])
+    if isinstance(related_paths, list):
+        for item in related_paths:
+            if _text(item):
+                paths.append(_text(item))
     return sorted(set(paths))
 
 
