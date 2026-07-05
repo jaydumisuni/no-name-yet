@@ -97,6 +97,27 @@ RISKY_DIR_PARTS = {
 
 TEST_DIR_PARTS = {"test", "tests", "spec", "specs", "__tests__", "e2e"}
 DOC_DIR_PARTS = {"doc", "docs", "documentation", "adr", "adrs"}
+TEST_SUFFIXES = (
+    "_test.py",
+    "_test.go",
+    "_test.rs",
+    "_test.rb",
+    ".test.js",
+    ".test.jsx",
+    ".test.ts",
+    ".test.tsx",
+    ".spec.js",
+    ".spec.jsx",
+    ".spec.ts",
+    ".spec.tsx",
+    "-test.js",
+    "-test.mjs",
+    "-test.cjs",
+    "-test.ts",
+    "-spec.js",
+    "-spec.ts",
+)
+TEST_PREFIXES = ("test_", "test-", "spec_", "spec-")
 
 
 def detect_language(path: str | Path) -> str:
@@ -107,6 +128,10 @@ def detect_language(path: str | Path) -> str:
     return _EXTENSION_INDEX.get(p.suffix.lower(), LanguageSpec("Unknown")).name
 
 
+def _looks_like_test_file(name_key: str) -> bool:
+    return name_key.startswith(TEST_PREFIXES) or name_key.endswith(TEST_SUFFIXES)
+
+
 def classify_role(path: str | Path) -> str:
     p = Path(path)
     parts = {part.lower() for part in p.parts}
@@ -114,7 +139,7 @@ def classify_role(path: str | Path) -> str:
 
     if name_key in ROLE_BY_NAME:
         return ROLE_BY_NAME[name_key]
-    if parts & TEST_DIR_PARTS or name_key.startswith("test_") or name_key.endswith("_test.py"):
+    if parts & TEST_DIR_PARTS or _looks_like_test_file(name_key):
         return "test"
     if parts & DOC_DIR_PARTS or p.suffix.lower() in {".md", ".mdx", ".rst"}:
         return "documentation"
