@@ -157,5 +157,5 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
         for name, status in capability_status.items():
             lines.append(f"- {name}: {status}")
     lines.extend(["", "## Rule"])
-    lines.append("Sergeant is the reviewer. External reviewers are optional evidence sources, not required gates.")
+    lines.append("Sergeant is the reviewer. Main Review is the reviewer core. External reviewers are optional evidence sources, not required gates.")
     return "\n".join(lines) + "\n"
