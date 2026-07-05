@@ -7,11 +7,13 @@ import json
 from pathlib import Path
 
 from .app_bridge import handle_app_review_request
+from .boundary import check_action_boundary, repository_visibility_policy
 from .capability_engine import run_capability_engine
 from .diff_review import parse_changed_files_text, review_changed_files, review_changed_files_file
 from .evidence import collect_evidence
 from .final_proof import assert_final_proof, run_final_proof
 from .github_collector import collect_github_comments_file
+from .github_live_fetch import fetch_pr_comments_live
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
 from .memory_ingestion import write_learning_candidates_to_memory
 from .proof_suite import assert_end_to_end_proof, run_end_to_end_proof
@@ -53,6 +55,23 @@ def build_parser() -> argparse.ArgumentParser:
     capability_source.add_argument("--files")
     capability_source.add_argument("--file-list")
     capability_parser.add_argument("--pretty", action="store_true")
+
+    live_parser = subparsers.add_parser("live-github-comments", help="Read-only live GitHub PR comments fetch.")
+    live_parser.add_argument("repository", help="Repository in owner/name form.")
+    live_parser.add_argument("pr_number", type=int, help="Pull request number.")
+    live_parser.add_argument("--token", default=None, help="Optional read-only GitHub token.")
+    live_parser.add_argument("--base-url", default="https://api.github.com")
+    live_parser.add_argument("--pretty", action="store_true")
+
+    boundary_parser = subparsers.add_parser("boundary", help="Check Sergeant public safety boundary.")
+    boundary_parser.add_argument("action")
+    boundary_parser.add_argument("--requires-write-token", action="store_true")
+    boundary_parser.add_argument("--executes-untrusted-code", action="store_true")
+    boundary_parser.add_argument("--pretty", action="store_true")
+
+    visibility_parser = subparsers.add_parser("visibility-policy", help="Show public/private split guidance.")
+    visibility_parser.add_argument("--private", action="store_true")
+    visibility_parser.add_argument("--pretty", action="store_true")
 
     verify_parser = subparsers.add_parser("verify-standard", help="Check THETECHGUY engineering verification evidence.")
     verify_parser.add_argument("path", nargs="?", default=".")
@@ -157,6 +176,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "capability-review":
         _print_json(run_capability_engine(Path(args.path), _changed_from_args(args.files, args.file_list)), pretty=args.pretty)
+        return 0
+    if args.command == "live-github-comments":
+        _print_json(fetch_pr_comments_live(args.repository, args.pr_number, token=args.token, base_url=args.base_url).to_dict(), pretty=args.pretty)
+        return 0
+    if args.command == "boundary":
+        _print_json(check_action_boundary(args.action, {"requires_write_token": args.requires_write_token, "executes_untrusted_code": args.executes_untrusted_code}), pretty=args.pretty)
+        return 0
+    if args.command == "visibility-policy":
+        _print_json(repository_visibility_policy(is_public=not args.private), pretty=args.pretty)
         return 0
     if args.command == "verify-standard":
         _print_json(verify_repository_standard(Path(args.path)).to_dict(), pretty=args.pretty)
