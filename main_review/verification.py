@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .scanner import scan_repository
+
 VerificationStatus = Literal["verified", "partial", "not_verified"]
 
 
@@ -44,23 +46,48 @@ def _exists(root: Path, *parts: str) -> bool:
     return (root.joinpath(*parts)).exists()
 
 
-def verify_repository_standard(root: str | Path = ".") -> VerificationReport:
-    root_path = Path(root).resolve()
-    checks = [
+def _has_any_ci(root: Path) -> bool:
+    workflows = root / ".github" / "workflows"
+    return workflows.exists() and any(path.suffix.lower() in {".yml", ".yaml"} for path in workflows.iterdir())
+
+
+def _has_manifest(root: Path) -> bool:
+    manifests = {
+        "pyproject.toml",
+        "package.json",
+        "requirements.txt",
+        "go.mod",
+        "cargo.toml",
+        "pom.xml",
+        "build.gradle",
+        "settings.gradle",
+        "pubspec.yaml",
+        "composer.json",
+        "Gemfile",
+    }
+    return any((root / manifest).exists() for manifest in manifests)
+
+
+def _has_project_docs(root: Path) -> bool:
+    return any((root / name).exists() for name in ["README.md", "README.mdx", "docs", "documentation"])
+
+
+def _self_check_checks(root_path: Path) -> list[VerificationCheck]:
+    return [
         VerificationCheck(
             name="project_scaffold",
             passed=_exists(root_path, "pyproject.toml") and _exists(root_path, "main_review"),
-            evidence="pyproject.toml and main_review package must exist.",
+            evidence="pyproject.toml and main_review package must exist for Sentinel Review self-verification.",
         ),
         VerificationCheck(
             name="ci_workflow",
             passed=_exists(root_path, ".github", "workflows", "ci.yml"),
-            evidence="GitHub Actions CI workflow must exist.",
+            evidence="Sentinel Review CI workflow must exist.",
         ),
         VerificationCheck(
             name="tests_present",
-            passed=_exists(root_path, "tests"),
-            evidence="tests/ directory must exist.",
+            passed=bool(scan_repository(root_path).tests),
+            evidence="Test files must be detected.",
         ),
         VerificationCheck(
             name="engineering_standard_documented",
@@ -85,24 +112,65 @@ def verify_repository_standard(root: str | Path = ".") -> VerificationReport:
         ),
     ]
 
+
+def _generic_checks(root_path: Path) -> list[VerificationCheck]:
+    insight = scan_repository(root_path)
+    return [
+        VerificationCheck(
+            name="project_manifest",
+            passed=_has_manifest(root_path) or bool(insight.manifests),
+            evidence="Repository should expose a recognized project manifest.",
+        ),
+        VerificationCheck(
+            name="ci_workflow",
+            passed=_has_any_ci(root_path),
+            evidence="Repository should include at least one CI workflow file.",
+        ),
+        VerificationCheck(
+            name="tests_present",
+            passed=bool(insight.tests),
+            evidence="Repository should contain detectable tests across supported languages.",
+        ),
+        VerificationCheck(
+            name="project_documentation",
+            passed=_has_project_docs(root_path),
+            evidence="Repository should include README or docs.",
+        ),
+        VerificationCheck(
+            name="source_present",
+            passed=any(file.role in {"source", "ui", "database"} for file in insight.files),
+            evidence="Repository should contain implementation source files.",
+        ),
+        VerificationCheck(
+            name="review_standard_documented",
+            passed=_exists(root_path, "docs", "19-thetechguy-engineering-standard.md") or _exists(root_path, "docs", "20-clean-clone-proof.md"),
+            evidence="Repository may document a project-specific review/proof standard.",
+            required=False,
+        ),
+    ]
+
+
+def verify_repository_standard(root: str | Path = ".", *, mode: Literal["auto", "self", "generic"] = "auto") -> VerificationReport:
+    root_path = Path(root).resolve()
+    if mode == "auto":
+        mode = "self" if _exists(root_path, "main_review") and _exists(root_path, "docs", "19-thetechguy-engineering-standard.md") else "generic"
+    checks = _self_check_checks(root_path) if mode == "self" else _generic_checks(root_path)
+
     required = [check for check in checks if check.required]
     required_passed = all(check.passed for check in required)
     optional_passed = all(check.passed for check in checks if not check.required)
 
     if required_passed and optional_passed:
         status: VerificationStatus = "verified"
-        summary = "Required and optional verification evidence is present."
+        summary = f"Required and optional {mode} verification evidence is present."
         next_actions: list[str] = []
     elif required_passed:
         status = "partial"
-        summary = "Required verification evidence is present, but optional reviewer-learning evidence is incomplete."
-        next_actions = [
-            "Complete optional reviewer pattern documentation.",
-            "Run clean-clone proof and record the result.",
-        ]
+        summary = f"Required {mode} verification evidence is present, but optional evidence is incomplete."
+        next_actions = [check.evidence for check in checks if not check.required and not check.passed]
     else:
         status = "not_verified"
-        summary = "Required verification evidence is missing."
+        summary = f"Required {mode} verification evidence is missing."
         next_actions = [check.evidence for check in required if not check.passed]
 
     return VerificationReport(
