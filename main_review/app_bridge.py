@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .evidence_consensus import build_evidence_consensus
 from .pr_reviewer import render_pr_review_markdown, run_independent_pr_review
 
 
@@ -26,6 +27,14 @@ def _clean_changed_files(value: object) -> list[str]:
     raise TypeError("changed_files must be a list, string, or null")
 
 
+def _clean_external_providers(value: object) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    raise TypeError("external_providers must be a list of dictionaries or null")
+
+
 def _review_status(action: str) -> str:
     if action == "APPROVE":
         return "pass"
@@ -35,14 +44,7 @@ def _review_status(action: str) -> str:
 
 
 def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
-    """Run a Sergeant review from an app-facing request payload.
-
-    Expected request keys:
-    - root: repository path, defaults to current directory
-    - mode: repository | pull_request | changed_files
-    - changed_files: list or comma/newline string
-    - external_review_file: optional path to exported external reviewer comments
-    """
+    """Run a Sergeant review from an app-facing request payload."""
 
     if not isinstance(request, dict):
         raise TypeError("request must be a dictionary")
@@ -53,11 +55,13 @@ def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
     root = Path(str(request.get("root") or "."))
     changed_files = _clean_changed_files(request.get("changed_files"))
     external_review_file = request.get("external_review_file")
+    external_providers = _clean_external_providers(request.get("external_providers"))
     packet = run_independent_pr_review(
         root,
         changed_files=changed_files,
         external_review_file=Path(str(external_review_file)) if external_review_file else None,
     )
+    evidence_consensus = build_evidence_consensus(packet, external_providers)
     verdict = packet.get("verdict", {})
     action = str(verdict.get("verdict") or "COMMENT")
     intelligence = packet.get("review_intelligence", {})
@@ -73,6 +77,7 @@ def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
         "quality_score": intelligence.get("quality_score"),
         "root_causes": intelligence.get("root_causes", {}),
         "top_findings": intelligence.get("ranked_findings", [])[:5],
+        "evidence_consensus": evidence_consensus,
         "markdown": render_pr_review_markdown(packet),
         "packet": packet,
     }
