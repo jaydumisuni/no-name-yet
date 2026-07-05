@@ -1,0 +1,43 @@
+name: Main Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  main-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Main Review
+        run: |
+          python -m pip install --upgrade pip pytest
+          python -m pip install -e .
+      - name: Build changed file list
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed-files.txt
+      - name: Run independent Main Review
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from main_review.github_bot import write_github_review_payload
+          files = Path('changed-files.txt').read_text(encoding='utf-8').splitlines()
+          write_github_review_payload('main-review-result.json', '.', changed_files=files)
+          PY
+      - name: Upload Main Review result
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-review-result
+          path: main-review-result.json
