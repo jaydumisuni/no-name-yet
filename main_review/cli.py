@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from .app_bridge import handle_app_review_request
+from .battle_tests import validate_battle_fixtures
 from .boundary import check_action_boundary, repository_visibility_policy
 from .capability_engine import run_capability_engine
 from .diff_review import parse_changed_files_text, review_changed_files, review_changed_files_file
@@ -80,6 +81,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     ide_parser = subparsers.add_parser("ide-bench-contract", help="Print the VS Code, JetBrains, and AI handoff contract.")
     ide_parser.add_argument("--pretty", action="store_true")
+
+    battle_parser = subparsers.add_parser("battle-tests", help="Validate local battle-test fixtures.")
+    battle_parser.add_argument("path", nargs="?", default=".")
+    battle_parser.add_argument("--pretty", action="store_true")
 
     boundary_parser = subparsers.add_parser("boundary", help="Check Sergeant public safety boundary.")
     boundary_parser.add_argument("action")
@@ -207,6 +212,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "ide-bench-contract":
         _print_json(build_ide_bench_contract(), pretty=args.pretty)
+        return 0
+    if args.command == "battle-tests":
+        _print_json(validate_battle_fixtures(Path(args.path)), pretty=args.pretty)
         return 0
     if args.command == "boundary":
         _print_json(check_action_boundary(args.action, {"requires_write_token": args.requires_write_token, "executes_untrusted_code": args.executes_untrusted_code}), pretty=args.pretty)
