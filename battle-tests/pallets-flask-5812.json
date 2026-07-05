@@ -1,0 +1,24 @@
+{
+  "repository": "pallets/flask",
+  "pull_request": 5812,
+  "url": "https://github.com/pallets/flask/pull/5812",
+  "title": "merge app and request context",
+  "outcome": "merged",
+  "changed_files_count": 36,
+  "review_signals": [
+    "Large architecture-level lifecycle change.",
+    "Documentation updates are part of the user-facing contract.",
+    "Maintainer asked for external app testing before merge.",
+    "A large downstream app was tested and passed unchanged.",
+    "A later follow-up noted copied context reuse caused counter issues."
+  ],
+  "expected_sergeant_findings": [
+    "Treat as architecture review, not simple cleanup.",
+    "Check deprecation aliases and migration behavior.",
+    "Verify proxy availability across lifecycle stages.",
+    "Focus on teardown ordering, preserved test-client contexts, streaming, shell, and copied-context behavior.",
+    "Flag copied-context reuse as a regression risk."
+  ],
+  "expected_initial_verdict": "NEEDS WORK",
+  "expected_final_verdict": "PASS_WITH_WATCH"
+}
