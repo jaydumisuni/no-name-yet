@@ -14,6 +14,7 @@ from .evidence_consensus import build_evidence_consensus
 from .graduation import run_graduation_benchmark, summarize_graduation
 from .learning_loop import run_learning_loop
 from .pr_reviewer import render_pr_review_markdown, run_independent_pr_review
+from .squad import run_squad_review
 
 
 REVIEW_MODES = {"repository", "pull_request", "changed_files"}
@@ -96,6 +97,7 @@ def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
     sergeant_metrics = request.get("sergeant_benchmark") or {"name": "Sergeant", "metrics": _default_sergeant_metrics(packet, evidence_consensus)}
     reference_metrics = request.get("reference_benchmark") or {"name": "Reference", "metrics": {}}
     graduation = run_graduation_benchmark(sergeant_metrics, reference_metrics)
+    squad = run_squad_review(packet, evidence_consensus, learning, graduation)
     verdict = packet.get("verdict", {})
     action = str(verdict.get("verdict") or "COMMENT")
     intelligence = packet.get("review_intelligence", {})
@@ -115,6 +117,7 @@ def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
         "learning": learning,
         "graduation": graduation,
         "graduation_markdown": summarize_graduation(graduation),
+        "squad": squad,
         "markdown": render_pr_review_markdown(packet),
         "packet": packet,
     }
