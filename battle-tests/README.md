@@ -14,6 +14,7 @@ Each fixture should include:
 ## Fixtures
 
 - `psf-requests-7502.md` - merged Requests PR with review discussion about test clarity and focused coverage.
+- `pallets-flask-5812.md` - merged Flask architecture PR covering context lifecycle, docs, compatibility, and later follow-up evidence.
 
 ## Rule
 
