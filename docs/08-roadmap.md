@@ -1,8 +1,35 @@
 # Roadmap
 
+## Current status
+
+Sergeant has moved past the original R&D-only state into a working reviewer/proof system.
+
+Completed submission sprint:
+
+- Live GitHub read-only fetch
+- CLI integration
+- App Bridge integration
+- IDE Bench contract for VS Code, JetBrains, and AI handoff
+- Mocked tests
+- CI proof
+- Clean-clone proof
+- Battle-test framework
+- Requests benchmark
+- Flask architecture benchmark
+- Battle-test validator
+- Release proof through PR where CI and Main Review are green
+
+Important claim correction:
+
+```text
+Secret detection is genuinely proven with a planted temp-file positive case.
+GitHub PR comment payload ingestion is verified with GitHub-shaped fixtures.
+Full live GitHub API ingestion remains the next proof step before making the strongest live-ingestion claim.
+```
+
 ## Phase 0 — Research foundation
 
-Status: started.
+Status: complete.
 
 Goals:
 
@@ -25,14 +52,15 @@ Outputs:
 
 ## Phase 1 — Minimal local reviewer
 
+Status: complete for current submission scope.
+
 Goal: run locally against a repository or diff and produce a verdict.
 
-Target command shape:
+Command shape:
 
 ```bash
-main-review scan
-main-review review --base main --head feature-branch
-main-review report
+main-review review . --pretty
+main-review app-review . --mode pull_request --files "src/app.py,tests/test_app.py" --pretty
 ```
 
 Capabilities:
@@ -42,27 +70,46 @@ Capabilities:
 - changed file classifier
 - secret/public-safety checker
 - docs/test gap detector
-- simple architecture rule checker
+- architecture rule checker
 - verdict report
 
 No automatic editing.
 
 ## Phase 2 — GitHub PR reviewer
 
+Status: partial / proof-gated.
+
 Goal: run on GitHub pull requests safely.
 
 Capabilities:
 
 - read-only PR collector
-- limited comment poster
-- report artifact
+- live GitHub read-only fetch support
+- PR comment payload ingestion
 - no analysis write token
 - no untrusted code execution
 - base-branch policy only
 
+Proof boundary:
+
+```text
+GitHub-shaped payload ingestion is verified.
+Full live API ingestion requires captured token/network evidence before being claimed as fully proven.
+```
+
 ## Phase 3 — Evidence providers
 
-Add optional evidence providers:
+Status: started through evidence consensus and battle-test validator.
+
+Evidence direction:
+
+- secret detection
+- architecture findings
+- docs-vs-implementation findings
+- test/CI evidence
+- benchmark evidence
+
+Future optional providers:
 
 - Semgrep
 - CodeQL/SARIF importer
@@ -72,49 +119,56 @@ Add optional evidence providers:
 
 All providers must be sandbox-aware.
 
-## Phase 4 — Project memory
+## Phase 4 — Project memory / verified learning
 
-Add review memory:
+Status: implemented for current verified-learning path.
+
+Review memory direction:
 
 - repeated issue patterns
 - project-specific rules
 - previous owner decisions
 - architecture lessons
 - known safe/unsafe paths
+- accepted corrections
 
-This is where it becomes stronger than generic reviewers.
+This is where Sergeant becomes stronger than generic reviewers.
 
-## Phase 5 — Code Ops connection
+## Phase 5 — Code Ops / App Bridge connection
 
-Connect reviewer verdicts to Code Ops.
+Status: implemented for current app bridge scope.
 
 Flow:
 
 ```text
 Reviewer says NEEDS WORK
         ↓
-Code Ops plans fixes
+Builder or Code Ops plans fixes
         ↓
-Code Ops patches
+Builder patches
         ↓
-Reviewer checks again
+Sergeant checks again
 ```
 
 The reviewer still does not edit by itself.
 
 ## Phase 6 — Product identity lock
 
-Once behavior is proven, choose final name.
+Status: complete.
 
-Criteria:
+Final working identity: **Sergeant**.
+
+Reason:
 
 - memorable
 - role-based
 - fits THETECHGUY/Hunter ecosystem
-- not generic
+- distinct from Hunter Foreman
 - easy to say in developer workflow
 
 ## Phase 7 — Production hardening
+
+Status: next major phase.
 
 Add:
 
@@ -125,6 +179,7 @@ Add:
 - PR spoofing tests
 - malicious config tests
 - public/private leak tests
+- full live GitHub API ingestion proof
 
 ## Phase 8 — Standalone product path
 
@@ -139,4 +194,10 @@ Long-term possibility:
 
 ## Current next step
 
-Finish R&D docs, then create first small local prototype that only reads and reports.
+For hackathon use, Sergeant is ready as a supporting trust/proof layer.
+
+Next proof step if needed:
+
+```text
+Capture a full live GitHub API ingestion run against a real PR response and save the evidence before claiming full live PR ingestion.
+```
