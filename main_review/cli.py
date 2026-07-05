@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .capability_engine import run_capability_engine
 from .diff_review import parse_changed_files_text, review_changed_files, review_changed_files_file
 from .evidence import collect_evidence
 from .final_proof import assert_final_proof, run_final_proof
@@ -35,6 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser = subparsers.add_parser("review", help="Run static evidence collection and produce a verdict.")
     review_parser.add_argument("path", nargs="?", default=".", help="Repository path to review.")
     review_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+
+    capability_parser = subparsers.add_parser("capability-review", help="Run Sergeant Tier 1 capability analysis.")
+    capability_parser.add_argument("path", nargs="?", default=".", help="Repository path to inspect.")
+    capability_source = capability_parser.add_mutually_exclusive_group()
+    capability_source.add_argument("--files", help="Comma-separated or newline-like changed-file list.")
+    capability_source.add_argument("--file-list", help="Path to a changed-file list.")
+    capability_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
 
     verify_parser = subparsers.add_parser("verify-standard", help="Check THETECHGUY engineering verification evidence.")
     verify_parser.add_argument("path", nargs="?", default=".", help="Repository path to verify.")
@@ -136,6 +144,14 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(review_repository(Path(args.path)), pretty=args.pretty)
         return 0
 
+    if args.command == "capability-review":
+        if args.file_list:
+            changed = parse_changed_files_text(Path(args.file_list).read_text(encoding="utf-8"))
+        else:
+            changed = parse_changed_files_text(args.files or "")
+        _print_json(run_capability_engine(Path(args.path), changed), pretty=args.pretty)
+        return 0
+
     if args.command == "verify-standard":
         _print_json(verify_repository_standard(Path(args.path)).to_dict(), pretty=args.pretty)
         return 0
@@ -159,26 +175,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "collect-github-comments":
-        _print_json(
-            collect_github_comments_file(
-                Path(args.path),
-                repository=args.repository,
-                pr_number=args.pr_number,
-            ),
-            pretty=args.pretty,
-        )
+        _print_json(collect_github_comments_file(Path(args.path), repository=args.repository, pr_number=args.pr_number), pretty=args.pretty)
         return 0
 
     if args.command == "review-batch":
-        payload = run_review_learning_batch(
-            Path(args.path),
-            root=Path(args.root),
-            repository=args.repository,
-            pr_number=args.pr_number,
-            write_memory=args.write_memory,
-            status=args.status,
-            only_tags=args.tag,
-        )
+        payload = run_review_learning_batch(Path(args.path), root=Path(args.root), repository=args.repository, pr_number=args.pr_number, write_memory=args.write_memory, status=args.status, only_tags=args.tag)
         _print_json(batch_summary(payload) if args.summary_only else payload, pretty=args.pretty)
         return 0
 
@@ -187,42 +188,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "learn-review":
-        _print_json(
-            write_learning_candidates_to_memory(
-                Path(args.path),
-                root=Path(args.root),
-                status=args.status,
-                only_tags=args.tag,
-            ),
-            pretty=args.pretty,
-        )
+        _print_json(write_learning_candidates_to_memory(Path(args.path), root=Path(args.root), status=args.status, only_tags=args.tag), pretty=args.pretty)
         return 0
 
     if args.command == "memory":
         store = ReviewMemoryStore(default_memory_path(args.root))
-
         if args.memory_command == "add":
-            record = new_memory_record(
-                kind=args.kind,
-                title=args.title,
-                summary=args.summary,
-                reason=args.reason,
-                status=args.status,
-                scope=args.scope,
-                evidence=args.evidence,
-                tags=args.tag,
-                applies_to=args.applies_to,
-                confidence=args.confidence,
-            )
+            record = new_memory_record(kind=args.kind, title=args.title, summary=args.summary, reason=args.reason, status=args.status, scope=args.scope, evidence=args.evidence, tags=args.tag, applies_to=args.applies_to, confidence=args.confidence)
             store.add(record)
             _print_json(record.__dict__, pretty=True)
             return 0
-
         if args.memory_command == "list":
             records = store.list(status=args.status, kind=args.kind, tag=args.tag)
             _print_json([record.__dict__ for record in records], pretty=args.pretty)
             return 0
-
         if args.memory_command == "search":
             records = store.search(args.query)
             _print_json([record.__dict__ for record in records], pretty=args.pretty)
