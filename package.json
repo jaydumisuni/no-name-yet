@@ -1,0 +1,46 @@
+{
+  "name": "sergeant-reviewer",
+  "displayName": "Sergeant",
+  "description": "Sergeant open-source engineering reviewer for VS Code.",
+  "version": "0.1.0",
+  "publisher": "thetechguyds",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaydumisuni/Sergeant.git"
+  },
+  "icon": "resources/srg-logo-and-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:sergeant.reviewWorkspace",
+    "onCommand:sergeant.ideBenchContract"
+  ],
+  "main": "./vscode-extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sergeant.reviewWorkspace",
+        "title": "Sergeant: Review Workspace"
+      },
+      {
+        "command": "sergeant.ideBenchContract",
+        "title": "Sergeant: IDE Bench Contract"
+      }
+    ],
+    "configuration": {
+      "title": "Sergeant",
+      "properties": {
+        "sergeant.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python executable used to run Sergeant."
+        }
+      }
+    }
+  }
+}

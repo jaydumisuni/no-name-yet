@@ -1,0 +1,12 @@
+.git/**
+.github/**
+.idea/**
+.pytest_cache/**
+.vscode/**
+battle-tests/**
+docs/**
+tests/**
+main_review.egg-info/**
+__pycache__/**
+**/__pycache__/**
+*.vsix

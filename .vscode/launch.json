@@ -9,7 +9,7 @@
       "args": ["ide-bench-contract", "--pretty"],
       "cwd": "${workspaceFolder}",
       "env": {
-        "SERGEANT_ICON_ASSET": "resources/srg logo and icon.png"
+        "SERGEANT_ICON_ASSET": "resources/srg-logo-and-icon.png"
       },
       "console": "integratedTerminal"
     },
@@ -21,7 +21,7 @@
       "args": ["review", ".", "--pretty"],
       "cwd": "${workspaceFolder}",
       "env": {
-        "SERGEANT_ICON_ASSET": "resources/srg logo and icon.png"
+        "SERGEANT_ICON_ASSET": "resources/srg-logo-and-icon.png"
       },
       "console": "integratedTerminal"
     }

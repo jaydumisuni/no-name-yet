@@ -10,7 +10,7 @@ from typing import Any
 
 from .review_contract import CONTRACT_VERSION, capability_names
 
-SERGEANT_ICON_ASSET = "resources/srg logo and icon.png"
+SERGEANT_ICON_ASSET = "resources/srg-logo-and-icon.png"
 
 AI_HANDOFF_CONTRACT = {
     "schema_version": CONTRACT_VERSION,

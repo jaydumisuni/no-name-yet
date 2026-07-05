@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/readme%20top%20imsge.png" alt="Sergeant - open-source engineering reviewer" width="860">
+  <img src="resources/readme-top-image.png" alt="Sergeant - open-source engineering reviewer" width="860">
 </p>
 
 # Sergeant
@@ -126,6 +126,18 @@ python sergeant.py ide-bench-contract --pretty
 VS Code launch configs are in `.vscode/launch.json`.
 
 PyCharm run configs are in `.idea/runConfigurations/`.
+
+Install Sergeant as a local VS Code extension:
+
+```bash
+npx @vscode/vsce package --no-dependencies
+code --install-extension sergeant-reviewer-0.1.0.vsix --force
+```
+
+After installation, Sergeant appears in the VS Code Extensions view and provides these commands from any workspace:
+
+- `Sergeant: Review Workspace`
+- `Sergeant: IDE Bench Contract`
 
 Validate battle-test fixtures:
 

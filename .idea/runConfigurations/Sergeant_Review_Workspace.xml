@@ -4,7 +4,7 @@
     <option name="PARAMETERS" value="review . --pretty" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <envs>
-      <env name="SERGEANT_ICON_ASSET" value="resources/srg logo and icon.png" />
+      <env name="SERGEANT_ICON_ASSET" value="resources/srg-logo-and-icon.png" />
     </envs>
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />

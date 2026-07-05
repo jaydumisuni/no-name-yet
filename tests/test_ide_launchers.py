@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ICON_ASSET = "resources/srg logo and icon.png"
+ICON_ASSET = "resources/srg-logo-and-icon.png"
 
 
 def test_vscode_launches_sergeant_launcher_with_icon_asset() -> None:
@@ -46,5 +46,5 @@ def test_pycharm_run_configs_launch_sergeant_with_icon_asset() -> None:
 
 
 def test_readme_and_icon_assets_exist() -> None:
-    assert (ROOT / "resources" / "readme top imsge.png").is_file()
+    assert (ROOT / "resources" / "readme-top-image.png").is_file()
     assert (ROOT / ICON_ASSET).is_file()
