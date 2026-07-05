@@ -35,6 +35,10 @@ Supported decisions include:
 
 Sergeant produces memory candidates and can optionally write them into `.main-review/memory.json` when `write_learning` is true.
 
+## CI proof note
+
+The release sprint validates this path through mocked app-bridge and live-GitHub tests so CI does not depend on network rate limits.
+
 ## Rule
 
 Learning must be verified. A review finding becomes memory only after a human-confirmed outcome.
