@@ -141,12 +141,6 @@ def _generic_checks(root_path: Path) -> list[VerificationCheck]:
             passed=any(file.role in {"source", "ui", "database"} for file in insight.files),
             evidence="Repository should contain implementation source files.",
         ),
-        VerificationCheck(
-            name="review_standard_documented",
-            passed=_exists(root_path, "docs", "19-thetechguy-engineering-standard.md") or _exists(root_path, "docs", "20-clean-clone-proof.md"),
-            evidence="Repository may document a project-specific review/proof standard.",
-            required=False,
-        ),
     ]
 
 
