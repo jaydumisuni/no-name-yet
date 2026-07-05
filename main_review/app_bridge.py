@@ -1,0 +1,78 @@
+"""App bridge for Sergeant.
+
+This is the stable integration layer an app can call without knowing Sergeant's
+internal module layout. It accepts a JSON-like request, runs the review pipeline,
+and returns a compact response suitable for UI cards, API responses, or logs.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from .pr_reviewer import render_pr_review_markdown, run_independent_pr_review
+
+
+REVIEW_MODES = {"repository", "pull_request", "changed_files"}
+
+
+def _clean_changed_files(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.replace("\n", ",").split(",") if part.strip()]
+    if isinstance(value, list):
+        return [str(part).strip() for part in value if str(part).strip()]
+    raise TypeError("changed_files must be a list, string, or null")
+
+
+def _review_status(action: str) -> str:
+    if action == "APPROVE":
+        return "pass"
+    if action == "REQUEST_CHANGES":
+        return "block"
+    return "needs_work"
+
+
+def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Run a Sergeant review from an app-facing request payload.
+
+    Expected request keys:
+    - root: repository path, defaults to current directory
+    - mode: repository | pull_request | changed_files
+    - changed_files: list or comma/newline string
+    - external_review_file: optional path to exported external reviewer comments
+    """
+
+    if not isinstance(request, dict):
+        raise TypeError("request must be a dictionary")
+    mode = str(request.get("mode") or "repository")
+    if mode not in REVIEW_MODES:
+        raise ValueError(f"mode must be one of {sorted(REVIEW_MODES)}")
+
+    root = Path(str(request.get("root") or "."))
+    changed_files = _clean_changed_files(request.get("changed_files"))
+    external_review_file = request.get("external_review_file")
+    packet = run_independent_pr_review(
+        root,
+        changed_files=changed_files,
+        external_review_file=Path(str(external_review_file)) if external_review_file else None,
+    )
+    verdict = packet.get("verdict", {})
+    action = str(verdict.get("verdict") or "COMMENT")
+    intelligence = packet.get("review_intelligence", {})
+    return {
+        "ok": True,
+        "service": "Sergeant",
+        "mode": mode,
+        "status": _review_status(action),
+        "action": action,
+        "confidence": verdict.get("confidence", 0),
+        "reason": verdict.get("reason", ""),
+        "required_actions": verdict.get("required_actions", []),
+        "quality_score": intelligence.get("quality_score"),
+        "root_causes": intelligence.get("root_causes", {}),
+        "top_findings": intelligence.get("ranked_findings", [])[:5],
+        "markdown": render_pr_review_markdown(packet),
+        "packet": packet,
+    }
