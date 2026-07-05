@@ -14,10 +14,12 @@ from .evidence import collect_evidence
 from .final_proof import assert_final_proof, run_final_proof
 from .github_collector import collect_github_comments_file
 from .github_live_fetch import fetch_pr_comments_live
+from .ide_bench import build_ide_bench_contract
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
 from .memory_ingestion import write_learning_candidates_to_memory
 from .proof_suite import assert_end_to_end_proof, run_end_to_end_proof
 from .review_batch import batch_summary, run_review_learning_batch
+from .review_contract import github_comments_to_external_provider, load_review_request_file
 from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
 from .verdict import review_repository
@@ -47,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     app_source.add_argument("--files")
     app_source.add_argument("--file-list")
     app_parser.add_argument("--external-review-file")
+    app_parser.add_argument("--request-file", help="JSON request using the shared Sergeant review contract.")
     app_parser.add_argument("--pretty", action="store_true")
 
     capability_parser = subparsers.add_parser("capability-review", help="Run Sergeant Tier 1 capability analysis.")
@@ -62,6 +65,21 @@ def build_parser() -> argparse.ArgumentParser:
     live_parser.add_argument("--token", default=None, help="Optional read-only GitHub token.")
     live_parser.add_argument("--base-url", default="https://api.github.com")
     live_parser.add_argument("--pretty", action="store_true")
+
+    live_review_parser = subparsers.add_parser("live-github-review", help="Fetch live GitHub comments and run them through the app bridge.")
+    live_review_parser.add_argument("repository", help="Repository in owner/name form.")
+    live_review_parser.add_argument("pr_number", type=int, help="Pull request number.")
+    live_review_parser.add_argument("path", nargs="?", default=".")
+    live_review_parser.add_argument("--mode", default="pull_request", choices=["repository", "pull_request", "changed_files"])
+    live_review_source = live_review_parser.add_mutually_exclusive_group()
+    live_review_source.add_argument("--files")
+    live_review_source.add_argument("--file-list")
+    live_review_parser.add_argument("--token", default=None, help="Optional read-only GitHub token.")
+    live_review_parser.add_argument("--base-url", default="https://api.github.com")
+    live_review_parser.add_argument("--pretty", action="store_true")
+
+    ide_parser = subparsers.add_parser("ide-bench-contract", help="Print the VS Code, JetBrains, and AI handoff contract.")
+    ide_parser.add_argument("--pretty", action="store_true")
 
     boundary_parser = subparsers.add_parser("boundary", help="Check Sergeant public safety boundary.")
     boundary_parser.add_argument("action")
@@ -172,13 +190,23 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(review_repository(Path(args.path)), pretty=args.pretty)
         return 0
     if args.command == "app-review":
-        _print_json(handle_app_review_request({"root": args.path, "mode": args.mode, "changed_files": _changed_from_args(args.files, args.file_list), "external_review_file": args.external_review_file}), pretty=args.pretty)
+        request = load_review_request_file(args.request_file) if args.request_file else {"root": args.path, "mode": args.mode, "changed_files": _changed_from_args(args.files, args.file_list), "external_review_file": args.external_review_file, "source": "cli:app-review"}
+        _print_json(handle_app_review_request(request), pretty=args.pretty)
         return 0
     if args.command == "capability-review":
         _print_json(run_capability_engine(Path(args.path), _changed_from_args(args.files, args.file_list)), pretty=args.pretty)
         return 0
     if args.command == "live-github-comments":
         _print_json(fetch_pr_comments_live(args.repository, args.pr_number, token=args.token, base_url=args.base_url).to_dict(), pretty=args.pretty)
+        return 0
+    if args.command == "live-github-review":
+        live = fetch_pr_comments_live(args.repository, args.pr_number, token=args.token, base_url=args.base_url).to_dict()
+        provider = github_comments_to_external_provider(live)
+        request = {"root": args.path, "mode": args.mode, "changed_files": _changed_from_args(args.files, args.file_list), "external_providers": [provider], "source": "cli:live-github-review"}
+        _print_json(handle_app_review_request(request), pretty=args.pretty)
+        return 0
+    if args.command == "ide-bench-contract":
+        _print_json(build_ide_bench_contract(), pretty=args.pretty)
         return 0
     if args.command == "boundary":
         _print_json(check_action_boundary(args.action, {"requires_write_token": args.requires_write_token, "executes_untrusted_code": args.executes_untrusted_code}), pretty=args.pretty)
