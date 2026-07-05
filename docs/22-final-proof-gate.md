@@ -41,9 +41,9 @@ The final proof gate checks both code state and engineering-standard evidence.
 
 ## Current limitation
 
-This still cannot force CodeRabbit to review when CodeRabbit is rate-limited.
+This still cannot force an external reviewer to review when that reviewer is unavailable or rate-limited.
 
-When CodeRabbit is unavailable, Main Review must record that honestly and proceed using:
+When external review evidence is unavailable, Main Review must record that honestly and proceed using:
 
 - CI proof
 - clean-clone proof

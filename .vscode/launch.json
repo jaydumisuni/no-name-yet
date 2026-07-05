@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Sergeant: IDE Bench Contract",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/sergeant.py",
+      "args": ["ide-bench-contract", "--pretty"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "SERGEANT_ICON_ASSET": "resources/srg logo and icon.png"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Sergeant: Review Workspace",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/sergeant.py",
+      "args": ["review", ".", "--pretty"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "SERGEANT_ICON_ASSET": "resources/srg logo and icon.png"
+      },
+      "console": "integratedTerminal"
+    }
+  ]
+}

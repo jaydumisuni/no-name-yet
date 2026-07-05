@@ -79,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     live_review_parser.add_argument("--base-url", default="https://api.github.com")
     live_review_parser.add_argument("--pretty", action="store_true")
 
-    ide_parser = subparsers.add_parser("ide-bench-contract", help="Print the VS Code, JetBrains, and AI handoff contract.")
+    ide_parser = subparsers.add_parser("ide-bench-contract", help="Print the VS Code, PyCharm, JetBrains, and AI handoff contract.")
     ide_parser.add_argument("--pretty", action="store_true")
 
     battle_parser = subparsers.add_parser("battle-tests", help="Validate local battle-test fixtures.")

@@ -2,7 +2,7 @@
 
 The end-to-end proof suite keeps moving when an external reviewer is unavailable.
 
-It does not pretend CodeRabbit/Qodo reviewed the PR.
+It does not pretend an external reviewer reviewed the PR.
 
 Instead, it proves every internal phase that must work before external review feedback can be useful.
 
@@ -31,7 +31,7 @@ The suite checks:
 
 ## Why this exists
 
-When CodeRabbit is rate-limited, we do not stop and we do not fake the result.
+When an external reviewer is unavailable or rate-limited, we do not stop and we do not fake the result.
 
 We move around the blocker by proving our own pipeline:
 
@@ -63,4 +63,4 @@ Main Review must still prove:
 
 The proof suite uses deterministic fixtures for external reviewer comments.
 
-Real CodeRabbit/Qodo comments should still be consumed when available.
+Real external reviewer comments should still be consumed when available.

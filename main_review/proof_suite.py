@@ -1,8 +1,7 @@
 """End-to-end proof suite for Main Review.
 
 This module exercises the review pipeline with deterministic fixtures so proof
-continues even when an external reviewer such as CodeRabbit is unavailable or
-rate-limited.
+continues even when optional external reviewer evidence is unavailable.
 """
 
 from __future__ import annotations
@@ -44,22 +43,25 @@ def run_end_to_end_proof(root: str | Path = ".") -> dict[str, Any]:
             comments_file,
             [
                 {
+                    "source": "reference-reviewer",
                     "body": "Missing receiver validation test should be preserved as a reusable review lesson.",
-                    "user": {"login": "coderabbitai"},
+                    "user": {"login": "reference-reviewer"},
                     "path": "src/api.py",
                     "line": 12,
                     "classification": "🟢",
                     "reason": "Contract changes need receiver-side proof, not sender-only proof.",
                 },
                 {
+                    "source": "reference-reviewer",
                     "body": "Use a different variable naming style without project evidence.",
-                    "user": {"login": "coderabbitai"},
+                    "user": {"login": "reference-reviewer"},
                     "classification": "🔴",
                     "reason": "Style-only feedback is rejected unless it supports readability, consistency, or defects.",
                 },
                 {
+                    "source": "security-reviewer",
                     "body": "Save pattern: untrusted review bots should not execute repository code without a sandbox.",
-                    "user": {"login": "qodo-bot"},
+                    "user": {"login": "security-reviewer"},
                     "classification": "🧠",
                     "reason": "Static-first review protects repositories from reviewer supply-chain risk.",
                     "tags": ["security", "static-review"],

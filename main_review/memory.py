@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -32,8 +32,8 @@ class MemoryRecord:
     applies_to: list[str] = field(default_factory=list)
     supersedes: list[str] = field(default_factory=list)
     confidence: float = 0.5
-    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def normalized(self) -> "MemoryRecord":
         self.tags = sorted(set(self.tags))
@@ -41,7 +41,7 @@ class MemoryRecord:
         self.evidence = [item for item in self.evidence if item.strip()]
         self.supersedes = sorted(set(self.supersedes))
         self.confidence = max(0.0, min(1.0, float(self.confidence)))
-        self.updated_at = datetime.now(UTC).isoformat()
+        self.updated_at = datetime.now(timezone.utc).isoformat()
         return self
 
 
@@ -64,7 +64,7 @@ class ReviewMemoryStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "version": 1,
-            "updated_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "records": [asdict(record.normalized()) for record in records],
         }
         self.path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

@@ -1,6 +1,6 @@
 # External Review Ingestion
 
-Patch 06 starts the ingestion foundation for CodeRabbit/Qodo/other reviewer comments.
+Patch 06 starts the ingestion foundation for external reviewer comments.
 
 The goal is not to obey external reviewers.
 
@@ -63,7 +63,7 @@ We have already used external reviews many times across different project chats 
 
 That history should not be lost.
 
-Every CodeRabbit/Qodo comment that survives our scrutiny becomes training material for Main Review.
+Every external reviewer comment that survives our scrutiny becomes training material for Main Review.
 
 ## Current limitation
 
@@ -76,7 +76,7 @@ It ingests exported/copied JSON first so the classification and learning pipelin
 Later patches should add:
 
 - GitHub PR comment collector
-- CodeRabbit author/source detection
+- reviewer author/source detection
 - inline review comment export
 - classification UI/table
 - memory-write command for accepted learning candidates

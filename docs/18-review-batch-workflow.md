@@ -49,7 +49,7 @@ main-review review-batch github-comments.json \
 
 ## Why this matters
 
-Before Main Review replaces CodeRabbit, we need a repeatable way to consume external reviewer comments and preserve useful patterns.
+Before Main Review can be trusted on harder review work, we need a repeatable way to consume external reviewer comments and preserve useful patterns.
 
 Patch 09 makes that workflow one command instead of several manual steps.
 

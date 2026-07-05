@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/sergeant-sgt.svg" alt="SGT. Sergeant - open-source engineering reviewer" width="860">
+  <img src="resources/readme%20top%20imsge.png" alt="Sergeant - open-source engineering reviewer" width="860">
 </p>
 
 # Sergeant
@@ -68,7 +68,7 @@ It refuses to:
 - Graduation benchmark
 - Squad intelligence
 - App bridge contract
-- IDE Bench contract for VS Code, JetBrains, and AI handoff
+- IDE Bench contract for VS Code, PyCharm, JetBrains, and AI handoff
 - Read-only live GitHub PR comment fetch
 - Live GitHub review bridge
 - Boundary and visibility policy checks
@@ -82,6 +82,8 @@ git clone https://github.com/jaydumisuni/Sergeant.git
 cd Sergeant
 python -m pip install -e .
 ```
+
+Requires Python 3.10 or newer.
 
 ## Quick start
 
@@ -114,6 +116,16 @@ Show IDE handoff contract:
 ```bash
 main-review ide-bench-contract --pretty
 ```
+
+Run from PyCharm or VS Code without installing the console script:
+
+```bash
+python sergeant.py ide-bench-contract --pretty
+```
+
+VS Code launch configs are in `.vscode/launch.json`.
+
+PyCharm run configs are in `.idea/runConfigurations/`.
 
 Validate battle-test fixtures:
 
@@ -171,6 +183,21 @@ Private/project-specific rules, customer evidence, deployment secrets, and write
 The current v1 foundation has passed CI, clean-clone proof, app bridge proof, IDE contract proof, mocked live GitHub proof, battle-test validation, and release proof checks.
 
 Cross-language ranking proof remains the next improvement phase.
+
+## Proof (Still to do)
+
+- Run against real repositories in multiple languages:
+  - Python
+  - JavaScript / TypeScript
+  - Go
+  - Rust
+  - Java / Kotlin
+  - C#
+  - C/C++
+- Compare Sergeant's findings with what maintainers actually reviewed.
+- Record agreement, misses, and false positives.
+
+Repository: [jaydumisuni/Sergeant](https://github.com/jaydumisuni/Sergeant)
 
 ## Contributing
 

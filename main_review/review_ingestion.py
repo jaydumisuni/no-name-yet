@@ -2,7 +2,7 @@
 
 This module turns external reviewer comments into structured learning items.
 It does not call GitHub directly in v1. It normalizes exported/copied comments
-so CodeRabbit/Qodo/etc. feedback can be classified and converted into memory.
+so reviewer feedback can be classified and converted into memory.
 """
 
 from __future__ import annotations

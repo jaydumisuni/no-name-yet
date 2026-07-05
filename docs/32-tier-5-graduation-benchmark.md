@@ -24,4 +24,4 @@ It does not claim Sergeant is better because of features. It measures whether Se
 
 Sergeant graduates by earned evidence across real reviews, not by feature claims.
 
-CodeRabbit or another strong reviewer can be used as the reference benchmark, but Sergeant remains the reviewer being proven.
+External reviewers can be used as benchmark references, but they are only measuring sticks. Sergeant must work and reach its own verdict without them.

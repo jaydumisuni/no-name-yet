@@ -101,7 +101,7 @@ def collect_github_comments(
         url = _optional_str(item.get("html_url") or item.get("url") or item.get("display_url"))
         classification = _optional_str(item.get("classification")) or "unclassified"
         reason = str(item.get("reason", ""))
-        source = detect_reviewer_source(author, body)
+        source = _optional_str(item.get("source")) or detect_reviewer_source(author, body)
         tags = ["github-pr-comment", source]
         if path:
             tags.append("inline")

@@ -77,3 +77,19 @@ def test_collect_github_comments_file_outputs_ingestion_shape(tmp_path: Path) ->
     assert payload["comments"][0]["source"] == "coderabbit"
     assert payload["comments"][0]["classification"] == "unclassified"
     assert payload["comments"][0]["path"] == "tests/test_app.py"
+
+
+def test_collect_github_comments_respects_explicit_generic_source() -> None:
+    comments = collect_github_comments(
+        {
+            "comments": [
+                {
+                    "source": "reference-reviewer",
+                    "body": "Generic reviewer evidence.",
+                    "user": {"login": "bot"},
+                }
+            ]
+        }
+    )
+
+    assert comments[0].source == "reference-reviewer"

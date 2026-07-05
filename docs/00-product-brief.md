@@ -30,7 +30,7 @@ A good reviewer should not only ask whether the code compiles. It should ask whe
 
 Create an independent reviewer that studies best-in-class tools, learns from their strengths and failures, and applies THETECHGUY/Hunter engineering standards as the final decision layer.
 
-This reviewer should eventually become strong enough that CodeRabbit, Qodo, PR-Agent, and similar tools are no longer needed as dependencies.
+This reviewer should stand on its own. External reviewers can be studied or benchmarked, but they must not become dependencies.
 
 ## Non-goals
 

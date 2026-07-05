@@ -1,6 +1,6 @@
 # External Review Learning Loop
 
-This workflow captures how Main Review should learn from external reviewers until it can replace that dependency.
+This workflow captures how Main Review can learn from external reviewers without depending on them.
 
 The goal is not to make CodeRabbit, Qodo, PR-Agent, or any other reviewer happy.
 
@@ -66,7 +66,7 @@ Action:
 For each repo:
 
 ```text
-1. Collect CodeRabbit review comments.
+1. Collect external reviewer comments.
 2. Classify every comment.
 3. Fix 🟢 items.
 4. Evaluate 🟡 items against our architecture.
@@ -83,7 +83,7 @@ The three repos are:
 
 ## Why this matters
 
-CodeRabbit has already reviewed many of our changes across earlier work.
+External reviewers have already reviewed many changes across earlier work.
 
 That is valuable training material. Losing it would waste real review history.
 

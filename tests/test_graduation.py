@@ -19,7 +19,7 @@ def test_graduation_benchmark_scores_and_gaps() -> None:
             "documentation_consistency": 0.9,
         },
     }
-    reference = {"name": "CodeRabbit", "metrics": {"real_bugs_found": 0.8, "false_positive_control": 0.85}}
+    reference = {"name": "External Benchmark", "metrics": {"real_bugs_found": 0.8, "false_positive_control": 0.85}}
 
     result = run_graduation_benchmark(sergeant, reference)
     markdown = summarize_graduation(result)
@@ -57,7 +57,7 @@ def test_app_bridge_returns_graduation_packet(tmp_path: Path) -> None:
             "root": str(tmp_path),
             "mode": "pull_request",
             "changed_files": ["src/app.py", "tests/test_app.py"],
-            "reference_benchmark": {"name": "CodeRabbit", "metrics": {"real_bugs_found": 0.5}},
+            "reference_benchmark": {"name": "External Benchmark", "metrics": {"real_bugs_found": 0.5}},
         }
     )
 
