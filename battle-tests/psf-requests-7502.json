@@ -1,0 +1,25 @@
+{
+  "repository": "psf/requests",
+  "pull_request": 7502,
+  "url": "https://github.com/psf/requests/pull/7502",
+  "title": "Fix file wrapper detection in request file encoding",
+  "outcome": "merged",
+  "changed_files": [
+    "src/requests/models.py",
+    "tests/test_requests.py"
+  ],
+  "review_signals": [
+    "Maintainer requested changes around overlapping tests.",
+    "Maintainer asked for test inputs to be narrowed to the behavior under test.",
+    "Author accepted the simplification direction.",
+    "Maintainer later approved the PR."
+  ],
+  "expected_sergeant_findings": [
+    "Implementation is small and targeted.",
+    "Regression test covers the file wrapper behavior.",
+    "Extra unrelated request arguments would reduce test clarity.",
+    "Duplicate tests should be removed or parameterized."
+  ],
+  "expected_initial_verdict": "NEEDS WORK",
+  "expected_final_verdict": "PASS"
+}
