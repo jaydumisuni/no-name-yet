@@ -37,6 +37,12 @@ def test_vscode_extension_runtime_uses_bundled_launcher() -> None:
     assert "registerTreeDataProvider" in runtime
     assert "SergeantActionProvider" in runtime
     assert "ACTIONS" in runtime
+    assert "showResultPanel" in runtime
+    assert "renderResultHtml" in runtime
+    assert "Required Actions" in runtime
+    assert "Top Findings" in runtime
+    assert "Raw Evidence" in runtime
+    assert "createWebviewPanel" in runtime
     assert "new vscode.ThemeIcon(\"shield\")" in runtime
     assert '"review"' in runtime
     assert '"app-review"' in runtime
