@@ -29,19 +29,22 @@ Delete only branches that are clearly abandoned scratch/retry branches after con
 
 ## Obvious cleanup candidates reported by branch audit
 
-These branch-name patterns should be treated as cleanup candidates:
+These branch-name patterns should be treated as cleanup candidates after confirmation:
 
 - `do-not-use*`
 - `mistake*`
 - `last-mistake*`
 - `please-ignore*`
-- `*ignore*`
-- `*loop*`
 - `why-am-i-doing-this*`
 - `stop-branching-now*`
 - `noop*`
 - `tmp*`
 - duplicate retry families such as `sentinel-trust-checks-v*`, `srg-review-intelligence-v*`, and `trust-checks-v*`
+
+These broad branch-name matches are review-only and must not be used as automatic delete rules:
+
+- `*ignore*`
+- `*loop*`
 
 ## Branch categories
 
@@ -52,11 +55,12 @@ These branch-name patterns should be treated as cleanup candidates:
 | active future work | keep |
 | merged PR branch | delete after confirmation |
 | obvious failed loop/scratch branch | delete after confirmation |
+| broad wildcard match | manual review only |
 | unknown branch with unique commits | compare before deleting |
 
 ## Next steps
 
-1. Export full branch list locally with `git branch -r` or from GitHub branches page.
+1. Export the full ref list locally with `git for-each-ref --format='%(refname:short)' refs/heads refs/remotes refs/tags`.
 2. Paste or commit the list into this document.
 3. Mark each branch `keep`, `delete`, or `unknown`.
 4. Delete only `delete` branches.
