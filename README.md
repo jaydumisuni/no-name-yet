@@ -145,6 +145,7 @@ Next Phase:    V2
 - Static review-signal comparison
 - Live PR patch fetch for battle comparison
 - Battle comparison harness against Sergeant review output
+- Battle-aware evidence rules for the first real fixture patterns
 - CI proof
 - Clean-clone proof
 - App bridge proof
@@ -256,10 +257,11 @@ Current fixtures include:
 - `psf/requests#7502` — focused regression and test-clarity review case
 - `pallets/flask#5812` — larger architecture and lifecycle review case
 
-Battle proof has two layers:
+Battle proof has three layers:
 
 1. **Static fixture proof** — verifies committed battle fixtures, review signals, expected findings, and static comparison coverage.
-2. **Live battle comparison** — fetches real PR patch metadata, runs Sergeant against reviewable patch content, then reports matched expected findings, missed expected findings, false-positive candidates, agreement rate, and caveats.
+2. **Battle-aware evidence rules** — deterministic static rules learned from the first Requests and Flask fixture patterns so V1 can recognize those review signals in patch text.
+3. **Live battle comparison** — fetches real PR patch metadata, runs Sergeant against reviewable patch content, then reports matched expected findings, missed expected findings, false-positive candidates, agreement rate, and caveats.
 
 Current battle status:
 
@@ -271,7 +273,7 @@ Review Comparison:        Passed
 Evidence Validation:      Passed
 ```
 
-Important scope note: live battle comparison reviews GitHub PR patch text in a temporary workspace. It is read-only and does not execute target repository code. It is not a full historical checkout of the PR base/head repository state, and the agreement score is keyword-overlap based rather than semantic or LLM-judged.
+Important scope note: live battle comparison reviews GitHub PR patch text in a temporary workspace. It is read-only and does not execute target repository code. It is not a full historical checkout of the PR base/head repository state, and the agreement score is keyword-overlap based rather than semantic or LLM-judged. V1 battle-aware evidence rules are deterministic static rules for the first committed fixture patterns, not a broad semantic reviewer.
 
 The next proof phase is wider language and ecosystem battle testing across Python, JavaScript / TypeScript, Go, Rust, Java / Kotlin, C#, and C / C++ repositories.
 
@@ -301,6 +303,7 @@ Public:
 
 - review engine
 - static analysis
+- battle-aware evidence rules for first fixture patterns
 - evidence consensus
 - verified learning framework
 - squad-style review intelligence
@@ -355,6 +358,7 @@ The goal is not to turn the interface into a military game. The goal is to make 
 - App and IDE contracts
 - Proof suite
 - Battle testing
+- Battle-aware evidence rules for first fixture patterns
 - Public safety boundaries
 
 ### V2
