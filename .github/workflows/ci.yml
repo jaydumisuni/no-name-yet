@@ -21,7 +21,15 @@ jobs:
       - name: Install test runner
         run: python -m pip install --upgrade pip pytest
       - name: Run tests
-        run: pytest -q
+        run: |
+          set -o pipefail
+          pytest -q -ra 2>&1 | tee pytest-output.txt
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-output
+          path: pytest-output.txt
 
   clean-clone-proof:
     runs-on: ubuntu-latest
@@ -37,7 +45,15 @@ jobs:
           python -m pip install --upgrade pip pytest
           python -m pip install -e .
       - name: Run tests
-        run: pytest -q
+        run: |
+          set -o pipefail
+          pytest -q -ra 2>&1 | tee pytest-output.txt
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-clone-pytest-output
+          path: pytest-output.txt
       - name: Prove CLI scan
         run: main-review scan --pretty
       - name: Prove CLI evidence
