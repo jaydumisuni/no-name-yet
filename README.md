@@ -142,6 +142,9 @@ Next Phase:    V2
 ### Proof and battle validation
 
 - Battle-test fixtures and validator
+- Static review-signal comparison
+- Live PR patch fetch for battle comparison
+- Battle comparison harness against Sergeant review output
 - CI proof
 - Clean-clone proof
 - App bridge proof
@@ -213,11 +216,19 @@ After installation, Sergeant appears in the VS Code Extensions view and provides
 - `Sergeant: Review Workspace`
 - `Sergeant: IDE Bench Contract`
 
-Validate battle-test fixtures:
+Validate battle-test fixtures and static review-signal comparisons:
 
 ```bash
 main-review battle-tests --pretty
 ```
+
+Run a live battle comparison against one fixture:
+
+```bash
+main-review battle-compare battle-tests/psf-requests-7502.json --token YOUR_READ_ONLY_GITHUB_TOKEN --pretty
+```
+
+`battle-compare` fetches the real PR patch list through the GitHub API, writes the patch text into a temporary review workspace, runs Sergeant against it, and compares Sergeant's output against the fixture's expected findings using transparent keyword-overlap scoring. It does not execute target repository code.
 
 Run the self-check gate:
 
@@ -245,6 +256,11 @@ Current fixtures include:
 - `psf/requests#7502` — focused regression and test-clarity review case
 - `pallets/flask#5812` — larger architecture and lifecycle review case
 
+Battle proof has two layers:
+
+1. **Static fixture proof** — verifies committed battle fixtures, review signals, expected findings, and static comparison coverage.
+2. **Live battle comparison** — fetches real PR patch metadata, runs Sergeant against reviewable patch content, then reports matched expected findings, missed expected findings, false-positive candidates, agreement rate, and caveats.
+
 Current battle status:
 
 ```text
@@ -254,6 +270,8 @@ Pull Request Battles:     Passed
 Review Comparison:        Passed
 Evidence Validation:      Passed
 ```
+
+Important scope note: live battle comparison reviews GitHub PR patch text in a temporary workspace. It is read-only and does not execute target repository code. It is not a full historical checkout of the PR base/head repository state, and the agreement score is keyword-overlap based rather than semantic or LLM-judged.
 
 The next proof phase is wider language and ecosystem battle testing across Python, JavaScript / TypeScript, Go, Rust, Java / Kotlin, C#, and C / C++ repositories.
 
@@ -288,6 +306,7 @@ Public:
 - squad-style review intelligence
 - app and IDE contracts
 - read-only GitHub ingestion
+- live PR diff fetch for battle comparison
 - battle-test validation
 
 Private/project-specific rules, customer evidence, deployment secrets, and write-token operations do not belong in the public repository.
