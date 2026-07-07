@@ -163,7 +163,7 @@ class BattleAwareEvidenceProvider:
             findings.append(EvidenceFinding(self.name, "minor", "testing", "Regression tests cover existing destination query strings and incoming request query strings.", path=path, evidence="Detected RedirectView query-string regression cases covering destination and request query strings.", confidence=0.8))
         if "urlparse" in text and ".query" in text:
             findings.append(EvidenceFinding(self.name, "minor", "architecture", "Query-string merge logic should use explicit URL query detection instead of checking for a raw question mark.", path=path, evidence="Detected explicit URL query parsing for separator selection.", confidence=0.75))
-        elif "query_string" in text and "\"?\" in url" in text:
+        elif "\"?\" in url" in text or "'?' in url" in text:
             findings.append(EvidenceFinding(self.name, "minor", "architecture", "Query-string merge logic should use explicit URL query detection instead of checking for a raw question mark.", path=path, evidence="Detected separator selection based on raw question-mark membership in URL text.", confidence=0.7))
         if "following the review feedback" in text or "follow-up pr" in text:
             findings.append(EvidenceFinding(self.name, "minor", "documentation", "Follow-up review feedback should be tracked before treating the change as final.", path=path, evidence="Detected follow-up review continuation language.", confidence=0.65))
