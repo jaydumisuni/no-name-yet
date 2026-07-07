@@ -1,11 +1,12 @@
 [project]
-name = "main-review"
+name = "sergeant-reviewer"
 version = "0.1.0"
-description = "Repository intelligence and final engineering review foundation."
+description = "Sergeant open-source engineering review system."
 requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
+sergeant = "main_review.cli:main"
 main-review = "main_review.cli:main"
 
 [tool.setuptools]
