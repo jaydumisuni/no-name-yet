@@ -168,31 +168,33 @@ Requires Python 3.10 or newer.
 Review the current repository:
 
 ```bash
-main-review review . --pretty
+sergeant review . --pretty
 ```
+
+`main-review` is also kept as a backwards-compatible CLI alias for V1.
 
 Run the app bridge contract:
 
 ```bash
-main-review app-review . --mode pull_request --files "src/app.py,tests/test_app.py" --pretty
+sergeant app-review . --mode pull_request --files "src/app.py,tests/test_app.py" --pretty
 ```
 
 Fetch read-only live GitHub PR comments:
 
 ```bash
-main-review live-github-comments owner/repo 12 --pretty
+sergeant live-github-comments owner/repo 12 --pretty
 ```
 
 Run live GitHub comments through the review bridge:
 
 ```bash
-main-review live-github-review owner/repo 12 . --pretty
+sergeant live-github-review owner/repo 12 . --pretty
 ```
 
 Show IDE handoff contract:
 
 ```bash
-main-review ide-bench-contract --pretty
+sergeant ide-bench-contract --pretty
 ```
 
 Run from PyCharm or VS Code without installing the console script:
@@ -220,13 +222,13 @@ After installation, Sergeant appears in the VS Code Extensions view and provides
 Validate battle-test fixtures and static review-signal comparisons:
 
 ```bash
-main-review battle-tests --pretty
+sergeant battle-tests --pretty
 ```
 
 Run a live battle comparison against one fixture:
 
 ```bash
-main-review battle-compare battle-tests/psf-requests-7502.json --token YOUR_READ_ONLY_GITHUB_TOKEN --pretty
+sergeant battle-compare battle-tests/psf-requests-7502.json --token YOUR_READ_ONLY_GITHUB_TOKEN --pretty
 ```
 
 `battle-compare` fetches the real PR patch list through the GitHub API, writes the patch text into a temporary review workspace, runs Sergeant against it, and compares Sergeant's output against the fixture's expected findings using transparent keyword-overlap scoring. It does not execute target repository code.
@@ -234,7 +236,7 @@ main-review battle-compare battle-tests/psf-requests-7502.json --token YOUR_READ
 Run the self-check gate:
 
 ```bash
-main-review verify-standard --pretty
+sergeant verify-standard --pretty
 ```
 
 A clean self-check returns:
@@ -256,12 +258,12 @@ Current fixtures include:
 
 - `psf/requests#7502` — focused regression and test-clarity review case
 - `pallets/flask#5812` — larger architecture and lifecycle review case
-- `django/django#19610` — held-out URL query-string merge review case
+- `django/django#19610` — third URL query-string merge review case
 
 Battle proof has three layers:
 
 1. **Static fixture proof** — verifies committed battle fixtures, review signals, expected findings, and static comparison coverage.
-2. **Battle-aware evidence rules** — deterministic static rules learned from committed fixture patterns and extended through a Django held-out case so V1 can recognize those review signals in patch text.
+2. **Battle-aware evidence rules** — deterministic static rules learned from committed fixture patterns and extended through the Django query-string case so V1 can recognize those review signals in patch text.
 3. **Live battle comparison** — fetches real PR patch metadata, runs Sergeant against reviewable patch content, then reports matched expected findings, missed expected findings, false-positive candidates, agreement rate, and caveats.
 
 Current battle status:
@@ -272,10 +274,10 @@ Repository Battles:       Passed
 Pull Request Battles:     Passed
 Review Comparison:        Passed
 Evidence Validation:      Passed
-Held-out Fixture:         Passed
+Third Fixture:            Passed
 ```
 
-Important scope note: live battle comparison reviews GitHub PR patch text in a temporary workspace. It is read-only and does not execute target repository code. It is not a full historical checkout of the PR base/head repository state, and the agreement score is keyword-overlap based with documented synonym expansion rather than semantic or LLM-judged. V1 battle-aware evidence rules are deterministic static rules for committed fixture patterns, not a broad semantic reviewer.
+Important scope note: live battle comparison reviews GitHub PR patch text in a temporary workspace. It is read-only and does not execute target repository code. It is not a full historical checkout of the PR base/head repository state, and the agreement score is keyword-overlap based with documented synonym expansion rather than semantic or LLM-judged. V1 battle-aware evidence rules are deterministic static rules for committed fixture patterns, not a broad semantic reviewer or a held-out generalization benchmark.
 
 The next proof phase is wider language and ecosystem battle testing across Python, JavaScript / TypeScript, Go, Rust, Java / Kotlin, C#, and C / C++ repositories.
 
