@@ -21,6 +21,10 @@ class FakeDiff:
     files: list[FakeFile]
 
 
+def _fake_comments(repository: str, pr_number: int, *, token=None, base_url="https://api.github.com"):
+    return []
+
+
 def test_run_battle_comparison_scores_expected_matches(tmp_path, monkeypatch):
     fixture = tmp_path / "case.json"
     fixture.write_text(
@@ -55,6 +59,7 @@ def test_run_battle_comparison_scores_expected_matches(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr("main_review.battle_compare.fetch_pr_diff_live", fake_fetch)
+    monkeypatch.setattr("main_review.battle_compare.fetch_pr_comments_live", _fake_comments)
 
     result = run_battle_comparison(fixture)
 
@@ -87,6 +92,7 @@ def test_run_battle_comparison_reports_missed_without_repo_noise(tmp_path, monke
         return FakeDiff(repository, pr_number, "base", "head", [FakeFile("src/app.py", "@@\n+plain change")])
 
     monkeypatch.setattr("main_review.battle_compare.fetch_pr_diff_live", fake_fetch)
+    monkeypatch.setattr("main_review.battle_compare.fetch_pr_comments_live", _fake_comments)
 
     result = run_battle_comparison(fixture)
     payload = result.to_dict()
@@ -119,6 +125,7 @@ def test_patch_only_battle_compare_does_not_emit_repo_level_doc_or_test_noise(tm
         return FakeDiff(repository, pr_number, "base", "head", [FakeFile("src/app.py", "@@\n+plain change")])
 
     monkeypatch.setattr("main_review.battle_compare.fetch_pr_diff_live", fake_fetch)
+    monkeypatch.setattr("main_review.battle_compare.fetch_pr_comments_live", _fake_comments)
 
     result = run_battle_comparison(fixture)
 
