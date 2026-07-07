@@ -101,7 +101,8 @@ def test_battle_aware_provider_detects_django_query_string_patterns(tmp_path: Pa
     )
     (tmp_path / "tests" / "generic_views" / "test_base.py").write_text(
         'def test_redirect_with_query_string_in_destination_and_request():\n'
-        '    response = RedirectView.as_view(url="/bar/?pork=spam", query_string=True)(self.rf.get("/foo/?utm_source=social"))\n',
+        '    response = RedirectView.as_view(url="/bar/?pork=spam", query_string=True)(self.rf.get("/foo/?utm_source=social"))\n'
+        '    assert response.headers["Location"] == "/bar/?pork=spam&utm_source=social"\n',
         encoding="utf-8",
     )
 
