@@ -1,0 +1,23 @@
+{
+  "repository": "django/django",
+  "pull_request": 19610,
+  "url": "https://github.com/django/django/pull/19610",
+  "title": "Fixed #36488 -- use & separator when merging query strings in RedirectView",
+  "outcome": "closed_followup_pr",
+  "changed_files": [
+    "django/views/generic/base.py",
+    "tests/generic_views/test_base.py"
+  ],
+  "review_signals": [
+    "Reviewer suggested replacing inline percent-format separator logic with an explicit urlparse(url).query branch.",
+    "Reviewer said the change looked good with a suggestion.",
+    "Maintainer closed this PR because a follow-up PR continued the review feedback."
+  ],
+  "expected_sergeant_findings": [
+    "Query-string merge logic should use explicit URL query detection instead of checking for a raw question mark.",
+    "Regression tests cover existing destination query strings and incoming request query strings.",
+    "Follow-up review feedback should be tracked before treating the change as final."
+  ],
+  "expected_initial_verdict": "NEEDS WORK",
+  "expected_final_verdict": "PASS_WITH_WATCH"
+}
