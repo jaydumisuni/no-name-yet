@@ -6,7 +6,7 @@
 
 **Sergeant (SRG)** is an open-source software engineering review system created by **THETECHGUY DIGITAL SOLUTIONS**.
 
-Sergeant helps developers inspect repositories, review pull requests, verify engineering standards, and produce evidence-based review reports. It is built to fit existing developer workflows and AI provider choices instead of locking a project into one model or platform.
+Sergeant helps developers inspect repositories, review pull requests, verify engineering standards, and produce evidence-based reports. It is built to fit existing developer workflows and AI provider choices instead of locking a project into one model or platform.
 
 Sergeant is not another one-shot coding assistant. It is a reviewer: it checks work, challenges assumptions, collects proof, and reports what should happen before code is merged or released.
 
@@ -16,16 +16,15 @@ NEEDS WORK
 BLOCK
 ```
 
-## Operational status
+## Who Sergeant is for
 
-```text
-Status:        Standing By
-Version:       v1
-Mission:       Operational
-Proof Status:  Verified
-Battle Status: Passed
-Next Phase:    V2
-```
+Sergeant is useful for:
+
+- Individual developers who want a second engineering review before shipping.
+- Open-source maintainers reviewing pull requests and project changes.
+- Software teams that care about standards, evidence, and repeatable review flow.
+- AI-assisted development workflows where generated code still needs independent review.
+- Self-hosted or model-agnostic environments that should not depend on one provider.
 
 ## Why Sergeant exists
 
@@ -74,6 +73,41 @@ Ship
 
 The first step matters: Sergeant should understand the objective, architecture, and intended standard before deciding whether something is wrong.
 
+## How Sergeant works
+
+```text
+Developer
+   │
+   ▼
+Sergeant
+   │
+   ├─ Repository
+   ├─ Pull Request
+   └─ Change Set
+   │
+   ▼
+Evidence Collection
+   │
+   ▼
+Standards Verification
+   │
+   ▼
+Report Ready
+```
+
+Sergeant reviews the available evidence, compares it against engineering standards, and returns a clear outcome: `PASS`, `NEEDS WORK`, or `BLOCK`.
+
+## Operational status
+
+```text
+Status:        Standing By
+Version:       v1
+Mission:       Operational
+Proof Status:  Verified
+Battle Status: Passed
+Next Phase:    V2
+```
+
 ## Current v1 capability set
 
 ### Repository review
@@ -103,8 +137,7 @@ The first step matters: Sergeant should understand the objective, architecture, 
 - VS Code extension commands
 - Read-only GitHub PR comment ingestion
 - Live GitHub review bridge
-- Model-agnostic architecture
-- CI and clean-clone proof
+- Works with local models, self-hosted deployments, and OpenAI-compatible providers
 
 ### Proof and battle validation
 
@@ -275,7 +308,7 @@ It refuses to:
 
 ## Sergeant terminology
 
-Sergeant uses a small amount of military-inspired language to make the workflow memorable without making the tool hard to understand.
+Sergeant uses a small amount of military-inspired language to make reviews structured and memorable without making the tool hard to understand. Every term has a plain-language meaning.
 
 | Sergeant term | Meaning |
 | --- | --- |
@@ -315,16 +348,6 @@ The goal is not to turn the interface into a military game. The goal is to make 
 - More language and framework coverage
 - Improved report experience
 - Self-hosted and OpenAI-compatible provider options
-
-## Status
-
-**Sergeant v1 foundation is implemented and self-verifying.**
-
-The current v1 foundation has passed CI, clean-clone proof, app bridge proof, IDE contract proof, mocked live GitHub proof, battle-test validation, and release proof checks.
-
-Cross-language ranking proof remains the next improvement phase.
-
-Repository: [jaydumisuni/Sergeant](https://github.com/jaydumisuni/Sergeant)
 
 ## Contributing
 
