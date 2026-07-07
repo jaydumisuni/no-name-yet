@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from .app_bridge import handle_app_review_request
+from .battle_compare import run_battle_comparison
 from .battle_tests import validate_battle_fixtures
 from .boundary import check_action_boundary, repository_visibility_policy
 from .capability_engine import run_capability_engine
@@ -82,9 +83,16 @@ def build_parser() -> argparse.ArgumentParser:
     ide_parser = subparsers.add_parser("ide-bench-contract", help="Print the VS Code, PyCharm, JetBrains, and AI handoff contract.")
     ide_parser.add_argument("--pretty", action="store_true")
 
-    battle_parser = subparsers.add_parser("battle-tests", help="Validate local battle-test fixtures.")
+    battle_parser = subparsers.add_parser("battle-tests", help="Validate local battle-test fixtures and static comparisons.")
     battle_parser.add_argument("path", nargs="?", default=".")
     battle_parser.add_argument("--pretty", action="store_true")
+
+    battle_compare_parser = subparsers.add_parser("battle-compare", help="Fetch a real PR patch, run Sergeant, and compare expected battle findings.")
+    battle_compare_parser.add_argument("fixture", help="Path to one battle-tests/*.json fixture.")
+    battle_compare_parser.add_argument("--token", default=None, help="Optional read-only GitHub token.")
+    battle_compare_parser.add_argument("--base-url", default="https://api.github.com")
+    battle_compare_parser.add_argument("--match-threshold", type=float, default=0.5)
+    battle_compare_parser.add_argument("--pretty", action="store_true")
 
     boundary_parser = subparsers.add_parser("boundary", help="Check Sergeant public safety boundary.")
     boundary_parser.add_argument("action")
@@ -215,6 +223,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "battle-tests":
         _print_json(validate_battle_fixtures(Path(args.path)), pretty=args.pretty)
+        return 0
+    if args.command == "battle-compare":
+        result = run_battle_comparison(Path(args.fixture), token=args.token, base_url=args.base_url, match_threshold=args.match_threshold)
+        _print_json(result.to_dict(), pretty=args.pretty)
         return 0
     if args.command == "boundary":
         _print_json(check_action_boundary(args.action, {"requires_write_token": args.requires_write_token, "executes_untrusted_code": args.executes_untrusted_code}), pretty=args.pretty)
