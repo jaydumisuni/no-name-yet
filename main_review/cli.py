@@ -26,7 +26,7 @@ from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
 from .verdict import review_repository
 from .verification import verify_repository_standard
-from .v2_mission import run_v2_mission
+from .v2_mission import MISSION_TYPES, run_v2_mission
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     v2_parser = subparsers.add_parser("v2-mission", help="Build the Sergeant V2 mission, briefing, loadout, confidence, and audit packet.")
     v2_parser.add_argument("path", nargs="?", default=".")
-    v2_parser.add_argument("--mission-type", default="repository_review")
+    v2_parser.add_argument("--mission-type", default="repository_review", choices=sorted(MISSION_TYPES))
     v2_parser.add_argument("--mode", default="repository", choices=["repository", "pull_request", "changed_files"])
     v2_source = v2_parser.add_mutually_exclusive_group()
     v2_source.add_argument("--files")
@@ -225,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
             "changed_files": _changed_from_args(args.files, args.file_list),
             "source": args.source,
             "execution_permissions": {
-                "read_only": True,
+                "read_only": not args.allow_write,
                 "allow_network": args.allow_network,
                 "allow_shell": args.allow_shell,
                 "allow_write": args.allow_write,

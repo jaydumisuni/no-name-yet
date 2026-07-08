@@ -58,7 +58,16 @@ def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
     reference_metrics = normalized.get("reference_benchmark") or {"name": "Reference", "metrics": {}}
     graduation = run_graduation_benchmark(sergeant_metrics, reference_metrics)
     squad = run_squad_review(packet, evidence_consensus, learning, graduation)
-    v2 = run_v2_mission(normalized, evidence_consensus=evidence_consensus)
+    try:
+        v2 = run_v2_mission(normalized, evidence_consensus=evidence_consensus)
+    except Exception as exc:
+        v2 = {
+            "ok": False,
+            "schema_version": "sergeant.mission.v2",
+            "error": "v2_mission_failed",
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }
     markdown = render_pr_review_markdown(packet)
 
     return build_review_response(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -135,6 +136,26 @@ def test_v2_cli_runs(tmp_path: Path) -> None:
     _make_repo(tmp_path)
 
     assert main(["v2-mission", str(tmp_path), "--mission-type", "pull_request_review", "--mode", "pull_request", "--files", "src/app.py,tests/test_app.py"]) == 0
+
+
+def test_v2_cli_rejects_unknown_mission_type(tmp_path: Path) -> None:
+    _make_repo(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["v2-mission", str(tmp_path), "--mission-type", "random_review"])
+
+    assert exc.value.code == 2
+
+
+def test_v2_cli_allow_write_clears_read_only(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _make_repo(tmp_path)
+
+    assert main(["v2-mission", str(tmp_path), "--allow-write"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    permissions = payload["mission"]["execution_permissions"]
+    assert permissions["allow_write"] is True
+    assert permissions["read_only"] is False
 
 
 def test_v2_declares_all_core_mission_types() -> None:

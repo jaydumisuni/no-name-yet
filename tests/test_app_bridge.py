@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+import main_review.app_bridge as app_bridge
 from main_review.app_bridge import handle_app_review_request
 from main_review.cli import main
 from main_review.review_contract import CONTRACT_VERSION
@@ -60,3 +63,20 @@ def test_app_bridge_cli_accepts_request_file(tmp_path: Path) -> None:
     exit_code = main(["app-review", "--request-file", str(request_file)])
 
     assert exit_code == 0
+
+
+def test_app_bridge_keeps_v1_payload_when_v2_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _make_repo(tmp_path)
+
+    def fail_v2(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("planned v2 failure")
+
+    monkeypatch.setattr(app_bridge, "run_v2_mission", fail_v2)
+
+    payload = handle_app_review_request({"root": str(tmp_path), "mode": "pull_request", "changed_files": ["src/app.py"]})
+
+    assert payload["ok"] is True
+    assert payload["schema_version"] == CONTRACT_VERSION
+    assert payload["v2"]["ok"] is False
+    assert payload["v2"]["error"] == "v2_mission_failed"
+    assert payload["v2"]["error_type"] == "RuntimeError"
