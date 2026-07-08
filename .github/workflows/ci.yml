@@ -33,6 +33,7 @@ jobs:
 
   clean-clone-proof:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,6 +68,7 @@ jobs:
       - name: Prove battle-test fixtures
         run: main-review battle-tests --pretty
       - name: Generate live battle outputs
+        timeout-minutes: 5
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
