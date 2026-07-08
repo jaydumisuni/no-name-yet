@@ -10,6 +10,17 @@ from typing import Any
 
 CONTRACT_VERSION = "sergeant.review.v1"
 REVIEW_MODES = {"repository", "pull_request", "changed_files"}
+OPTIONAL_V2_REQUEST_FIELDS = {
+    "mission_type",
+    "branch",
+    "commit",
+    "pull_request",
+    "policy_profile",
+    "enterprise_profile",
+    "time_budget",
+    "execution_permissions",
+    "output_preferences",
+}
 
 
 def clean_changed_files(value: object) -> list[str]:
@@ -59,6 +70,9 @@ def normalize_review_request(request: dict[str, Any]) -> dict[str, Any]:
         "reference_benchmark": request.get("reference_benchmark"),
         "source": request.get("source") or "app-bridge",
     }
+    for field in OPTIONAL_V2_REQUEST_FIELDS:
+        if field in request:
+            normalized[field] = request.get(field)
     return normalized
 
 
@@ -95,6 +109,7 @@ def build_review_response(
     graduation: dict[str, Any],
     graduation_markdown: str,
     squad: dict[str, Any],
+    v2: dict[str, Any] | None = None,
     markdown: str,
 ) -> dict[str, Any]:
     """Build the one response format used by CLI, app, IDE, and AI handoff."""
@@ -102,7 +117,7 @@ def build_review_response(
     action = str(verdict.get("verdict") or "COMMENT")
     intelligence = packet.get("review_intelligence", {})
     capability_review = packet.get("capability_review", {})
-    return {
+    response = {
         "ok": True,
         "schema_version": CONTRACT_VERSION,
         "service": "Sergeant",
@@ -135,6 +150,9 @@ def build_review_response(
         "markdown": markdown,
         "packet": packet,
     }
+    if v2 is not None:
+        response["v2"] = v2
+    return response
 
 
 def github_comments_to_external_provider(live_payload: dict[str, Any]) -> dict[str, Any]:

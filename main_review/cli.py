@@ -26,6 +26,7 @@ from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
 from .verdict import review_repository
 from .verification import verify_repository_standard
+from .v2_mission import run_v2_mission
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +44,20 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser = subparsers.add_parser("review", help="Run static evidence collection and produce a verdict.")
     review_parser.add_argument("path", nargs="?", default=".")
     review_parser.add_argument("--pretty", action="store_true")
+
+    v2_parser = subparsers.add_parser("v2-mission", help="Build the Sergeant V2 mission, briefing, loadout, confidence, and audit packet.")
+    v2_parser.add_argument("path", nargs="?", default=".")
+    v2_parser.add_argument("--mission-type", default="repository_review")
+    v2_parser.add_argument("--mode", default="repository", choices=["repository", "pull_request", "changed_files"])
+    v2_source = v2_parser.add_mutually_exclusive_group()
+    v2_source.add_argument("--files")
+    v2_source.add_argument("--file-list")
+    v2_parser.add_argument("--source", default="cli:v2-mission")
+    v2_parser.add_argument("--allow-network", action="store_true")
+    v2_parser.add_argument("--allow-shell", action="store_true")
+    v2_parser.add_argument("--allow-write", action="store_true")
+    v2_parser.add_argument("--allow-untrusted-code", action="store_true")
+    v2_parser.add_argument("--pretty", action="store_true")
 
     app_parser = subparsers.add_parser("app-review", help="Run Sergeant through the app-facing bridge.")
     app_parser.add_argument("path", nargs="?", default=".")
@@ -201,6 +216,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "review":
         _print_json(review_repository(Path(args.path)), pretty=args.pretty)
+        return 0
+    if args.command == "v2-mission":
+        _print_json(run_v2_mission({
+            "root": args.path,
+            "mode": args.mode,
+            "mission_type": args.mission_type,
+            "changed_files": _changed_from_args(args.files, args.file_list),
+            "source": args.source,
+            "execution_permissions": {
+                "read_only": True,
+                "allow_network": args.allow_network,
+                "allow_shell": args.allow_shell,
+                "allow_write": args.allow_write,
+                "allow_untrusted_code": args.allow_untrusted_code,
+            },
+        }), pretty=args.pretty)
         return 0
     if args.command == "app-review":
         request = load_review_request_file(args.request_file) if args.request_file else {"root": args.path, "mode": args.mode, "changed_files": _changed_from_args(args.files, args.file_list), "external_review_file": args.external_review_file, "source": "cli:app-review"}

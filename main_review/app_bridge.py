@@ -17,6 +17,7 @@ from .learning_loop import run_learning_loop
 from .pr_reviewer import render_pr_review_markdown, run_independent_pr_review
 from .review_contract import build_review_response, normalize_review_request
 from .squad import run_squad_review
+from .v2_mission import run_v2_mission
 
 
 def _default_sergeant_metrics(packet: dict[str, Any], evidence_consensus: dict[str, Any]) -> dict[str, float]:
@@ -57,6 +58,7 @@ def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
     reference_metrics = normalized.get("reference_benchmark") or {"name": "Reference", "metrics": {}}
     graduation = run_graduation_benchmark(sergeant_metrics, reference_metrics)
     squad = run_squad_review(packet, evidence_consensus, learning, graduation)
+    v2 = run_v2_mission(normalized, evidence_consensus=evidence_consensus)
     markdown = render_pr_review_markdown(packet)
 
     return build_review_response(
@@ -67,5 +69,6 @@ def handle_app_review_request(request: dict[str, Any]) -> dict[str, Any]:
         graduation=graduation,
         graduation_markdown=summarize_graduation(graduation),
         squad=squad,
+        v2=v2,
         markdown=markdown,
     )

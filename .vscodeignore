@@ -6,7 +6,7 @@
 battle-tests/**
 docs/**
 tests/**
-main_review.egg-info/**
+*.egg-info/**
 __pycache__/**
 **/__pycache__/**
 *.vsix

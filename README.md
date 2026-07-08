@@ -101,14 +101,14 @@ Sergeant reviews the available evidence, compares it against engineering standar
 
 ```text
 Status:        Standing By
-Version:       v1
+Version:       v2 command-system phase
 Mission:       Operational
 Proof Status:  Verified
 Battle Status: Passed
-Next Phase:    V2
+V1 Baseline:   Released and pinned
 ```
 
-## Current v1 capability set
+## Current capability set
 
 ### Repository review
 
@@ -197,6 +197,12 @@ Show IDE handoff contract:
 sergeant ide-bench-contract --pretty
 ```
 
+Build the V2 mission, briefing, loadout, confidence, and audit packet:
+
+```bash
+sergeant v2-mission . --mission-type pull_request_review --mode pull_request --files "src/app.py,tests/test_app.py" --pretty
+```
+
 Run from PyCharm or VS Code without installing the console script:
 
 ```bash
@@ -211,7 +217,7 @@ Install Sergeant as a local VS Code extension:
 
 ```bash
 npx @vscode/vsce package --no-dependencies
-code --install-extension sergeant-reviewer-0.1.1.vsix --force
+code --install-extension sergeant-reviewer-0.2.0.vsix --force
 ```
 
 After installation, Sergeant appears in the VS Code Extensions view and provides these commands from any workspace:
@@ -367,6 +373,11 @@ The goal is not to turn the interface into a military game. The goal is to make 
 
 ### V2
 
+- V2 command-system layer implemented
+- Mission intake, briefing, and loadout packets
+- Shared armoury and weapon manifests
+- Officer blueprints and adaptive deployment
+- Adaptive confidence and audit trail
 - Command Center UI polish
 - Better Review Squad workflow
 - Evidence Locker / report history
