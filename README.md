@@ -217,13 +217,24 @@ Install Sergeant as a local VS Code extension:
 
 ```bash
 npx @vscode/vsce package --no-dependencies
-code --install-extension sergeant-reviewer-0.2.0.vsix --force
+code --install-extension sergeant-reviewer-0.2.1.vsix --force
 ```
 
-After installation, Sergeant appears in the VS Code Extensions view and provides these commands from any workspace:
+After installation, Sergeant appears in the VS Code activity bar as a Command Center and provides these commands from any workspace:
 
 - `Sergeant: Review Workspace`
+- `Sergeant: App Bridge Review`
+- `Sergeant: Review Current File`
+- `Sergeant: Review Changed Files`
+- `Sergeant: Build V2 Mission`
+- `Sergeant: Run Proof Suite`
+- `Sergeant: Run Final Proof`
+- `Sergeant: Verify Standard`
+- `Sergeant: Validate Battle Tests`
 - `Sergeant: IDE Bench Contract`
+- `Sergeant: Open Last Report`
+- `Sergeant: Copy Last Report`
+- `Sergeant: Export Last Report`
 
 Validate battle-test fixtures and static review-signal comparisons:
 

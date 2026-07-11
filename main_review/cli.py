@@ -1,4 +1,4 @@
-"""Command line entrypoint for Main Review."""
+"""Command line entrypoint for Sergeant."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from .v2_mission import MISSION_TYPES, run_v2_mission
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="main-review")
+    parser = argparse.ArgumentParser(prog="sergeant")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan_parser = subparsers.add_parser("scan", help="Build a static repository intelligence packet.")
