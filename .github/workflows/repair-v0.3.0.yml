@@ -1,0 +1,122 @@
+name: Repair Sergeant v0.3.0 Publications
+
+on:
+  push:
+    branches: [release-v0.3.0]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-sergeant-v0.3.0
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Finish Open VSX, JetBrains, and release assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out proven release source
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Verify required credentials
+        shell: bash
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: |
+          test -n "$OVSX_PAT" || { echo "Repository secret OVSX_PAT is missing."; exit 1; }
+          test -n "$JETBRAINS_MARKETPLACE_TOKEN" || { echo "Repository secret JETBRAINS_MARKETPLACE_TOKEN is missing."; exit 1; }
+
+      - name: Build all release artifacts
+        shell: bash
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+          npx --yes @vscode/vsce@latest package --no-dependencies --out sergeant-reviewer-0.3.0.vsix
+          gradle -p adapters/jetbrains clean buildPlugin
+          JETBRAINS_ZIP=$(find adapters/jetbrains/build/distributions -maxdepth 1 -type f -name '*.zip' -print -quit)
+          test -n "$JETBRAINS_ZIP" || { echo "JetBrains plugin ZIP was not produced."; exit 1; }
+          sha256sum sergeant-reviewer-0.3.0.vsix "$JETBRAINS_ZIP" dist/* > SHA256SUMS.txt
+
+      - name: Ensure Open VSX namespace exists
+        shell: bash
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set +e
+          OUTPUT=$(npx --yes ovsx@latest create-namespace thetechguyds --pat "$OVSX_PAT" 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ] && ! echo "$OUTPUT" | grep -Eqi 'already exists|already claimed|namespace.*exists'; then
+            exit $STATUS
+          fi
+
+      - name: Publish to Open VSX idempotently
+        shell: bash
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set +e
+          OUTPUT=$(npx --yes ovsx@latest publish sergeant-reviewer-0.3.0.vsix --pat "$OVSX_PAT" 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ] && ! echo "$OUTPUT" | grep -Eqi 'already exists|version.*exists|already published'; then
+            exit $STATUS
+          fi
+
+      - name: Publish JetBrains preview idempotently
+        shell: bash
+        env:
+          JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: |
+          set +e
+          OUTPUT=$(gradle -p adapters/jetbrains publishPlugin 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ] && ! echo "$OUTPUT" | grep -Eqi 'already exists|already uploaded|version.*exists|duplicate'; then
+            exit $STATUS
+          fi
+
+      - name: Attach complete artifact set to GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          JETBRAINS_ZIP=$(find adapters/jetbrains/build/distributions -maxdepth 1 -type f -name '*.zip' -print -quit)
+          gh release upload v0.3.0 \
+            sergeant-reviewer-0.3.0.vsix \
+            "$JETBRAINS_ZIP" \
+            dist/* \
+            SHA256SUMS.txt \
+            --clobber
