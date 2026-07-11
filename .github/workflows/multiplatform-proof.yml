@@ -1,0 +1,76 @@
+name: Multiplatform Proof
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "pyproject.toml"
+      - "vscode-extension.js"
+      - "main_review/**"
+      - "adapters/jetbrains/**"
+      - "tests/**"
+      - ".github/workflows/multiplatform-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-and-vscode:
+    name: Python package and VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install build and test tools
+        run: python -m pip install --upgrade build twine pytest
+      - name: Run tests
+        run: python -m pytest -q
+      - name: Build and verify PyPI artifacts
+        run: |
+          python -m build
+          python -m twine check dist/*
+      - name: Verify coordinated versions
+        run: |
+          python - <<'PY'
+          import json, pathlib, tomllib
+          npm = json.loads(pathlib.Path("package.json").read_text())["version"]
+          py = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          assert npm == py == "0.3.0", (npm, py)
+          PY
+      - name: Package VS Code extension
+        run: npx --yes @vscode/vsce@latest package --no-dependencies --out sergeant-reviewer-0.3.0.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sergeant-0.3.0-python-vscode
+          path: |
+            dist/*
+            sergeant-reviewer-0.3.0.vsix
+
+  jetbrains:
+    name: JetBrains plugin preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+      - name: Build JetBrains plugin
+        run: gradle -p adapters/jetbrains clean buildPlugin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sergeant-0.3.0-jetbrains-preview
+          path: adapters/jetbrains/build/distributions/*.zip

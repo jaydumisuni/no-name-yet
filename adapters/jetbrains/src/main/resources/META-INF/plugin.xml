@@ -1,0 +1,27 @@
+<idea-plugin>
+  <id>com.thetechguyds.sergeant</id>
+  <name>Sergeant</name>
+  <vendor email="support@thetechguyds.com" url="https://thetechguyds.com">THETECHGUY DIGITAL SOLUTIONS</vendor>
+
+  <description><![CDATA[
+    Sergeant is an evidence-based engineering reviewer. This preview adds a native JetBrains tool window that runs the shared Sergeant CLI against the current project.
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="Sergeant"
+                anchor="right"
+                factoryClass="com.thetechguyds.sergeant.SergeantToolWindowFactory"
+                canCloseContents="false"/>
+  </extensions>
+
+  <actions>
+    <action id="Sergeant.ReviewProject"
+            class="com.thetechguyds.sergeant.ReviewProjectAction"
+            text="Sergeant: Review Project"
+            description="Run Sergeant against the current project">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>
