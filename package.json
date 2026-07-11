@@ -2,7 +2,7 @@
   "name": "sergeant-reviewer",
   "displayName": "Sergeant",
   "description": "Sergeant open-source engineering reviewer for VS Code.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "thetechguyds",
   "license": "MIT",
   "repository": {
@@ -31,14 +31,14 @@
       "sergeant": [
         {
           "id": "sergeant.actions",
-          "name": "Actions"
+          "name": "Command Center"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "sergeant.actions",
-        "contents": "Sergeant actions load here when the extension activates."
+        "contents": "Open the Sergeant Command Center to review, verify, and inspect this workspace."
       }
     ],
     "commands": [
@@ -49,6 +49,18 @@
       {
         "command": "sergeant.appReviewWorkspace",
         "title": "Sergeant: App Bridge Review"
+      },
+      {
+        "command": "sergeant.reviewCurrentFile",
+        "title": "Sergeant: Review Current File"
+      },
+      {
+        "command": "sergeant.reviewChangedFiles",
+        "title": "Sergeant: Review Changed Files"
+      },
+      {
+        "command": "sergeant.v2Mission",
+        "title": "Sergeant: Build V2 Mission"
       },
       {
         "command": "sergeant.proofSuite",
@@ -69,6 +81,18 @@
       {
         "command": "sergeant.ideBenchContract",
         "title": "Sergeant: IDE Bench Contract"
+      },
+      {
+        "command": "sergeant.openLastReport",
+        "title": "Sergeant: Open Last Report"
+      },
+      {
+        "command": "sergeant.copyLastReport",
+        "title": "Sergeant: Copy Last Report"
+      },
+      {
+        "command": "sergeant.exportLastReport",
+        "title": "Sergeant: Export Last Report"
       }
     ],
     "configuration": {
