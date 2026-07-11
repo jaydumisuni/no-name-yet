@@ -45,8 +45,10 @@ def test_vscode_extension_runtime_uses_bundled_launcher() -> None:
     assert "ACTIONS" in runtime
     assert "SGT Command Center" in runtime
     assert "Mission Planner" in runtime
+    assert "Review workspace evidence." in runtime
     assert "Evidence Locker" in runtime
     assert "Review Doctrine" in runtime
+    assert "grid-template-columns:repeat(3,minmax(0,1fr))" in runtime
     assert "showResultPanel" in runtime
     assert "renderResultHtml" in runtime
     assert "Required Actions" in runtime

@@ -217,7 +217,7 @@ Install Sergeant as a local VS Code extension:
 
 ```bash
 npx @vscode/vsce package --no-dependencies
-code --install-extension sergeant-reviewer-0.2.1.vsix --force
+code --install-extension sergeant-reviewer-0.2.2.vsix --force
 ```
 
 After installation, Sergeant appears in the VS Code activity bar as a Command Center and provides these commands from any workspace:
