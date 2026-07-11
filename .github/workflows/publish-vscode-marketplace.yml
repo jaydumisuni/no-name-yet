@@ -1,0 +1,79 @@
+name: Publish VS Code Extension
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vscode-marketplace-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Package and publish Sergeant
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Read extension metadata
+        id: metadata
+        shell: bash
+        run: |
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "publisher=$(node -p "require('./package.json').publisher")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify publisher identity
+        shell: bash
+        run: |
+          test "${{ steps.metadata.outputs.publisher }}" = "thetechguyds" || {
+            echo "Expected publisher 'thetechguyds', found '${{ steps.metadata.outputs.publisher }}'."
+            exit 1
+          }
+
+      - name: Verify release tag matches package version
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          TAG_VERSION="${RELEASE_TAG#v}"
+          test "$TAG_VERSION" = "$PACKAGE_VERSION" || {
+            echo "Release tag '$RELEASE_TAG' does not match package.json version '$PACKAGE_VERSION'."
+            echo "Update package.json first, then publish a matching v$PACKAGE_VERSION release."
+            exit 1
+          }
+
+      - name: Package VSIX
+        shell: bash
+        run: npx --yes @vscode/vsce@latest package --out "${{ steps.metadata.outputs.name }}-${{ steps.metadata.outputs.version }}.vsix"
+
+      - name: Upload packaged VSIX as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.name }}-${{ steps.metadata.outputs.version }}-vsix
+          path: ${{ steps.metadata.outputs.name }}-${{ steps.metadata.outputs.version }}.vsix
+          if-no-files-found: error
+
+      - name: Publish to Visual Studio Marketplace
+        shell: bash
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          test -n "$VSCE_PAT" || {
+            echo "Repository secret VSCE_PAT is missing."
+            exit 1
+          }
+          npx --yes @vscode/vsce@latest publish --pat "$VSCE_PAT"
