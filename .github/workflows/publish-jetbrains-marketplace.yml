@@ -1,0 +1,98 @@
+name: Publish JetBrains Plugin
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jetbrains-marketplace-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish Sergeant JetBrains preview
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Read plugin metadata
+        id: metadata
+        shell: bash
+        run: |
+          VERSION=$(grep '^pluginVersion=' adapters/jetbrains/gradle.properties | cut -d= -f2-)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_version=${VERSION%-preview}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release tag matches plugin release line
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PLUGIN_RELEASE_VERSION: ${{ steps.metadata.outputs.release_version }}
+        run: |
+          TAG_VERSION="${RELEASE_TAG#v}"
+          test "$TAG_VERSION" = "$PLUGIN_RELEASE_VERSION" || {
+            echo "Release tag '$RELEASE_TAG' does not match JetBrains plugin release line '$PLUGIN_RELEASE_VERSION'."
+            exit 1
+          }
+
+      - name: Verify JetBrains publishing token exists
+        shell: bash
+        env:
+          JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: |
+          test -n "$JETBRAINS_MARKETPLACE_TOKEN" || {
+            echo "Repository secret JETBRAINS_MARKETPLACE_TOKEN is missing."
+            exit 1
+          }
+
+      - name: Build JetBrains plugin
+        run: gradle -p adapters/jetbrains clean buildPlugin
+
+      - name: Verify plugin package exists
+        id: package
+        shell: bash
+        run: |
+          PACKAGE=$(find adapters/jetbrains/build/distributions -maxdepth 1 -type f -name '*.zip' -print -quit)
+          test -n "$PACKAGE" || { echo "JetBrains plugin ZIP was not produced."; exit 1; }
+          echo "path=$PACKAGE" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$PACKAGE")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload plugin package as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sergeant-${{ steps.metadata.outputs.version }}-jetbrains
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish preview to JetBrains Marketplace
+        env:
+          JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: gradle -p adapters/jetbrains publishPlugin
+
+      - name: Attach JetBrains ZIP to GitHub Release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" "${{ steps.package.outputs.path }}" --clobber
