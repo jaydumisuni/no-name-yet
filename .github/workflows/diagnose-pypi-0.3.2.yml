@@ -8,6 +8,7 @@ on:
 permissions:
   actions: read
   contents: read
+  deployments: read
 
 jobs:
   inspect:
@@ -39,7 +40,40 @@ jobs:
           echo "INSPECTING_RUN_ID=$RUN_ID"
           if [ -n "$RUN_ID" ]; then
             gh run view "$RUN_ID" --repo jaydumisuni/Sergeant --json databaseId,event,status,conclusion,headBranch,headSha,jobs,url || true
+            gh api "repos/jaydumisuni/Sergeant/actions/runs/$RUN_ID" || true
             echo 'FAILED_LOG_BEGIN'
             gh run view "$RUN_ID" --repo jaydumisuni/Sergeant --log-failed || true
             echo 'FAILED_LOG_END'
           fi
+
+      - name: Inspect pypi environment and deployments
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          echo 'ENVIRONMENT_BEGIN'
+          gh api repos/jaydumisuni/Sergeant/environments/pypi || true
+          echo 'ENVIRONMENT_END'
+          echo 'BRANCH_POLICIES_BEGIN'
+          gh api repos/jaydumisuni/Sergeant/environments/pypi/deployment-branch-policies || true
+          echo 'BRANCH_POLICIES_END'
+          echo 'DEPLOYMENTS_BEGIN'
+          gh api 'repos/jaydumisuni/Sergeant/deployments?environment=pypi&per_page=30' > deployments.json || true
+          cat deployments.json || true
+          echo 'DEPLOYMENTS_END'
+          python - <<'PY' > deployment-ids.txt
+          import json
+          try:
+              data=json.load(open('deployments.json'))
+          except Exception:
+              data=[]
+          for item in data[:10]:
+              print(item.get('id',''))
+          PY
+          while read -r DEPLOYMENT_ID; do
+            [ -z "$DEPLOYMENT_ID" ] && continue
+            echo "DEPLOYMENT_STATUS_BEGIN $DEPLOYMENT_ID"
+            gh api "repos/jaydumisuni/Sergeant/deployments/$DEPLOYMENT_ID/statuses" || true
+            echo "DEPLOYMENT_STATUS_END $DEPLOYMENT_ID"
+          done < deployment-ids.txt
