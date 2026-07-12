@@ -10,83 +10,33 @@ permissions:
   contents: write
 
 jobs:
-  verify:
+  github-release:
+    name: GitHub release 0.3.2
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.0.0"
-
-      - name: Ensure the published GitHub release exists
+      - name: Verify published release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.3.2 --repo jaydumisuni/Sergeant >/dev/null 2>&1; then
-            echo 'GITHUB_RELEASE_0_3_2_ALREADY_PRESENT'
-            exit 0
-          fi
-          cat > release-notes.md <<'EOF'
-          ## Sergeant 0.3.2 — Complete Command Center
-
-          Sergeant's complete V2 Command Center is delivered in the 0.3 release line.
-
-          - Full Commander dashboard, Mission Planner, live mission progress, Evidence, Evidence Locker, Officers/Armoury, Settings, Doctrine, Roadmap, and Guide
-          - Compact VS Code launcher plus full editor Command Center
-          - Shared JetBrains Command Center through JCEF with a native fallback
-          - Live workspace, branch, changed-file, provider, report, and evidence state
-          - Read-only review by default, draft-only writer boundary, human approval, and no auto-merge
-          - CI, Main Review, browser UI proof, VSIX, Python distribution, and JetBrains packaging proof passed
-          EOF
-          gh release create v0.3.2 \
-            --repo jaydumisuni/Sergeant \
-            --target main \
-            --title 'Sergeant v0.3.2 — Complete Command Center' \
-            --notes-file release-notes.md
-
-      - name: Verify GitHub release
-        id: github_release
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set +e
-          gh api repos/jaydumisuni/Sergeant/releases/tags/v0.3.2 > github-release.json
-          status=$?
-          if [ "$status" -eq 0 ]; then
-            python - <<'PY'
+          gh api repos/jaydumisuni/Sergeant/releases/tags/v0.3.2 > release.json
+          python - <<'PY'
           import json
-          data=json.load(open('github-release.json'))
+          data=json.load(open('release.json'))
           assert data['tag_name']=='v0.3.2'
           assert data['draft'] is False
           assert data['prerelease'] is False
-          print('GITHUB_RELEASE_OK', data['name'])
+          print('GITHUB_RELEASE_0_3_2_OK', data['name'])
           PY
-            status=$?
-          fi
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
 
-      - name: Verify PyPI 0.3.2
-        id: pypi
-        continue-on-error: true
-        shell: bash
+  pypi:
+    name: PyPI 0.3.2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify wheel and source distribution
         run: |
-          set +e
           curl -fsSL https://pypi.org/pypi/sergeant-reviewer/json -o pypi.json
-          status=$?
-          if [ "$status" -eq 0 ]; then
-            python - <<'PY'
+          python - <<'PY'
           import json
           data=json.load(open('pypi.json'))
           files=data.get('releases',{}).get('0.3.2',[])
@@ -95,94 +45,78 @@ jobs:
           assert any(name.endswith('.tar.gz') for name in names), names
           print('PYPI_0_3_2_OK', sorted(names))
           PY
-            status=$?
-          fi
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
 
-      - name: Verify Visual Studio Marketplace 0.3.2
-        id: vsmarket
-        continue-on-error: true
-        shell: bash
+  visual-studio-marketplace:
+    name: Visual Studio Marketplace 0.3.2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify extension version
         run: |
-          cat > vs-query.json <<'JSON'
+          cat > query.json <<'JSON'
           {"filters":[{"criteria":[{"filterType":7,"value":"thetechguyds.sergeant-reviewer"}]}],"flags":914}
           JSON
-          set +e
-          curl -fsSL -X POST -H 'Content-Type: application/json' -H 'Accept: application/json;api-version=7.2-preview.1' --data @vs-query.json https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery -o vsmarket.json
-          status=$?
-          if [ "$status" -eq 0 ]; then
-            python - <<'PY'
+          curl -fsSL -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json;api-version=7.2-preview.1' \
+            --data @query.json \
+            https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
+            -o marketplace.json
+          python - <<'PY'
           import json
-          data=json.load(open('vsmarket.json'))
+          data=json.load(open('marketplace.json'))
           extensions=[item for result in data.get('results',[]) for item in result.get('extensions',[])]
           assert extensions, data
           versions=[item.get('version') for item in extensions[0].get('versions',[])]
           assert '0.3.2' in versions, versions[:20]
           print('VSMARKET_0_3_2_OK', versions[:10])
           PY
-            status=$?
-          fi
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
 
-      - name: Verify Open VSX 0.3.2
-        id: openvsx
-        continue-on-error: true
-        shell: bash
+  open-vsx:
+    name: Open VSX 0.3.2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify extension version
         run: |
-          set +e
           curl -fsSL https://open-vsx.org/api/thetechguyds/sergeant-reviewer -o openvsx.json
-          status=$?
-          if [ "$status" -eq 0 ]; then
-            python - <<'PY'
+          python - <<'PY'
           import json
           data=json.load(open('openvsx.json'))
           versions=data.get('allVersions',{})
           assert data.get('version')=='0.3.2' or '0.3.2' in versions, (data.get('version'), sorted(versions))
           print('OPENVSX_0_3_2_OK', data.get('version'))
           PY
-            status=$?
-          fi
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
 
-      - name: Publish or independently confirm JetBrains 0.3.2 preview
-        id: jetbrains
-        continue-on-error: true
+  jetbrains:
+    name: JetBrains 0.3.2 preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.0.0"
+      - name: Publish or confirm preview version
         shell: bash
         env:
           JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
         run: |
+          test -n "$JETBRAINS_MARKETPLACE_TOKEN" || { echo 'JETBRAINS_MARKETPLACE_TOKEN is missing'; exit 1; }
           set +e
-          if [ -z "$JETBRAINS_MARKETPLACE_TOKEN" ]; then
-            echo 'JETBRAINS_MARKETPLACE_TOKEN is missing'
-            status=1
-          else
-            OUTPUT=$(gradle -p adapters/jetbrains publishPlugin --stacktrace 2>&1)
-            status=$?
-            printf '%s\n' "$OUTPUT"
-            if [ "$status" -eq 0 ]; then
-              echo 'JETBRAINS_0_3_2_UPLOAD_ACCEPTED'
-            elif printf '%s' "$OUTPUT" | grep -Fqi 'already contains version 0.3.2-preview in channel preview'; then
-              echo 'JETBRAINS_0_3_2_ALREADY_PRESENT'
-              status=0
-            fi
+          OUTPUT=$(gradle -p adapters/jetbrains publishPlugin --stacktrace 2>&1)
+          STATUS=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+          if [ "$STATUS" -eq 0 ]; then
+            echo 'JETBRAINS_0_3_2_UPLOAD_ACCEPTED'
+            exit 0
           fi
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
-
-      - name: Enforce complete publication proof
-        if: always()
-        shell: bash
-        run: |
-          echo "GitHub release: ${{ steps.github_release.outputs.status }}"
-          echo "PyPI: ${{ steps.pypi.outputs.status }}"
-          echo "Visual Studio Marketplace: ${{ steps.vsmarket.outputs.status }}"
-          echo "Open VSX: ${{ steps.openvsx.outputs.status }}"
-          echo "JetBrains: ${{ steps.jetbrains.outputs.status }}"
-          test "${{ steps.github_release.outputs.status }}" = "0"
-          test "${{ steps.pypi.outputs.status }}" = "0"
-          test "${{ steps.vsmarket.outputs.status }}" = "0"
-          test "${{ steps.openvsx.outputs.status }}" = "0"
-          test "${{ steps.jetbrains.outputs.status }}" = "0"
+          printf '%s' "$OUTPUT" | grep -Fqi 'already contains version 0.3.2-preview in channel preview' && {
+            echo 'JETBRAINS_0_3_2_ALREADY_PRESENT'
+            exit 0
+          }
+          exit "$STATUS"
