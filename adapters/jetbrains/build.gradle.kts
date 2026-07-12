@@ -1,11 +1,16 @@
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.0.21"
-    id("org.jetbrains.intellij.platform") version "2.2.1"
+    id("org.jetbrains.kotlin.jvm") version "2.1.20"
+    id("org.jetbrains.intellij.platform") version "2.16.0"
 }
 
-group = "com.thetechguyds.sergeant"
-version = "0.3.0-preview"
+val pluginGroup: String by project
+val pluginName: String by project
+val pluginVersion: String by project
+val platformVersion: String by project
+
+group = pluginGroup
+version = pluginVersion
 
 repositories {
     mavenCentral()
@@ -16,7 +21,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        intellijIdeaCommunity("2024.3")
+        intellijIdeaCommunity(platformVersion)
         pluginVerifier()
         zipSigner()
     }
@@ -28,10 +33,10 @@ kotlin {
 
 intellijPlatform {
     pluginConfiguration {
-        name = "Sergeant"
-        version = "0.3.0-preview"
+        name = pluginName
+        version = pluginVersion
         ideaVersion {
-            sinceBuild = "243"
+            sinceBuild = "252"
         }
         vendor {
             name = "THETECHGUY DIGITAL SOLUTIONS"
@@ -41,12 +46,12 @@ intellijPlatform {
     }
     publishing {
         token = providers.environmentVariable("JETBRAINS_MARKETPLACE_TOKEN")
-        channels = listOf("eap")
+        channels = listOf("preview")
     }
 }
 
 tasks {
     wrapper {
-        gradleVersion = "8.10.2"
+        gradleVersion = "9.0.0"
     }
 }

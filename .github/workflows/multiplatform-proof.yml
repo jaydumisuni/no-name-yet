@@ -67,10 +67,14 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "9.0.0"
       - name: Build JetBrains plugin
         run: gradle -p adapters/jetbrains clean buildPlugin
+      - name: Verify JetBrains package exists
+        shell: bash
+        run: test -n "$(find adapters/jetbrains/build/distributions -maxdepth 1 -type f -name '*.zip' -print -quit)"
       - uses: actions/upload-artifact@v4
         with:
-          name: sergeant-0.3.0-jetbrains-preview
+          name: sergeant-0.3.1-jetbrains-preview
           path: adapters/jetbrains/build/distributions/*.zip
+          if-no-files-found: error
