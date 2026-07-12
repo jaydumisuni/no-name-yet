@@ -1,0 +1,53 @@
+name: Publish JetBrains 0.3.1 Preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-jetbrains-0.3.1-preview.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-jetbrains-0.3.1-preview
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.0.0"
+
+      - name: Verify publication inputs
+        shell: bash
+        env:
+          JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: |
+          test -n "$JETBRAINS_MARKETPLACE_TOKEN" || { echo 'JETBRAINS_MARKETPLACE_TOKEN is missing'; exit 1; }
+          grep -Fx 'pluginVersion=0.3.1-preview' adapters/jetbrains/gradle.properties
+          grep -Fx 'platformVersion=2025.2.6.2' adapters/jetbrains/gradle.properties
+
+      - name: Build JetBrains plugin
+        run: gradle -p adapters/jetbrains clean buildPlugin
+
+      - name: Publish JetBrains preview
+        env:
+          JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: gradle -p adapters/jetbrains publishPlugin
