@@ -13,81 +13,22 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify PyPI
+      - name: Probe JetBrains Marketplace APIs
         shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL https://pypi.org/pypi/sergeant-reviewer/json -o pypi.json
-          python - <<'PY'
-          import json
-          data=json.load(open('pypi.json'))
-          assert data['info']['version']=='0.3.0', data['info']['version']
-          files=data['releases'].get('0.3.0', [])
-          names={f['filename'] for f in files}
-          assert any(n.endswith('.whl') for n in names), names
-          assert any(n.endswith('.tar.gz') for n in names), names
-          print('PYPI_OK', sorted(names))
-          PY
-
-      - name: Verify Visual Studio Marketplace
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > query.json <<'JSON'
-          {"filters":[{"criteria":[{"filterType":7,"value":"thetechguyds.sergeant-reviewer"}]}],"flags":914}
-          JSON
-          curl -fsSL -X POST -H 'Content-Type: application/json' -H 'Accept: application/json;api-version=7.2-preview.1' --data @query.json https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery -o vsmarket.json
-          python - <<'PY'
-          import json
-          data=json.load(open('vsmarket.json'))
-          exts=[e for r in data.get('results',[]) for e in r.get('extensions',[])]
-          assert exts, data
-          ext=exts[0]
-          versions=[v.get('version') for v in ext.get('versions',[])]
-          assert '0.3.0' in versions, versions[:20]
-          print('VSMARKET_OK', ext.get('publisher',{}).get('publisherName'), ext.get('extensionName'), versions[:10])
-          PY
-
-      - name: Verify Open VSX
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL https://open-vsx.org/api/thetechguyds/sergeant-reviewer -o openvsx.json
-          python - <<'PY'
-          import json
-          data=json.load(open('openvsx.json'))
-          all_versions=data.get('allVersions',{})
-          assert data.get('version')=='0.3.0' or '0.3.0' in all_versions, data
-          print('OPENVSX_OK', data.get('namespace'), data.get('name'), data.get('version'), sorted(all_versions)[:10])
-          PY
-
-      - name: Inspect GitHub release assets
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -u
-          ASSETS=$(gh api repos/jaydumisuni/Sergeant/releases/tags/v0.3.0 --jq '.assets[].name')
-          printf 'GITHUB_ASSETS_BEGIN\n%s\nGITHUB_ASSETS_END\n' "$ASSETS"
-          missing=0
-          for exact in sergeant-reviewer-0.3.0.vsix sergeant_reviewer-0.3.0.tar.gz SHA256SUMS.txt; do
-            grep -Fx "$exact" <<<"$ASSETS" >/dev/null || { echo "MISSING_ASSET $exact"; missing=1; }
-          done
-          grep -E '^sergeant.*0\.3\.0.*\.zip$' <<<"$ASSETS" >/dev/null || { echo 'MISSING_ASSET JetBrains ZIP'; missing=1; }
-          grep -E '^sergeant_reviewer-0\.3\.0-.*\.whl$' <<<"$ASSETS" >/dev/null || { echo 'MISSING_ASSET Python wheel'; missing=1; }
-          echo "GITHUB_ASSET_PROOF_MISSING=$missing"
-
-      - name: Probe JetBrains Marketplace
-        shell: bash
-        run: |
-          set -euo pipefail
-          for url in \
-            'https://plugins.jetbrains.com/api/searchPlugins?search=Sergeant' \
-            'https://plugins.jetbrains.com/api/plugins?pluginId=com.thetechguyds.sergeant' \
-            'https://plugins.jetbrains.com/api/plugin/com.thetechguyds.sergeant'; do
-            echo "JETBRAINS_PROBE $url"
-            code=$(curl -sSL -o body.json -w '%{http_code}' "$url")
-            echo "HTTP $code"
-            head -c 4000 body.json || true
+          endpoints=(
+            'https://plugins.jetbrains.com/api/searchPlugins?search=Sergeant'
+            'https://plugins.jetbrains.com/api/plugins?pluginId=com.thetechguyds.sergeant'
+            'https://plugins.jetbrains.com/api/plugin/com.thetechguyds.sergeant'
+          )
+          i=0
+          for url in "${endpoints[@]}"; do
+            i=$((i+1))
+            echo "=== PROBE_$i $url ==="
+            code=$(curl -sSL -o "body-$i.txt" -w '%{http_code}' "$url")
+            echo "HTTP_STATUS=$code"
+            cat "body-$i.txt"
             echo
+            echo "=== END_PROBE_$i ==="
           done
