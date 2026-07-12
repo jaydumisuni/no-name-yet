@@ -32,7 +32,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "9.0.0"
 
       - name: Read plugin metadata
         id: metadata
@@ -84,10 +84,22 @@ jobs:
           path: ${{ steps.package.outputs.path }}
           if-no-files-found: error
 
-      - name: Publish preview to JetBrains Marketplace
+      - name: Publish or confirm preview on JetBrains Marketplace
+        shell: bash
         env:
           JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
-        run: gradle -p adapters/jetbrains publishPlugin
+          PLUGIN_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set +e
+          OUTPUT=$(gradle -p adapters/jetbrains publishPlugin --stacktrace 2>&1)
+          STATUS=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+          if [ "$STATUS" -eq 0 ]; then
+            exit 0
+          fi
+          printf '%s' "$OUTPUT" | grep -Fqi "already contains version $PLUGIN_VERSION in channel preview" && exit 0
+          exit "$STATUS"
 
       - name: Attach JetBrains ZIP to GitHub Release
         if: github.event_name == 'release'
