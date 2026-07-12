@@ -69,28 +69,12 @@ jobs:
         with:
           gradle-version: "8.10.2"
       - name: Build JetBrains plugin
-        id: build
-        continue-on-error: true
+        run: gradle -p adapters/jetbrains clean buildPlugin
+      - name: Verify JetBrains package exists
         shell: bash
-        run: |
-          set +e
-          gradle -p adapters/jetbrains clean buildPlugin > jetbrains-build.log 2>&1
-          status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
-      - name: Upload JetBrains build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jetbrains-build-log
-          path: jetbrains-build.log
-          if-no-files-found: error
-      - name: Enforce JetBrains build result
-        if: always()
-        shell: bash
-        run: test "${{ steps.build.outputs.status }}" = "0"
+        run: test -n "$(find adapters/jetbrains/build/distributions -maxdepth 1 -type f -name '*.zip' -print -quit)"
       - uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: sergeant-0.3.1-jetbrains-preview
           path: adapters/jetbrains/build/distributions/*.zip
+          if-no-files-found: error
