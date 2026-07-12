@@ -1,0 +1,109 @@
+name: Coordinate Sergeant Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/coordinate-release.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: coordinate-sergeant-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create matching Sergeant release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify coordinated versions
+        id: metadata
+        shell: bash
+        run: |
+          NPM_VERSION=$(node -p "require('./package.json').version")
+          PYTHON_VERSION=$(python - <<'PY'
+          import pathlib, tomllib
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])
+          PY
+          )
+          JETBRAINS_VERSION=$(grep '^pluginVersion=' adapters/jetbrains/gradle.properties | cut -d= -f2-)
+          test "$NPM_VERSION" = "$PYTHON_VERSION" || {
+            echo "VS Code version '$NPM_VERSION' does not match Python version '$PYTHON_VERSION'."
+            exit 1
+          }
+          test "$JETBRAINS_VERSION" = "$NPM_VERSION-preview" || {
+            echo "JetBrains version '$JETBRAINS_VERSION' does not match '$NPM_VERSION-preview'."
+            exit 1
+          }
+          echo "version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NPM_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create published GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; no duplicate release was created."
+            exit 0
+          fi
+          cat > release-notes.md <<EOF
+          ## Sergeant $VERSION — Complete Command Center
+
+          Sergeant's complete V2 Command Center is now delivered in the 0.3 release line.
+
+          ### Command Center
+
+          - Full Commander dashboard with live workspace, branch, changed-file, mission, verdict, and history state
+          - Mission Planner with briefing, priority, provider, permissions, officers, armoury, and release-gate missions
+          - Live mission progress and evidence views
+          - Evidence Locker with open, copy, export, refresh, and persisted report history
+          - Officer deployment, armoury, Settings, Doctrine, Roadmap, and Guide
+          - Compact VS Code activity-bar launcher plus full editor Command Center
+          - Shared JetBrains Command Center through JCEF with a native fallback
+
+          ### Safety
+
+          - Read-only review by default
+          - Writer mode disabled by default
+          - Draft patches only
+          - Human approval required
+          - Never auto-merge
+
+          ### Proof
+
+          - CI and Sergeant Main Review passed
+          - Python package tests and distribution validation passed
+          - JavaScript syntax checks passed
+          - Browser navigation and overflow proof passed at desktop and compact IDE widths
+          - VSIX packaging passed
+          - JetBrains compilation, ZIP packaging, and shared-resource inspection passed
+
+          Publishing workflows will attach the VSIX and JetBrains ZIP and publish matching versions to Visual Studio Marketplace, Open VSX, PyPI, and the JetBrains Marketplace preview channel.
+          EOF
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Sergeant v$VERSION — Complete Command Center" \
+            --notes-file release-notes.md
