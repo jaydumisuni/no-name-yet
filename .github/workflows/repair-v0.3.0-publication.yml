@@ -91,7 +91,21 @@ jobs:
           set -e
           printf '%s\n' "$OUTPUT"
           if [ $STATUS -eq 0 ]; then exit 0; fi
-          printf '%s' "$OUTPUT" | grep -Eqi 'already exists|already been published|version .* exists' && exit 0
+          printf '%s' "$OUTPUT" | grep -Eqi 'already exists|already been published|version .* exists|version .* was already published' && exit 0
+          exit $STATUS
+
+      - name: Ensure Open VSX namespace exists
+        shell: bash
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set +e
+          OUTPUT=$(npx --yes ovsx@latest create-namespace thetechguyds --pat "$OVSX_PAT" 2>&1)
+          STATUS=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+          if [ $STATUS -eq 0 ]; then exit 0; fi
+          printf '%s' "$OUTPUT" | grep -Eqi 'already exists|already claimed|namespace.*exists|namespace.*claimed' && exit 0
           exit $STATUS
 
       - name: Publish or confirm Open VSX
@@ -105,7 +119,7 @@ jobs:
           set -e
           printf '%s\n' "$OUTPUT"
           if [ $STATUS -eq 0 ]; then exit 0; fi
-          printf '%s' "$OUTPUT" | grep -Eqi 'already exists|already published|version .* exists' && exit 0
+          printf '%s' "$OUTPUT" | grep -Eqi 'already exists|already published|version .* exists|extension version.*exists' && exit 0
           exit $STATUS
 
       - name: Publish or confirm JetBrains preview
@@ -119,7 +133,7 @@ jobs:
           set -e
           printf '%s\n' "$OUTPUT"
           if [ $STATUS -eq 0 ]; then exit 0; fi
-          printf '%s' "$OUTPUT" | grep -Eqi 'already exists|already uploaded|version .* exists' && exit 0
+          printf '%s' "$OUTPUT" | grep -Eqi 'already exists|already uploaded|version .* exists|plugin version.*exists' && exit 0
           exit $STATUS
 
       - name: Attach all artifacts to GitHub release
