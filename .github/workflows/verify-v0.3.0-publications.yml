@@ -1,0 +1,103 @@
+name: Verify Sergeant v0.3.0 Publications
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-v0.3.0-publications.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PyPI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://pypi.org/pypi/sergeant-reviewer/json -o pypi.json
+          python - <<'PY'
+          import json
+          data=json.load(open('pypi.json'))
+          assert data['info']['version']=='0.3.0', data['info']['version']
+          files=data['releases'].get('0.3.0', [])
+          names={f['filename'] for f in files}
+          assert any(n.endswith('.whl') for n in names), names
+          assert any(n.endswith('.tar.gz') for n in names), names
+          print('PYPI_OK', sorted(names))
+          PY
+
+      - name: Verify Visual Studio Marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > query.json <<'JSON'
+          {"filters":[{"criteria":[{"filterType":7,"value":"thetechguyds.sergeant-reviewer"}]}],"flags":914}
+          JSON
+          curl -fsSL -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json;api-version=7.2-preview.1' \
+            --data @query.json \
+            https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
+            -o vsmarket.json
+          python - <<'PY'
+          import json
+          data=json.load(open('vsmarket.json'))
+          exts=[e for r in data.get('results',[]) for e in r.get('extensions',[])]
+          assert exts, data
+          ext=exts[0]
+          versions=[v.get('version') for v in ext.get('versions',[])]
+          assert '0.3.0' in versions, versions[:20]
+          print('VSMARKET_OK', ext.get('publisher',{}).get('publisherName'), ext.get('extensionName'), versions[:10])
+          PY
+
+      - name: Verify Open VSX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://open-vsx.org/api/thetechguyds/sergeant-reviewer -o openvsx.json
+          python - <<'PY'
+          import json
+          data=json.load(open('openvsx.json'))
+          version=data.get('version') or data.get('allVersions',{}).get('0.3.0')
+          all_versions=data.get('allVersions',{})
+          assert data.get('version')=='0.3.0' or '0.3.0' in all_versions, data
+          print('OPENVSX_OK', data.get('namespace'), data.get('name'), data.get('version'), sorted(all_versions)[:10])
+          PY
+
+      - name: Verify GitHub release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSETS=$(gh api repos/jaydumisuni/Sergeant/releases/tags/v0.3.0 --jq '.assets[].name')
+          printf '%s\n' "$ASSETS"
+          grep -Fx 'sergeant-reviewer-0.3.0.vsix' <<<"$ASSETS"
+          grep -E '^sergeant.*0\.3\.0.*\.zip$' <<<"$ASSETS"
+          grep -E '^sergeant_reviewer-0\.3\.0-.*\.whl$' <<<"$ASSETS"
+          grep -Fx 'sergeant_reviewer-0.3.0.tar.gz' <<<"$ASSETS"
+          grep -Fx 'SHA256SUMS.txt' <<<"$ASSETS"
+
+      - name: Probe JetBrains Marketplace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL 'https://plugins.jetbrains.com/api/searchPlugins?search=Sergeant' -o jetbrains.json
+          python - <<'PY'
+          import json
+          data=json.load(open('jetbrains.json'))
+          print('JETBRAINS_SEARCH_RAW', data)
+          matches=[]
+          items=data if isinstance(data,list) else data.get('plugins',[]) or data.get('items',[])
+          for item in items:
+            text=json.dumps(item).lower()
+            if 'sergeant' in text and ('thetechguyds' in text or 'thetechguy' in text):
+              matches.append(item)
+          if matches:
+            print('JETBRAINS_VISIBLE', matches)
+          else:
+            print('JETBRAINS_NOT_PUBLIC_OR_UNDER_REVIEW')
+          PY
