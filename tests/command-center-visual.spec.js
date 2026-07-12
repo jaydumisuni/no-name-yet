@@ -32,7 +32,7 @@ async function assertCommandCenter(page, screenshotName) {
   await expect(page.locator('#providerSelect')).toBeVisible();
   await expect(page.locator('#deployBtn')).toBeVisible();
 
-  await page.locator('[data-page="dashboard"]').first().click();
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).first().click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(2);
   expect(pageErrors).toEqual([]);
