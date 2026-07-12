@@ -2,7 +2,7 @@
   "name": "sergeant-reviewer",
   "displayName": "Sergeant",
   "description": "Sergeant open-source engineering reviewer for VS Code.",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "publisher": "thetechguyds",
   "license": "MIT",
   "repository": {
@@ -42,6 +42,10 @@
       }
     ],
     "commands": [
+      {
+        "command": "sergeant.openCommandCenter",
+        "title": "Sergeant: Open Full Command Center"
+      },
       {
         "command": "sergeant.reviewWorkspace",
         "title": "Sergeant: Review Workspace"
@@ -102,6 +106,21 @@
           "type": "string",
           "default": "python",
           "description": "Python executable used to run Sergeant."
+        },
+        "sergeant.provider": {
+          "type": "string",
+          "default": "Local Model",
+          "enum": [
+            "Local Model",
+            "OpenAI-compatible API",
+            "GPT",
+            "Claude",
+            "Gemini",
+            "Copilot / Codex Handoff",
+            "Private/Internal Adapter",
+            "Custom Endpoint"
+          ],
+          "description": "Provider selected in the Sergeant Command Center. Provider execution remains subject to configured adapters and permissions."
         }
       }
     }
