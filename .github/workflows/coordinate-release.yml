@@ -113,17 +113,41 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.metadata.outputs.tag }}
+          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           gh workflow run publish-vscode-marketplace.yml \
             --repo "$GITHUB_REPOSITORY" \
             --ref main \
             --field release_tag="$TAG"
-          gh workflow run publish-pypi.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref main \
-            --field release_tag="$TAG"
+
+          PYPI_EXISTS=$(python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          version = os.environ['VERSION']
+          try:
+              with urllib.request.urlopen('https://pypi.org/pypi/sergeant-reviewer/json', timeout=30) as response:
+                  data = json.load(response)
+              print('true' if data.get('releases', {}).get(version) else 'false')
+          except urllib.error.HTTPError as error:
+              if error.code == 404:
+                  print('false')
+              else:
+                  raise
+          PY
+          )
+          if [ "$PYPI_EXISTS" = "true" ]; then
+            echo "sergeant-reviewer $VERSION already exists on PyPI; no duplicate trusted publication was dispatched."
+          else
+            gh workflow run publish-pypi.yml \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref "$TAG"
+          fi
+
           gh workflow run publish-jetbrains-marketplace.yml \
             --repo "$GITHUB_REPOSITORY" \
             --ref main \
             --field release_tag="$TAG"
-          echo "Dispatched Visual Studio Marketplace, Open VSX, PyPI, and JetBrains publication for $TAG."
+          echo "Dispatched Visual Studio Marketplace, Open VSX, and JetBrains publication for $TAG; PyPI used the tag-qualified trusted publisher when needed."
