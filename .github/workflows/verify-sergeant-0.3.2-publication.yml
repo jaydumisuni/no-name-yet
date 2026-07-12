@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -25,6 +25,33 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.0.0"
+
+      - name: Ensure the published GitHub release exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.3.2 --repo jaydumisuni/Sergeant >/dev/null 2>&1; then
+            echo 'GITHUB_RELEASE_0_3_2_ALREADY_PRESENT'
+            exit 0
+          fi
+          cat > release-notes.md <<'EOF'
+          ## Sergeant 0.3.2 — Complete Command Center
+
+          Sergeant's complete V2 Command Center is delivered in the 0.3 release line.
+
+          - Full Commander dashboard, Mission Planner, live mission progress, Evidence, Evidence Locker, Officers/Armoury, Settings, Doctrine, Roadmap, and Guide
+          - Compact VS Code launcher plus full editor Command Center
+          - Shared JetBrains Command Center through JCEF with a native fallback
+          - Live workspace, branch, changed-file, provider, report, and evidence state
+          - Read-only review by default, draft-only writer boundary, human approval, and no auto-merge
+          - CI, Main Review, browser UI proof, VSIX, Python distribution, and JetBrains packaging proof passed
+          EOF
+          gh release create v0.3.2 \
+            --repo jaydumisuni/Sergeant \
+            --target main \
+            --title 'Sergeant v0.3.2 — Complete Command Center' \
+            --notes-file release-notes.md
 
       - name: Wait for GitHub release and public registries
         shell: bash
