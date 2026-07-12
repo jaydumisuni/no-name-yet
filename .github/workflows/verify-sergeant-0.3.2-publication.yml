@@ -7,36 +7,62 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   github-release:
-    name: GitHub release 0.3.2
+    name: GitHub release and assets 0.3.2
     runs-on: ubuntu-latest
     steps:
-      - name: Verify published release
+      - name: Wait for complete published release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/jaydumisuni/Sergeant/releases/tags/v0.3.2 > release.json
-          python - <<'PY'
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            echo "GitHub release asset check $attempt/24"
+            if gh api repos/jaydumisuni/Sergeant/releases/tags/v0.3.2 > release.json 2>/dev/null; then
+              ASSETS=$(python - <<'PY'
           import json
           data=json.load(open('release.json'))
           assert data['tag_name']=='v0.3.2'
           assert data['draft'] is False
           assert data['prerelease'] is False
-          print('GITHUB_RELEASE_0_3_2_OK', data['name'])
+          print('\n'.join(asset['name'] for asset in data.get('assets', [])))
           PY
+              )
+              printf '%s\n' "$ASSETS"
+              missing=0
+              grep -Fx 'sergeant-reviewer-0.3.2.vsix' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Fx 'sergeant-reviewer-0.3.2.vsix.sha256' <<<"$ASSETS" >/dev/null || missing=1
+              grep -E '^sergeant_reviewer-0\.3\.2-.*\.whl$' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Fx 'sergeant_reviewer-0.3.2.tar.gz' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Fx 'SHA256SUMS-PYPI.txt' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Ei '^sergeant.*0\.3\.2-preview.*\.zip$' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Ei '^sergeant.*0\.3\.2-preview.*\.zip\.sha256$' <<<"$ASSETS" >/dev/null || missing=1
+              if [ "$missing" -eq 0 ]; then
+                echo 'GITHUB_RELEASE_0_3_2_ASSETS_OK'
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo 'Complete GitHub release assets were not visible before timeout.'
+          exit 1
 
   pypi:
     name: PyPI 0.3.2
     runs-on: ubuntu-latest
     steps:
-      - name: Verify wheel and source distribution
+      - name: Wait for wheel and source distribution
+        shell: bash
         run: |
-          curl -fsSL https://pypi.org/pypi/sergeant-reviewer/json -o pypi.json
-          python - <<'PY'
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            echo "PyPI check $attempt/24"
+            if curl -fsSL https://pypi.org/pypi/sergeant-reviewer/json -o pypi.json; then
+              if python - <<'PY'
           import json
           data=json.load(open('pypi.json'))
           files=data.get('releases',{}).get('0.3.2',[])
@@ -45,23 +71,32 @@ jobs:
           assert any(name.endswith('.tar.gz') for name in names), names
           print('PYPI_0_3_2_OK', sorted(names))
           PY
+              then exit 0; fi
+            fi
+            sleep 15
+          done
+          exit 1
 
   visual-studio-marketplace:
     name: Visual Studio Marketplace 0.3.2
     runs-on: ubuntu-latest
     steps:
-      - name: Verify extension version
+      - name: Wait for extension version
+        shell: bash
         run: |
+          set -euo pipefail
           cat > query.json <<'JSON'
           {"filters":[{"criteria":[{"filterType":7,"value":"thetechguyds.sergeant-reviewer"}]}],"flags":914}
           JSON
-          curl -fsSL -X POST \
-            -H 'Content-Type: application/json' \
-            -H 'Accept: application/json;api-version=7.2-preview.1' \
-            --data @query.json \
-            https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
-            -o marketplace.json
-          python - <<'PY'
+          for attempt in $(seq 1 24); do
+            echo "Visual Studio Marketplace check $attempt/24"
+            if curl -fsSL -X POST \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json;api-version=7.2-preview.1' \
+              --data @query.json \
+              https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
+              -o marketplace.json; then
+              if python - <<'PY'
           import json
           data=json.load(open('marketplace.json'))
           extensions=[item for result in data.get('results',[]) for item in result.get('extensions',[])]
@@ -70,21 +105,35 @@ jobs:
           assert '0.3.2' in versions, versions[:20]
           print('VSMARKET_0_3_2_OK', versions[:10])
           PY
+              then exit 0; fi
+            fi
+            sleep 15
+          done
+          exit 1
 
   open-vsx:
     name: Open VSX 0.3.2
     runs-on: ubuntu-latest
     steps:
-      - name: Verify extension version
+      - name: Wait for extension version
+        shell: bash
         run: |
-          curl -fsSL https://open-vsx.org/api/thetechguyds/sergeant-reviewer -o openvsx.json
-          python - <<'PY'
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            echo "Open VSX check $attempt/24"
+            if curl -fsSL https://open-vsx.org/api/thetechguyds/sergeant-reviewer -o openvsx.json; then
+              if python - <<'PY'
           import json
           data=json.load(open('openvsx.json'))
           versions=data.get('allVersions',{})
           assert data.get('version')=='0.3.2' or '0.3.2' in versions, (data.get('version'), sorted(versions))
           print('OPENVSX_0_3_2_OK', data.get('version'))
           PY
+              then exit 0; fi
+            fi
+            sleep 15
+          done
+          exit 1
 
   jetbrains:
     name: JetBrains 0.3.2 preview
