@@ -1,0 +1,32 @@
+name: Verify JetBrains 0.3.1 Preview
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-jetbrains-0.3.1-preview.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe JetBrains Marketplace API
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=0
+          for url in \
+            'https://plugins.jetbrains.com/api/plugins/32862/updates?channel=preview' \
+            'https://plugins.jetbrains.com/api/plugins/32862/updates' \
+            'https://plugins.jetbrains.com/api/plugins/32862'; do
+            echo "PROBE $url"
+            code=$(curl -sSL -o response.json -w '%{http_code}' "$url")
+            echo "HTTP $code"
+            cat response.json
+            echo
+            if grep -q '0.3.1-preview' response.json; then found=1; fi
+          done
+          test "$found" = 1
