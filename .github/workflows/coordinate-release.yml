@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: coordinate-sergeant-release
@@ -16,7 +17,7 @@ concurrency:
 
 jobs:
   release:
-    name: Create matching Sergeant release
+    name: Create and dispatch matching Sergeant release
     runs-on: ubuntu-latest
 
     steps:
@@ -58,21 +59,21 @@ jobs:
           echo "version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$NPM_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Create published GitHub release
+      - name: Create or confirm published GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.metadata.outputs.version }}
           TAG: ${{ steps.metadata.outputs.tag }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; no duplicate release was created."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
             exit 0
           fi
           cat > release-notes.md <<EOF
           ## Sergeant $VERSION — Complete Command Center
 
-          Sergeant's complete V2 Command Center is now delivered in the 0.3 release line.
+          Sergeant's complete V2 Command Center is delivered in the 0.3 release line.
 
           ### Command Center
 
@@ -100,10 +101,29 @@ jobs:
           - Browser navigation and overflow proof passed at desktop and compact IDE widths
           - VSIX packaging passed
           - JetBrains compilation, ZIP packaging, and shared-resource inspection passed
-
-          Publishing workflows will attach the VSIX and JetBrains ZIP and publish matching versions to Visual Studio Marketplace, Open VSX, PyPI, and the JetBrains Marketplace preview channel.
           EOF
           gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target main \
             --title "Sergeant v$VERSION — Complete Command Center" \
             --notes-file release-notes.md
+
+      - name: Dispatch all marketplace publishers
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          gh workflow run publish-vscode-marketplace.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            --field release_tag="$TAG"
+          gh workflow run publish-pypi.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            --field release_tag="$TAG"
+          gh workflow run publish-jetbrains-marketplace.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            --field release_tag="$TAG"
+          echo "Dispatched Visual Studio Marketplace, Open VSX, PyPI, and JetBrains publication for $TAG."
