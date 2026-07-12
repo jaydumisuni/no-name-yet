@@ -39,6 +39,7 @@ def test_jetbrains_plugin_bundles_shared_command_center() -> None:
     assert "JBCefJSQuery" in tool_window
     assert "sergeant-command-center-v2.html" in tool_window
     assert "sergeant-command-center-v2.css" in tool_window
+    assert "sergeant-command-center-v2-responsive.css" in tool_window
     assert "sergeant-command-center-v2.js" in tool_window
     assert "sergeantHostSend" in tool_window
     assert "sergeantState" in tool_window
@@ -46,6 +47,13 @@ def test_jetbrains_plugin_bundles_shared_command_center() -> None:
     assert "copyLastReport" in tool_window
     assert "exportLastReport" in tool_window
     assert "SergeantFallbackPanel" in tool_window
+    assert "Content-Security-Policy" in tool_window
+    assert "parseMissionContext" in tool_window
+    assert '"missionContext" to missionContext' in tool_window
+    assert '"currentMission" to currentMission' in tool_window
+    assert "loadHistory" in tool_window
+    assert "saveHistory" in tool_window
+    assert "sergeant.commandCenter.history" in tool_window
 
     for action in [
         "reviewWorkspace",
@@ -71,3 +79,5 @@ def test_shared_ui_contains_no_fake_runtime_generator() -> None:
     assert "Standalone preview mode" in script
     assert "No runtime evidence yet" in html
     assert "AWAITING MISSION" in script
+    assert "selectedMission" in script
+    assert "escapeHtml" in script
