@@ -53,18 +53,39 @@ test('full Command Center renders, navigates, and avoids floating-control overla
       .map(({ element }) => element.textContent.trim().slice(0, 60));
   });
   expect(overlaps).toEqual([]);
+
+  const overflowingConfidenceLabels = await page.evaluate(() => [...document.querySelectorAll('.confidence-line span:first-child')]
+    .filter((label) => label.scrollWidth > label.clientWidth + 1)
+    .map((label) => label.textContent));
+  expect(overflowingConfidenceLabels).toEqual([]);
 });
 
-test('compact IDE width remains usable without confidence-label collision', async ({ page }) => {
+test('compact IDE width keeps all navigation and confidence text visible', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 920 });
   await assertCommandCenter(page, 'command-center-420.png');
 
-  const collisions = await page.evaluate(() => [...document.querySelectorAll('.confidence-line')].filter((line) => {
-    const label = line.querySelector('span:first-child')?.getBoundingClientRect();
-    const bar = line.querySelector('.bar')?.getBoundingClientRect();
-    return label && bar && label.right > bar.left + 1;
-  }).map((line) => line.textContent.trim()));
-  expect(collisions).toEqual([]);
+  const compactLayout = await page.evaluate(() => {
+    const tabs = [...document.querySelectorAll('.tabs button')];
+    const tabContainer = document.querySelector('.tabs');
+    const collisions = [...document.querySelectorAll('.confidence-line')].filter((line) => {
+      const labelElement = line.querySelector('span:first-child');
+      const label = labelElement?.getBoundingClientRect();
+      const bar = line.querySelector('.bar')?.getBoundingClientRect();
+      return (label && bar && label.right > bar.left + 1) || (labelElement && labelElement.scrollWidth > labelElement.clientWidth + 1);
+    }).map((line) => line.textContent.trim());
+    return {
+      visibleTabs: tabs.filter((tab) => {
+        const box = tab.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && box.left >= -1 && box.right <= window.innerWidth + 1;
+      }).length,
+      tabCount: tabs.length,
+      tabOverflow: tabContainer.scrollWidth - tabContainer.clientWidth,
+      collisions,
+    };
+  });
+  expect(compactLayout.visibleTabs).toBe(compactLayout.tabCount);
+  expect(compactLayout.tabOverflow).toBeLessThanOrEqual(2);
+  expect(compactLayout.collisions).toEqual([]);
 });
 
 test('mission briefing is emitted as an audit payload', async ({ page }) => {
