@@ -1,0 +1,45 @@
+name: Diagnose PyPI 0.3.2
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/diagnose-pypi-0.3.2.yml
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect recent publish-pypi workflow runs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          gh run list \
+            --repo jaydumisuni/Sergeant \
+            --workflow publish-pypi.yml \
+            --limit 20 \
+            --json databaseId,event,status,conclusion,headBranch,headSha,displayTitle,createdAt,url \
+            > pypi-runs.json
+          cat pypi-runs.json
+          echo
+          RUN_ID=$(python - <<'PY'
+          import json
+          runs=json.load(open('pypi-runs.json'))
+          preferred=[r for r in runs if r['event']=='workflow_dispatch' and r.get('headBranch')=='main']
+          fallback=[r for r in runs if r['event'] in {'workflow_dispatch','push'}]
+          chosen=(preferred or fallback or runs)
+          print(chosen[0]['databaseId'] if chosen else '')
+          PY
+          )
+          echo "INSPECTING_RUN_ID=$RUN_ID"
+          if [ -n "$RUN_ID" ]; then
+            gh run view "$RUN_ID" --repo jaydumisuni/Sergeant --json databaseId,event,status,conclusion,headBranch,headSha,jobs,url || true
+            echo 'FAILED_LOG_BEGIN'
+            gh run view "$RUN_ID" --repo jaydumisuni/Sergeant --log-failed || true
+            echo 'FAILED_LOG_END'
+          fi
