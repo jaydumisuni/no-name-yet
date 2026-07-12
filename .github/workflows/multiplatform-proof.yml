@@ -60,9 +60,32 @@ jobs:
           Path('build/command-center-preview.html').write_text(html, encoding='utf-8')
           PY
       - name: Render and browser-click Command Center
+        id: ui_proof
+        continue-on-error: true
+        shell: bash
         env:
           COMMAND_CENTER_PREVIEW: ${{ github.workspace }}/build/command-center-preview.html
-        run: npx playwright test tests/command-center-visual.spec.js --reporter=line
+        run: |
+          set +e
+          npx playwright test tests/command-center-visual.spec.js --reporter=line > command-center-playwright.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          tail -n 160 command-center-playwright.log
+          exit "$status"
+      - name: Upload Command Center proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sergeant-command-center-proof-evidence
+          path: |
+            command-center-playwright.log
+            artifacts/*.png
+            test-results/**
+          if-no-files-found: warn
+      - name: Enforce Command Center browser proof
+        if: always()
+        shell: bash
+        run: test "${{ steps.ui_proof.outputs.status }}" = "0"
       - name: Build and verify PyPI artifacts
         run: |
           python -m build
@@ -107,7 +130,27 @@ jobs:
         with:
           gradle-version: "9.0.0"
       - name: Build JetBrains plugin
-        run: gradle -p adapters/jetbrains clean buildPlugin
+        id: jetbrains_build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          gradle -p adapters/jetbrains clean buildPlugin > jetbrains-command-center-build.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          tail -n 180 jetbrains-command-center-build.log
+          exit "$status"
+      - name: Upload JetBrains build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sergeant-jetbrains-command-center-build-log
+          path: jetbrains-command-center-build.log
+          if-no-files-found: error
+      - name: Enforce JetBrains build
+        if: always()
+        shell: bash
+        run: test "${{ steps.jetbrains_build.outputs.status }}" = "0"
       - name: Verify JetBrains package and shared UI resources
         shell: bash
         run: |
