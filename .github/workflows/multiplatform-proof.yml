@@ -67,7 +67,7 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "9.0.0"
       - name: Build JetBrains plugin
         run: gradle -p adapters/jetbrains clean buildPlugin
       - name: Verify JetBrains package exists
