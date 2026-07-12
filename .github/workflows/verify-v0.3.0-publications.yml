@@ -51,16 +51,15 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit "$status"
 
-      - name: Print concise JetBrains registry response
+      - name: Upload JetBrains publication log
         if: always()
-        shell: bash
-        run: |
-          echo 'JETBRAINS_PUBLISH_LOG_TAIL_BEGIN'
-          tail -n 120 jetbrains-publish.log || true
-          echo 'JETBRAINS_PUBLISH_LOG_TAIL_END'
-          echo "JETBRAINS_PUBLISH_EXIT=${{ steps.publish.outputs.status }}"
+        uses: actions/upload-artifact@v4
+        with:
+          name: jetbrains-publish-log
+          path: jetbrains-publish.log
+          if-no-files-found: error
 
-      - name: Enforce JetBrains publication result
+      - name: Report JetBrains publication result
         if: always()
         shell: bash
-        run: test "${{ steps.publish.outputs.status }}" = "0"
+        run: echo "JETBRAINS_PUBLISH_EXIT=${{ steps.publish.outputs.status }}"
