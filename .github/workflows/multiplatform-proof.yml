@@ -55,6 +55,7 @@ jobs:
           resources = Path('resources')
           html = (resources / 'sergeant-command-center-v2.html').read_text(encoding='utf-8')
           html = html.replace('/* SERGEANT_CSS */', (resources / 'sergeant-command-center-v2.css').read_text(encoding='utf-8'))
+          html = html.replace('/* SERGEANT_RESPONSIVE_CSS */', (resources / 'sergeant-command-center-v2-responsive.css').read_text(encoding='utf-8'))
           html = html.replace('// SERGEANT_JS', (resources / 'sergeant-command-center-v2.js').read_text(encoding='utf-8'))
           html = html.replace('<!-- SERGEANT_HOST_BOOTSTRAP -->', "<script>window.sergeantHostSend=(payload)=>{window.__sergeantLastPayload=payload;return true};</script>")
           Path('build/command-center-preview.html').write_text(html, encoding='utf-8')
@@ -162,6 +163,7 @@ jobs:
           test -n "$PLUGIN_JAR"
           unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2.html'
           unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2.css'
+          unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2-responsive.css'
           unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2.js'
       - uses: actions/upload-artifact@v4
         with:
