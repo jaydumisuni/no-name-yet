@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+VSCODE_ROOT = ROOT / "src" / "vscode"
 
 
 def test_vscode_extension_manifest_installs_sergeant_commands() -> None:
@@ -14,60 +15,97 @@ def test_vscode_extension_manifest_installs_sergeant_commands() -> None:
 
     assert "activationEvents" not in package
     assert package["displayName"] == "Sergeant"
+    assert package["version"] == "0.3.2"
     assert package["icon"] == "resources/srg-logo-and-icon.png"
-    assert package["main"] == "./vscode-extension.js"
+    assert package["main"] == "./src/vscode/extension.js"
+    assert (ROOT / package["main"]).is_file()
     assert containers[0]["id"] == "sergeant"
     assert containers[0]["title"] == "Sergeant"
     assert containers[0]["icon"] == "resources/sergeant-activity.svg"
     assert (ROOT / containers[0]["icon"]).is_file()
-    assert "sergeant.reviewWorkspace" in commands
-    assert "sergeant.appReviewWorkspace" in commands
-    assert "sergeant.reviewCurrentFile" in commands
-    assert "sergeant.reviewChangedFiles" in commands
-    assert "sergeant.v2Mission" in commands
-    assert "sergeant.proofSuite" in commands
-    assert "sergeant.finalProof" in commands
-    assert "sergeant.verifyStandard" in commands
-    assert "sergeant.battleTests" in commands
-    assert "sergeant.ideBenchContract" in commands
-    assert "sergeant.openLastReport" in commands
-    assert "sergeant.copyLastReport" in commands
-    assert "sergeant.exportLastReport" in commands
+    for command in {
+        "sergeant.openCommandCenter",
+        "sergeant.reviewWorkspace",
+        "sergeant.appReviewWorkspace",
+        "sergeant.reviewCurrentFile",
+        "sergeant.reviewChangedFiles",
+        "sergeant.v2Mission",
+        "sergeant.proofSuite",
+        "sergeant.finalProof",
+        "sergeant.verifyStandard",
+        "sergeant.battleTests",
+        "sergeant.ideBenchContract",
+        "sergeant.openLastReport",
+        "sergeant.copyLastReport",
+        "sergeant.exportLastReport",
+    }:
+        assert command in commands
     assert (ROOT / package["icon"]).is_file()
+    assert package["contributes"]["configuration"]["properties"]["sergeant.provider"]["default"] == "Local Model"
 
 
-def test_vscode_extension_runtime_uses_bundled_launcher() -> None:
-    runtime = (ROOT / "vscode-extension.js").read_text(encoding="utf-8")
+def test_vscode_runtime_uses_bundled_full_command_center() -> None:
+    extension = (VSCODE_ROOT / "extension.js").read_text(encoding="utf-8")
+    actions = (VSCODE_ROOT / "actions.js").read_text(encoding="utf-8")
+    provider = (VSCODE_ROOT / "command-center.js").read_text(encoding="utf-8")
+    results = (VSCODE_ROOT / "results.js").read_text(encoding="utf-8")
+    command_center = (ROOT / "resources" / "sergeant-command-center-v2.html").read_text(encoding="utf-8")
+    command_center_css = (ROOT / "resources" / "sergeant-command-center-v2.css").read_text(encoding="utf-8")
+    command_center_js = (ROOT / "resources" / "sergeant-command-center-v2.js").read_text(encoding="utf-8")
 
-    assert 'path.join(__dirname, "sergeant.py")' in runtime
-    assert "registerWebviewViewProvider" in runtime
-    assert "SergeantCommandCenterProvider" in runtime
-    assert "ACTIONS" in runtime
-    assert "SGT Command Center" in runtime
-    assert "Mission Planner" in runtime
-    assert "Review workspace evidence." in runtime
-    assert "Evidence Locker" in runtime
-    assert "Review Doctrine" in runtime
-    assert "grid-template-columns:repeat(3,minmax(0,1fr))" in runtime
-    assert "showResultPanel" in runtime
-    assert "renderResultHtml" in runtime
-    assert "Required Actions" in runtime
-    assert "Top Findings" in runtime
-    assert "Raw Evidence" in runtime
-    assert "createWebviewPanel" in runtime
-    assert '"review"' in runtime
-    assert '"app-review"' in runtime
-    assert '"changed_files"' in runtime
-    assert '"v2-mission"' in runtime
-    assert '"proof-suite"' in runtime
-    assert '"final-proof"' in runtime
-    assert '"verify-standard"' in runtime
-    assert '"battle-tests"' in runtime
-    assert '"ide-bench-contract"' in runtime
+    assert 'path.join(extensionRoot, "sergeant.py")' in extension
+    assert "registerWebviewViewProvider" in extension
+    assert "SergeantCommandCenterProvider" in extension
+    assert "openFullCommandCenter" in provider
+    assert "sergeant-command-center-v2.html" in provider
+    assert "SERGEANT_HOST_BOOTSTRAP" in provider
+    assert "createWebviewPanel" in extension
+    assert "renderResultHtml" in extension
+    assert "Required Actions" in results
+    assert "Top Findings" in results
+    assert "Raw Evidence" in results
+
+    for action in [
+        '"review"',
+        '"app-review"',
+        '"changed_files"',
+        '"v2-mission"',
+        '"proof-suite"',
+        '"final-proof"',
+        '"verify-standard"',
+        '"battle-tests"',
+        '"ide-bench-contract"',
+    ]:
+        assert action in actions
+
+    for expected in [
+        "SERGEANT V2 — Command Center",
+        "Mission Planner",
+        "Evidence Locker",
+        "Officer System / Armoury",
+        "AI / Provider Selector",
+        "Pass to Writer",
+        "Sergeant V2 Review Doctrine",
+        "Post‑V2 Roadmap",
+        "◇ What is Sergeant?",
+        "Commander → Mission → Officers → Weapon Manifest → Evidence → Verdict → Audit Trail",
+        "Runtime Evidence",
+    ]:
+        assert expected in command_center
+    assert "sergeantHostSend" in command_center_js
+    assert "window.addEventListener('message'" in command_center_js
+    assert "Commander → Mission → Officers → Weapon Manifest → Evidence → Verification → Commander Verdict → Audit Trail" in command_center_js
+    assert "grid-template-columns:270px" in command_center_css
+    assert "Math.random" not in command_center_js
+    assert "sgtTimer" not in command_center_js
 
 
 def test_command_center_visible_controls_are_wired() -> None:
-    runtime = (ROOT / "vscode-extension.js").read_text(encoding="utf-8")
+    extension = (VSCODE_ROOT / "extension.js").read_text(encoding="utf-8")
+    actions = (VSCODE_ROOT / "actions.js").read_text(encoding="utf-8")
+    provider = (VSCODE_ROOT / "command-center.js").read_text(encoding="utf-8")
+    command_center = (ROOT / "resources" / "sergeant-command-center-v2.html").read_text(encoding="utf-8")
+    command_center_js = (ROOT / "resources" / "sergeant-command-center-v2.js").read_text(encoding="utf-8")
 
     for action_id in [
         "reviewWorkspace",
@@ -81,20 +119,35 @@ def test_command_center_visible_controls_are_wired() -> None:
         "battleTests",
         "ideBenchContract",
     ]:
-        assert f'id: "{action_id}"' in runtime
-        assert f'data-run="${{escapeHtml(action.id)}}"' in runtime or f'data-run="{action_id}"' in runtime
+        assert f'id: "{action_id}"' in actions
 
-    for control_id, message_type in {
-        "launchMission": "run",
-        "openLast": "openLast",
-        "copyLast": "copyLast",
-        "exportLast": "exportLast",
-        "refresh": "refresh",
-    }.items():
-        assert f'id="{control_id}"' in runtime
-        assert f"type:'{message_type}'" in runtime or f'type: "{message_type}"' in runtime
+    for message_type in [
+        "run",
+        "openFull",
+        "openLast",
+        "copyLast",
+        "exportLast",
+        "selectWorkspace",
+        "saveSettings",
+        "refresh",
+        "ready",
+    ]:
+        assert f'"{message_type}"' in provider or f"'{message_type}'" in command_center_js
 
-    assert "onDidReceiveMessage" in runtime
-    assert "handleMessage" in runtime
-    assert "copyLastReport" in runtime
-    assert "exportLastReport" in runtime
+    for control_id in [
+        "deployBtn",
+        "openLatestReport",
+        "exportBattleReport",
+        "copyVerdict",
+        "providerSelect",
+        "workspaceSelect",
+        "globalSearch",
+        "quickCopy",
+    ]:
+        assert f'id="{control_id}"' in command_center
+
+    assert "onDidReceiveMessage" in provider
+    assert "handleMessage" in provider
+    assert "copyLastReport" in extension
+    assert "exportLastReport" in extension
+    assert "context.globalState" in provider

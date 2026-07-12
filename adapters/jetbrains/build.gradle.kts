@@ -27,6 +27,12 @@ dependencies {
     }
 }
 
+sourceSets {
+    main {
+        resources.srcDir("../../resources")
+    }
+}
+
 kotlin {
     jvmToolchain(21)
 }

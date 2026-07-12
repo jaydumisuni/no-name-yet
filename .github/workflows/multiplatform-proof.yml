@@ -5,7 +5,8 @@ on:
     paths:
       - "package.json"
       - "pyproject.toml"
-      - "vscode-extension.js"
+      - "src/vscode/**"
+      - "resources/sergeant-command-center-v2.*"
       - "main_review/**"
       - "adapters/jetbrains/**"
       - "tests/**"
@@ -16,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  python-and-vscode:
-    name: Python package and VS Code extension
+  python-vscode-and-ui:
+    name: Python, VS Code and Command Center proof
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,33 +30,94 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install build and test tools
-        run: python -m pip install --upgrade build twine pytest
-      - name: Run tests
+      - name: Install build, test and browser tools
+        run: |
+          python -m pip install --upgrade build twine pytest
+          npm install --no-save @playwright/test@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Run Python and package-contract tests
         run: python -m pytest -q
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          node --check src/vscode/actions.js
+          node --check src/vscode/results.js
+          node --check src/vscode/command-center.js
+          node --check src/vscode/extension.js
+          node --check resources/sergeant-command-center-v2.js
+          node --check tests/command-center-visual.spec.js
+      - name: Build standalone Command Center proof page
+        shell: bash
+        run: |
+          mkdir -p build artifacts
+          python - <<'PY'
+          from pathlib import Path
+          resources = Path('resources')
+          html = (resources / 'sergeant-command-center-v2.html').read_text(encoding='utf-8')
+          html = html.replace('/* SERGEANT_CSS */', (resources / 'sergeant-command-center-v2.css').read_text(encoding='utf-8'))
+          html = html.replace('/* SERGEANT_RESPONSIVE_CSS */', (resources / 'sergeant-command-center-v2-responsive.css').read_text(encoding='utf-8'))
+          html = html.replace('// SERGEANT_JS', (resources / 'sergeant-command-center-v2.js').read_text(encoding='utf-8'))
+          html = html.replace('<!-- SERGEANT_HOST_BOOTSTRAP -->', "<script>window.sergeantHostSend=(payload)=>{window.__sergeantLastPayload=payload;return true};</script>")
+          Path('build/command-center-preview.html').write_text(html, encoding='utf-8')
+          PY
+      - name: Render and browser-click Command Center
+        id: ui_proof
+        continue-on-error: true
+        shell: bash
+        env:
+          COMMAND_CENTER_PREVIEW: ${{ github.workspace }}/build/command-center-preview.html
+        run: |
+          set +e
+          npx playwright test tests/command-center-visual.spec.js --reporter=line > command-center-playwright.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          tail -n 160 command-center-playwright.log
+          exit "$status"
+      - name: Upload Command Center proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sergeant-command-center-proof-evidence
+          path: |
+            command-center-playwright.log
+            artifacts/*.png
+            test-results/**
+          if-no-files-found: warn
+      - name: Enforce Command Center browser proof
+        if: always()
+        shell: bash
+        run: test "${{ steps.ui_proof.outputs.status }}" = "0"
       - name: Build and verify PyPI artifacts
         run: |
           python -m build
           python -m twine check dist/*
-      - name: Verify coordinated versions
+      - name: Verify coordinated 0.3.2 versions
         run: |
           python - <<'PY'
           import json, pathlib, tomllib
-          npm = json.loads(pathlib.Path("package.json").read_text())["version"]
-          py = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
-          assert npm == py == "0.3.0", (npm, py)
+          npm = json.loads(pathlib.Path('package.json').read_text(encoding='utf-8'))['version']
+          py = tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version']
+          props = dict(
+              line.split('=', 1)
+              for line in pathlib.Path('adapters/jetbrains/gradle.properties').read_text(encoding='utf-8').splitlines()
+              if '=' in line
+          )
+          assert npm == py == '0.3.2', (npm, py)
+          assert props['pluginVersion'] == '0.3.2-preview', props['pluginVersion']
           PY
       - name: Package VS Code extension
-        run: npx --yes @vscode/vsce@latest package --no-dependencies --out sergeant-reviewer-0.3.0.vsix
+        run: npx --yes @vscode/vsce@latest package --no-dependencies --out sergeant-reviewer-0.3.2.vsix
       - uses: actions/upload-artifact@v4
         with:
-          name: sergeant-0.3.0-python-vscode
+          name: sergeant-0.3.2-python-vscode-ui
           path: |
             dist/*
-            sergeant-reviewer-0.3.0.vsix
+            sergeant-reviewer-0.3.2.vsix
+            artifacts/*.png
+          if-no-files-found: error
 
   jetbrains:
-    name: JetBrains plugin preview
+    name: JetBrains Command Center preview
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,12 +131,42 @@ jobs:
         with:
           gradle-version: "9.0.0"
       - name: Build JetBrains plugin
-        run: gradle -p adapters/jetbrains clean buildPlugin
-      - name: Verify JetBrains package exists
+        id: jetbrains_build
+        continue-on-error: true
         shell: bash
-        run: test -n "$(find adapters/jetbrains/build/distributions -maxdepth 1 -type f -name '*.zip' -print -quit)"
+        run: |
+          set +e
+          gradle -p adapters/jetbrains clean buildPlugin > jetbrains-command-center-build.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          tail -n 180 jetbrains-command-center-build.log
+          exit "$status"
+      - name: Upload JetBrains build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sergeant-jetbrains-command-center-build-log
+          path: jetbrains-command-center-build.log
+          if-no-files-found: error
+      - name: Enforce JetBrains build
+        if: always()
+        shell: bash
+        run: test "${{ steps.jetbrains_build.outputs.status }}" = "0"
+      - name: Verify JetBrains package and shared UI resources
+        shell: bash
+        run: |
+          PACKAGE=$(find adapters/jetbrains/build/distributions -maxdepth 1 -type f -name '*.zip' -print -quit)
+          test -n "$PACKAGE"
+          EXTRACTED=$(mktemp -d)
+          unzip -q "$PACKAGE" -d "$EXTRACTED"
+          PLUGIN_JAR=$(find "$EXTRACTED" -type f -name '*.jar' -print -quit)
+          test -n "$PLUGIN_JAR"
+          unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2.html'
+          unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2.css'
+          unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2-responsive.css'
+          unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2.js'
       - uses: actions/upload-artifact@v4
         with:
-          name: sergeant-0.3.1-jetbrains-preview
+          name: sergeant-0.3.2-jetbrains-preview
           path: adapters/jetbrains/build/distributions/*.zip
           if-no-files-found: error

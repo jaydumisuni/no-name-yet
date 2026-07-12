@@ -4,7 +4,7 @@
   <vendor email="support@thetechguyds.com" url="https://thetechguyds.com">THETECHGUY DIGITAL SOLUTIONS</vendor>
 
   <description><![CDATA[
-    Sergeant is an evidence-based engineering reviewer. This preview adds a native JetBrains tool window that runs the shared Sergeant CLI against the current project.
+    Sergeant is an evidence-based engineering reviewer with a complete Command Center for missions, officers, armoury, evidence, reports, doctrine, provider selection, permissions, roadmap, and guidance. The JetBrains preview runs the shared Sergeant CLI against the current project and keeps writer actions human-approved.
   ]]></description>
 
   <depends>com.intellij.modules.platform</depends>
