@@ -51,6 +51,7 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
     results = (VSCODE_ROOT / "results.js").read_text(encoding="utf-8")
     command_center = (ROOT / "resources" / "sergeant-command-center-v2.html").read_text(encoding="utf-8")
     command_center_css = (ROOT / "resources" / "sergeant-command-center-v2.css").read_text(encoding="utf-8")
+    responsive_css = (ROOT / "resources" / "sergeant-command-center-v2-responsive.css").read_text(encoding="utf-8")
     command_center_js = (ROOT / "resources" / "sergeant-command-center-v2.js").read_text(encoding="utf-8")
 
     assert 'path.join(extensionRoot, "sergeant.py")' in extension
@@ -58,7 +59,9 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
     assert "SergeantCommandCenterProvider" in extension
     assert "openFullCommandCenter" in provider
     assert "sergeant-command-center-v2.html" in provider
+    assert "sergeant-command-center-v2-responsive.css" in provider
     assert "SERGEANT_HOST_BOOTSTRAP" in provider
+    assert "Content-Security-Policy" in provider
     assert "createWebviewPanel" in extension
     assert "renderResultHtml" in extension
     assert "Required Actions" in results
@@ -93,9 +96,10 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
     ]:
         assert expected in command_center
     assert "sergeantHostSend" in command_center_js
-    assert "window.addEventListener('message'" in command_center_js
+    assert 'window.addEventListener("message"' in command_center_js
     assert "Commander → Mission → Officers → Weapon Manifest → Evidence → Verification → Commander Verdict → Audit Trail" in command_center_js
     assert "grid-template-columns:270px" in command_center_css
+    assert "padding-right:180px" in responsive_css
     assert "Math.random" not in command_center_js
     assert "sgtTimer" not in command_center_js
 
@@ -132,7 +136,7 @@ def test_command_center_visible_controls_are_wired() -> None:
         "refresh",
         "ready",
     ]:
-        assert f'"{message_type}"' in provider or f"'{message_type}'" in command_center_js
+        assert f'"{message_type}"' in provider or f'"{message_type}"' in command_center_js
 
     for control_id in [
         "deployBtn",
@@ -151,3 +155,20 @@ def test_command_center_visible_controls_are_wired() -> None:
     assert "copyLastReport" in extension
     assert "exportLastReport" in extension
     assert "context.globalState" in provider
+
+
+def test_command_center_preserves_and_escapes_mission_audit_data() -> None:
+    extension = (VSCODE_ROOT / "extension.js").read_text(encoding="utf-8")
+    provider = (VSCODE_ROOT / "command-center.js").read_text(encoding="utf-8")
+    command_center_js = (ROOT / "resources" / "sergeant-command-center-v2.js").read_text(encoding="utf-8")
+
+    assert "normalizeMissionContext" in extension
+    assert "missionContext" in extension
+    assert "message.mission || {}" in provider
+    assert "currentMission" in provider
+    assert "missionContext" in provider
+    assert "selectedMission" in command_center_js
+    assert 'send({ type: "run", action, mission })' in command_center_js
+    assert "escapeHtml" in command_center_js
+    assert '.replace(/</g, "&lt;")' in command_center_js
+    assert "replaceChildren" in command_center_js
