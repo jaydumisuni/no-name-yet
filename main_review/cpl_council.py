@@ -67,6 +67,18 @@ def _finding_key(finding: dict[str, Any]) -> tuple[object, ...]:
     return finding.get("path"), finding.get("line_start"), finding.get("line_end"), message
 
 
+def gap_signature(gap: dict[str, Any]) -> tuple[str, str, str]:
+    return str(gap.get("type")), str(gap.get("specialist")), str(gap.get("reason"))
+
+
+def _resolved_signatures(passes: list[dict[str, Any]]) -> set[tuple[str, str, str]]:
+    return {
+        tuple(str(part) for part in item.get("resolved_gap_signature", []))
+        for item in passes
+        if item.get("resolution_status") == "answered" and len(item.get("resolved_gap_signature", [])) == 3
+    }
+
+
 def assess(passes: list[dict[str, Any]], plan: list[dict[str, Any]], errors: list[str], model_count: int) -> list[dict[str, Any]]:
     gaps: list[dict[str, Any]] = []
     completed = {str(item.get("specialist")) for item in passes}
@@ -94,10 +106,14 @@ def assess(passes: list[dict[str, Any]], plan: list[dict[str, Any]], errors: lis
                     continue
                 specialist = CATEGORY_SPECIALIST.get(str(finding.get("category") or "other"), "correctness")
                 gaps.append({"type": "independent_confirmation", "specialist": specialist, "officer": SPECIALISTS[specialist].officer, "reason": f"High-impact finding has one model source: {finding.get('message')}"})
+
+    resolved = _resolved_signatures(passes)
     unique: dict[tuple[str, str, str], dict[str, Any]] = {}
     for gap in gaps:
-        unique.setdefault((str(gap["type"]), str(gap["specialist"]), str(gap["reason"])), gap)
-    order = {"failed_member": 0, "missing_report": 1, "disagreement": 2, "unanswered_question": 3, "independent_confirmation": 4}
+        signature = gap_signature(gap)
+        if signature not in resolved:
+            unique.setdefault(signature, gap)
+    order = {"failed_member": 0, "missing_report": 1, "recurrence": 2, "disagreement": 3, "unanswered_question": 4, "independent_confirmation": 5}
     return sorted(unique.values(), key=lambda item: (order.get(str(item["type"]), 9), str(item["specialist"]), str(item["reason"])))
 
 
@@ -111,6 +127,7 @@ def instruction(gap: dict[str, Any], round_number: int) -> dict[str, Any]:
         "instruction": f"Resolve or narrow this tabled gap using current repository evidence: {gap.get('reason')}",
         "required_evidence": ["path and line range", "grounded evidence", "answer or remaining uncertainty"],
         "gap_type": gap.get("type"),
+        "gap_signature": list(gap_signature(gap)),
     }
 
 
