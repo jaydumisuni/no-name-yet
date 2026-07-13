@@ -1,7 +1,7 @@
 """Provider routing beneath Sergeant's Cpl reasoning officer.
 
-Cpl is Sergeant's native Corporal Specialist.  It owns provider-independent
-reasoning policy while this module supplies stable HTTP transports.  Cpl can use
+Cpl is Sergeant's native Corporal Specialist. It owns provider-independent
+reasoning policy while this module supplies stable HTTP transports. Cpl can use
 a local Cpl gateway, Ollama, LM Studio, or an explicitly configured
 OpenAI-compatible service without importing provider-specific SDKs.
 
@@ -252,11 +252,11 @@ def discover_route(settings: LLMSettings | None = None) -> LLMRoute | None:
     if not settings.enabled:
         return None
 
+    provider = _normalize_provider(settings.provider)
     explicit_base = _normalize_base_url(settings.base_url)
     if explicit_base:
-        candidates = [(settings.provider if settings.provider != "auto" else "configured", explicit_base)]
+        candidates = [(provider if provider != "auto" else "configured", explicit_base)]
     else:
-        provider = _normalize_provider(settings.provider)
         local_candidates = [
             ("cpl", DEFAULT_CPL_BASE_URL),
             ("ollama", DEFAULT_OLLAMA_BASE_URL),
@@ -343,7 +343,7 @@ def _parse_json_text(text: str) -> dict[str, Any]:
         start = candidate.find("{")
         end = candidate.rfind("}")
         if start < 0 or end <= start:
-            raise LLMProviderError("Cpl model output did not contain a JSON object.")
+            raise LLMProviderError("Cpl model output did not contain a JSON object.") from None
         try:
             payload = json.loads(candidate[start : end + 1])
         except json.JSONDecodeError as error:
