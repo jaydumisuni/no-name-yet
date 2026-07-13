@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from main_review.pr_reviewer import render_pr_review_markdown, run_independent_pr_review
+from main_review.pr_reviewer import _decide, render_pr_review_markdown, run_independent_pr_review
 
 
 def _make_verified_repo(root: Path) -> None:
@@ -40,6 +40,51 @@ def test_independent_pr_review_approves_verified_repo_without_external_reviewer(
     assert "External reviewer comments are optional" in rendered
     assert "Cpl status: disabled" in rendered
     assert "Cpl role: Corporal Specialist" in rendered
+
+
+def test_not_deployed_cpl_does_not_claim_unresolved_council_gaps() -> None:
+    verdict = _decide(
+        {"verdict": "PASS"},
+        {"passed": True, "blockers": []},
+        {"verdict": {"verdict": "PASS"}},
+        {"verdict": "PASS", "ranked_findings": []},
+        {"confidence_after_challenge": 0.9},
+        {
+            "status": "error",
+            "policy": "preferred",
+            "verdict": "PASS",
+            "confidence": 0.0,
+            "findings": [],
+            "council": {"mode": "not_deployed", "complete": False},
+        },
+        {"consensus": "PASS"},
+    )
+
+    assert verdict.verdict == "APPROVE"
+    assert "Cpl reasoning was not available" in verdict.notes
+    assert not any("unresolved council gaps" in note for note in verdict.notes)
+
+
+def test_deployed_incomplete_cpl_preserves_unresolved_gap_note() -> None:
+    verdict = _decide(
+        {"verdict": "PASS"},
+        {"passed": True, "blockers": []},
+        {"verdict": {"verdict": "PASS"}},
+        {"verdict": "PASS", "ranked_findings": []},
+        {"confidence_after_challenge": 0.9},
+        {
+            "status": "completed",
+            "policy": "preferred",
+            "verdict": "NEEDS WORK",
+            "confidence": 0.7,
+            "findings": [],
+            "council": {"mode": "elastic_multi_model", "complete": False},
+        },
+        {"consensus": "NEEDS WORK"},
+    )
+
+    assert verdict.verdict == "COMMENT"
+    assert any("unresolved council gaps" in note for note in verdict.notes)
 
 
 def test_independent_pr_review_requests_changes_when_tests_missing(tmp_path: Path) -> None:
