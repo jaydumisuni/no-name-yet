@@ -110,6 +110,7 @@ def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> l
         status = _outcome_status(item)
         if status is None:
             continue
+        mission_id = item.get("mission_id")
         category = str(item.get("category") or "other").lower()
         officer = str(item.get("officer") or OFFICER_BY_CATEGORY.get(category, "Analyst"))
         finding_id = str(item.get("finding_id") or item.get("id") or item.get("message") or "unknown")
@@ -119,7 +120,7 @@ def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> l
             "superseded": "superseded_finding",
         }[status]
         common = {
-            "mission_id": item.get("mission_id"),
+            "mission_id": mission_id,
             "finding_id": finding_id,
             "event_type": event_type,
             "status": status,
@@ -133,7 +134,7 @@ def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> l
         for subject_type, subject_id in (("cpl", "Cpl"), ("officer", officer)):
             events.append({
                 **common,
-                "event_id": _stable_id(subject_type, subject_id, finding_id, status, item.get("path")),
+                "event_id": _stable_id(mission_id, subject_type, subject_id, finding_id, status, item.get("path")),
                 "subject_type": subject_type,
                 "subject_id": subject_id,
             })
@@ -141,14 +142,14 @@ def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> l
         for model in dict.fromkeys(str(model) for model in models if model):
             events.append({
                 **common,
-                "event_id": _stable_id("model", model, finding_id, status, item.get("path")),
+                "event_id": _stable_id(mission_id, "model", model, finding_id, status, item.get("path")),
                 "subject_type": "model",
                 "subject_id": model,
             })
         for weapon in dict.fromkeys(str(weapon) for weapon in item.get("weapons", []) if weapon):
             events.append({
                 **common,
-                "event_id": _stable_id("weapon", weapon, finding_id, status, item.get("path")),
+                "event_id": _stable_id(mission_id, "weapon", weapon, finding_id, status, item.get("path")),
                 "subject_type": "weapon",
                 "subject_id": weapon,
             })
@@ -164,10 +165,12 @@ def derive_profiles(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         verified = sum(item.get("status") == "verified" for item in rows)
         rejected = sum(item.get("status") == "rejected" for item in rows)
         total = max(1, verified + rejected)
+        mission_ids = {str(item.get("mission_id")) for item in rows if item.get("mission_id") is not None}
         profiles[key] = {
             "subject_type": rows[-1].get("subject_type"),
             "subject_id": rows[-1].get("subject_id"),
-            "missions_recorded": len(rows),
+            "missions_recorded": len(mission_ids) if mission_ids else len(rows),
+            "outcomes_recorded": len(rows),
             "verified_outcomes": verified,
             "rejected_outcomes": rejected,
             "observed_reliability": round(verified / total, 3),
