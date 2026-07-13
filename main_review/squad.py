@@ -225,7 +225,7 @@ def command_summary(reports: list[dict[str, object]]) -> dict[str, object]:
         "agents": [report.get("agent") for report in reports],
         "blocking_agents": [report.get("agent") for report in blocking],
         "needs_work_agents": [report.get("agent") for report in needs_work],
-        "rule": "Cpl councils, remembers, rebriefs, and amplifies. Permanent officers own specialist truth. Sergeant commands the final review.",
+        "rule": "Specialists advise. Cpl councils, remembers, rebriefs, and amplifies. Permanent officers own specialist truth. Sergeant commands the final review.",
     }
 
 
@@ -235,7 +235,7 @@ def run_squad_review(review_packet: dict[str, Any], evidence_consensus: dict[str
     return {
         "summary": command_summary(reports),
         "cpl_command": {
-            "role": "council-led field reasoning, officer amplification, and command learning",
+            "role": "senior field reasoning, council command, officer amplification, and command learning",
             "status": cpl.get("status", "not_deployed"),
             "verdict": cpl.get("verdict", "PASS"),
             "confidence": cpl.get("confidence", 0.0),
