@@ -44,6 +44,10 @@ def test_jetbrains_plugin_bundles_shared_command_center() -> None:
     assert "sergeantState" in tool_window
     assert "saveSettings" in tool_window
     assert "saveSemanticSettings" in tool_window
+    assert "Cpl reasoning settings saved." in tool_window
+    assert 'value == "fcc" -> "cpl"' in tool_window
+    assert 'value == "always" -> "maximum"' in tool_window
+    assert "deterministic review and Cpl specialist reasoning" in tool_window
     assert "copyLastReport" in tool_window
     assert "exportLastReport" in tool_window
     assert "SergeantFallbackPanel" in tool_window
