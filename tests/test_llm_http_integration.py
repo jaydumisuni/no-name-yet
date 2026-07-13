@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from main_review.llm_provider import LLMSettings, discover_route
-from main_review.llm_review import run_llm_review
+from main_review.llm_review import run_cpl_review
 
 
-class _FCCHandler(BaseHTTPRequestHandler):
+class _CplGatewayHandler(BaseHTTPRequestHandler):
     requests: list[dict[str, Any]] = []
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A003
@@ -84,9 +84,9 @@ class _FCCHandler(BaseHTTPRequestHandler):
         )
 
 
-def test_fcc_responses_route_discovers_best_open_model_and_returns_grounded_review(tmp_path: Path) -> None:
-    _FCCHandler.requests = []
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _FCCHandler)
+def test_cpl_responses_route_discovers_best_model_and_runs_specialist_reasoning(tmp_path: Path, monkeypatch) -> None:
+    _CplGatewayHandler.requests = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _CplGatewayHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -94,7 +94,7 @@ def test_fcc_responses_route_discovers_best_open_model_and_returns_grounded_revi
         settings = LLMSettings(
             enabled=True,
             policy="required",
-            provider="fcc",
+            provider="cpl",
             base_url=base_url,
             model="",
             protocol="responses",
@@ -105,6 +105,7 @@ def test_fcc_responses_route_discovers_best_open_model_and_returns_grounded_revi
         route = discover_route(settings)
 
         assert route is not None
+        assert route.provider == "cpl"
         assert route.model == "gateway/glm-5.2"
         assert route.protocol == "responses"
 
@@ -113,7 +114,9 @@ def test_fcc_responses_route_discovers_best_open_model_and_returns_grounded_revi
             "def average(total, count):\n    return total / count\n",
             encoding="utf-8",
         )
-        result = run_llm_review(
+        monkeypatch.setenv("SERGEANT_CPL_DEPTH", "adaptive")
+        monkeypatch.setenv("SERGEANT_CPL_MAX_PASSES", "2")
+        result = run_cpl_review(
             tmp_path,
             ["src/math.py"],
             {"repository_review": {"verdict": "PASS"}},
@@ -121,16 +124,18 @@ def test_fcc_responses_route_discovers_best_open_model_and_returns_grounded_revi
             route=route,
         )
 
+        assert result["officer"] == "Cpl"
         assert result["status"] == "completed"
         assert result["verdict"] == "NEEDS WORK"
         assert result["findings"][0]["evidence_verified"] is True
         assert result["route"]["model"] == "gateway/glm-5.2"
-        assert [request["payload"]["model"] for request in _FCCHandler.requests] == [
+        assert [request["payload"]["model"] for request in _CplGatewayHandler.requests] == [
             "gateway/glm-5.2",
             "gateway/qwen3-coder-next",
         ]
         assert len(result["passes"]) == 2
-        for request in _FCCHandler.requests:
+        assert result["passes"][1]["specialist"] == "tests_contracts"
+        for request in _CplGatewayHandler.requests:
             assert request["path"] == "/v1/responses"
             assert request["payload"]["input"][0]["role"] == "system"
             assert request["payload"]["input"][1]["role"] == "user"
