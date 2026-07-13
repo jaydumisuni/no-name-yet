@@ -79,8 +79,11 @@ def validate_github_base_url(
         raise HardeningError("GitHub API URL must not contain a query or fragment.")
     host = (parsed.hostname or "").lower()
     loopback = host in {"127.0.0.1", "localhost", "::1"}
-    if parsed.scheme != "https" and not (allow_insecure_loopback and parsed.scheme == "http" and loopback):
+    insecure_loopback = allow_insecure_loopback and parsed.scheme == "http" and loopback
+    if parsed.scheme != "https" and not insecure_loopback:
         raise HardeningError("GitHub API URL must use HTTPS; HTTP is permitted only for explicitly enabled loopback tests.")
+    if parsed.port not in {None, 443} and not insecure_loopback:
+        raise HardeningError("GitHub API URL must use the standard HTTPS port unless an insecure loopback test is explicitly enabled.")
     if host not in configured_github_hosts(allowed_hosts) and not (allow_insecure_loopback and loopback):
         raise HardeningError(f"GitHub API host is not explicitly trusted: {host or '<missing>'}")
     allowed_paths = {"", "/", "/api/v3"}
@@ -155,6 +158,24 @@ def normalize_repository_path(root: str | Path, candidate: str | Path) -> str:
     if relative == Path("."):
         raise HardeningError("Repository file path cannot resolve to the repository root.")
     return relative.as_posix()
+
+
+def normalize_input_file(root: str | Path, candidate: str | Path) -> str:
+    """Normalize an explicit input file while allowing an absolute path inside root."""
+
+    raw = str(candidate or "")
+    if not raw or "\x00" in raw:
+        raise HardeningError("Input file path must be non-empty and contain no NUL bytes.")
+    root_path = Path(root).resolve()
+    candidate_path = Path(raw)
+    target = candidate_path.resolve() if candidate_path.is_absolute() else (root_path / candidate_path).resolve()
+    try:
+        target.relative_to(root_path)
+    except ValueError as error:
+        raise HardeningError(f"Input file escapes the repository root: {raw!r}") from error
+    if target == root_path:
+        raise HardeningError("Input file path cannot resolve to the repository root.")
+    return str(target)
 
 
 def normalize_changed_files(root: str | Path, changed_files: Iterable[object], *, limit: int = 2000) -> list[str]:
