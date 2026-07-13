@@ -71,41 +71,51 @@ jobs:
             exit 0
           fi
           cat > release-notes.md <<EOF
-          ## Sergeant $VERSION — Complete Command Center
+          ## Sergeant $VERSION — Semantic Open-Model Review
 
-          Sergeant's complete V2 Command Center is delivered in the 0.3 release line.
+          Sergeant 0.4 adds an evidence-grounded semantic review layer while keeping Main Review and deterministic proof authoritative.
 
-          ### Command Center
+          ### Provider routing
 
-          - Full Commander dashboard with live workspace, branch, changed-file, mission, verdict, and history state
-          - Mission Planner with briefing, priority, provider, permissions, officers, armoury, and release-gate missions
-          - Live mission progress and evidence views
-          - Evidence Locker with open, copy, export, refresh, and persisted report history
-          - Officer deployment, armoury, Settings, Doctrine, Roadmap, and Guide
-          - Compact VS Code activity-bar launcher plus full editor Command Center
-          - Shared JetBrains Command Center through JCEF with a native fallback
+          - Free Claude Code-compatible OpenAI Responses routing
+          - Local Ollama and LM Studio discovery
+          - Explicit OpenAI-compatible hosted or self-hosted endpoints
+          - Open-model preference: GLM-5.2, Qwen3-Coder-Next, Kimi K2.5, then provider fallback
+          - Preferred, required, and disabled semantic-review policies
+          - Adaptive second-model challenger for high-risk or disputed changes
 
-          ### Safety
+          ### Review quality
 
-          - Read-only review by default
-          - Writer mode disabled by default
-          - Draft patches only
-          - Human approval required
-          - Never auto-merge
+          - Every accepted semantic blocker or major finding must identify a supplied path, valid line range, and repository evidence
+          - Unsupported high-severity model claims are rejected before consensus
+          - Dependency blast-radius and lexical risk signals are separated from demonstrated defects
+          - High-risk automation changes require explicit purpose, permissions, secrets, rollback, and proof assurance
+          - The actual Sergeant JSON verdict is now enforced as the Main Review merge gate
+
+          ### Product integration
+
+          - New sergeant pr-review command for complete deterministic-plus-semantic review
+          - New sergeant llm-status command for route and privacy inspection
+          - Shared semantic router controls in VS Code and JetBrains Command Centers
+          - One-active-mission gates remain enforced across both IDE families
+          - Coordinated VS Code and Python 0.4.0 packages plus JetBrains 0.4.0-preview
 
           ### Proof
 
-          - CI and Sergeant Main Review passed
-          - Python package tests and distribution validation passed
-          - JavaScript syntax checks passed
-          - Browser navigation and overflow proof passed at desktop and compact IDE widths
-          - VSIX packaging passed
-          - JetBrains compilation, ZIP packaging, and shared-resource inspection passed
+          - Sergeant Main Review: APPROVE / PASS / zero required actions
+          - CI and clean-clone proof passed
+          - Mock FCC /v1/models and /v1/responses integration passed
+          - Grounding and hallucination-rejection tests passed
+          - Browser semantic-router, compact-layout, and duplicate-launch proof passed
+          - Python wheel/source and VSIX validation passed
+          - JetBrains compilation, ZIP packaging, and bundled-resource inspection passed
+
+          This release provides a complete configured review gate. It does not claim that any model or tool can guarantee literal 100 percent defect detection.
           EOF
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target main \
-            --title "Sergeant v$VERSION — Complete Command Center" \
+            --title "Sergeant v$VERSION — Semantic Open-Model Review" \
             --notes-file release-notes.md
 
       - name: Dispatch all marketplace publishers
