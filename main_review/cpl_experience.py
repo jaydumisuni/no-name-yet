@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .memory import load_memory
+from .memory import ReviewMemoryStore, default_memory_path
 
 EXPERIENCE_PATH = Path(".main-review/cpl-experience.jsonl")
 VALID_STATUSES = {"verified", "rejected", "superseded"}
@@ -74,8 +74,7 @@ def load_experience_events(root: str | Path) -> list[dict[str, Any]]:
 def append_experience_events(root: str | Path, events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     path = _ledger_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing = load_experience_events(root)
-    known = {str(item.get("event_id")) for item in existing}
+    known = {str(item.get("event_id")) for item in load_experience_events(root)}
     added: list[dict[str, Any]] = []
     for raw in events:
         item = dict(raw)
@@ -85,11 +84,10 @@ def append_experience_events(root: str | Path, events: Iterable[dict[str, Any]])
         item.setdefault("created_at", _now())
         known.add(event_id)
         added.append(item)
-    if not added:
-        return []
-    with path.open("a", encoding="utf-8") as handle:
-        for item in added:
-            handle.write(json.dumps(item, sort_keys=True, default=str) + "\n")
+    if added:
+        with path.open("a", encoding="utf-8") as handle:
+            for item in added:
+                handle.write(json.dumps(item, sort_keys=True, default=str) + "\n")
     return added
 
 
@@ -99,9 +97,7 @@ def _outcome_status(item: dict[str, Any]) -> str | None:
         return "verified"
     if raw in {"rejected", "false_positive", "dismissed"}:
         return "rejected"
-    if raw == "superseded":
-        return "superseded"
-    return None
+    return "superseded" if raw == "superseded" else None
 
 
 def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -144,8 +140,7 @@ def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> l
                 "subject_type": "model",
                 "subject_id": model,
             })
-        weapons = item.get("weapons") or []
-        for weapon in dict.fromkeys(str(weapon) for weapon in weapons if weapon):
+        for weapon in dict.fromkeys(str(weapon) for weapon in item.get("weapons", []) if weapon):
             events.append({
                 **common,
                 "event_id": _stable_id("weapon", weapon, finding_id, status, item.get("path")),
@@ -158,8 +153,7 @@ def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> l
 def derive_profiles(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for event in events:
-        key = f"{event.get('subject_type')}:{event.get('subject_id')}"
-        grouped[key].append(event)
+        grouped[f"{event.get('subject_type')}:{event.get('subject_id')}"] .append(event)
     profiles: dict[str, dict[str, Any]] = {}
     for key, rows in grouped.items():
         verified = sum(item.get("status") == "verified" for item in rows)
@@ -178,27 +172,31 @@ def derive_profiles(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return profiles
 
 
-def retrieve_experience(
-    root: str | Path,
-    changed_files: list[str],
-    *,
-    officers: Iterable[str] = (),
-    limit: int = 16,
-) -> dict[str, Any]:
-    """Return only relevant verified/rejected experience for the current mission."""
+def _path_related(previous: str, current: str) -> bool:
+    if not previous or not current:
+        return False
+    if previous == current:
+        return True
+    previous_parent = previous.rsplit("/", 1)[0] if "/" in previous else ""
+    current_parent = current.rsplit("/", 1)[0] if "/" in current else ""
+    return bool(previous_parent and previous_parent == current_parent)
+
+
+def retrieve_experience(root: str | Path, changed_files: list[str], *, officers: Iterable[str] = (), limit: int = 16) -> dict[str, Any]:
+    """Return relevant verified/rejected experience for the current mission."""
 
     mission_tokens = _tokens(" ".join(changed_files))
     officer_set = {str(item).lower() for item in officers}
-    ranked: list[tuple[float, dict[str, Any]]] = []
     events = load_experience_events(root)
+    ranked: list[tuple[float, dict[str, Any]]] = []
     for event in events:
         score = 0.0
         path = str(event.get("path") or "")
-        if path and any(path == changed or path.startswith(changed.rsplit("/", 1)[0] + "/") for changed in changed_files):
+        if any(_path_related(path, changed) for changed in changed_files):
             score += 4.0
         overlap = len(mission_tokens & _tokens(" ".join([path, str(event.get("message")), str(event.get("category"))])))
         score += min(3.0, overlap * 0.5)
-        if str(event.get("subject_type")) == "officer" and str(event.get("subject_id", "")).lower() in officer_set:
+        if event.get("subject_type") == "officer" and str(event.get("subject_id", "")).lower() in officer_set:
             score += 2.0
         if event.get("status") == "verified":
             score += 0.5
@@ -206,27 +204,25 @@ def retrieve_experience(
             ranked.append((score, event))
     ranked.sort(key=lambda pair: (pair[0], str(pair[1].get("created_at", ""))), reverse=True)
 
-    memory_records = []
-    for record in load_memory(root):
-        if record.get("status") not in {"verified", "rejected"}:
+    lessons: list[dict[str, Any]] = []
+    for record in ReviewMemoryStore(default_memory_path(root)).load():
+        if record.status not in {"verified", "rejected"}:
             continue
-        paths = [str(path) for path in record.get("applicable_paths", [])]
-        text = " ".join(paths + [str(record.get("lesson")), str(record.get("risk"))])
-        if any(path in changed_files for path in paths) or mission_tokens & _tokens(text):
-            memory_records.append({
-                "id": record.get("id"),
-                "status": record.get("status"),
-                "lesson": record.get("lesson"),
-                "risk": record.get("risk"),
-                "applicable_paths": paths,
-                "confidence": record.get("confidence"),
+        text = " ".join([*record.applies_to, record.summary, record.reason, *record.tags])
+        if any(path in changed_files for path in record.applies_to) or mission_tokens & _tokens(text):
+            lessons.append({
+                "id": record.id,
+                "status": record.status,
+                "lesson": record.summary,
+                "risk": record.reason,
+                "applicable_paths": record.applies_to,
+                "confidence": record.confidence,
             })
 
-    selected_events = [event for _, event in ranked[: max(1, limit)]]
     return {
         "checked": True,
-        "events": selected_events,
-        "canonical_lessons": memory_records[: max(1, limit // 2)],
+        "events": [event for _, event in ranked[: max(1, limit)]],
+        "canonical_lessons": lessons[: max(1, limit // 2)],
         "profiles": derive_profiles(events),
         "anti_repeat_rule": "Applicable verified experience must influence the mission or Cpl must record why it was not used.",
     }
@@ -235,20 +231,12 @@ def retrieve_experience(
 def detect_recurrences(findings: list[dict[str, Any]], experience: dict[str, Any]) -> list[dict[str, Any]]:
     recurrences: list[dict[str, Any]] = []
     for finding in findings:
-        current_tokens = _tokens(" ".join([
-            str(finding.get("message")),
-            str(finding.get("category")),
-            str(finding.get("path")),
-        ]))
+        current_tokens = _tokens(" ".join([str(finding.get("message")), str(finding.get("category")), str(finding.get("path"))]))
         best: tuple[float, dict[str, Any]] | None = None
         for event in experience.get("events", []):
             if event.get("status") != "verified":
                 continue
-            previous_tokens = _tokens(" ".join([
-                str(event.get("message")),
-                str(event.get("category")),
-                str(event.get("path")),
-            ]))
+            previous_tokens = _tokens(" ".join([str(event.get("message")), str(event.get("category")), str(event.get("path"))]))
             score = len(current_tokens & previous_tokens) / max(1, len(current_tokens | previous_tokens))
             if finding.get("path") and finding.get("path") == event.get("path"):
                 score += 0.4
