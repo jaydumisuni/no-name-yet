@@ -46,6 +46,10 @@ def test_vscode_extension_manifest_installs_sergeant_commands() -> None:
     assert properties["sergeant.llmPolicy"]["default"] == "preferred"
     assert properties["sergeant.llmProvider"]["default"] == "auto"
     assert properties["sergeant.llmCouncil"]["default"] == "adaptive"
+    assert properties["sergeant.cplMaxRounds"]["default"] == 2
+    assert properties["sergeant.cplMaxRounds"]["maximum"] == 6
+    assert properties["sergeant.cplMaxCouncilMembers"]["default"] == 5
+    assert properties["sergeant.cplMaxCouncilMembers"]["maximum"] == 12
     assert "cpl" in properties["sergeant.llmProvider"]["enum"]
     assert "fcc" not in properties["sergeant.llmProvider"]["enum"]
     assert "maximum" in properties["sergeant.llmCouncil"]["enum"]
@@ -75,11 +79,15 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
         "SERGEANT_CPL_MODEL",
         "SERGEANT_CPL_PROTOCOL",
         "SERGEANT_CPL_DEPTH",
+        "SERGEANT_CPL_MAX_ROUNDS",
+        "SERGEANT_CPL_MAX_COUNCIL_MEMBERS",
     ]:
         assert environment_name in extension
     assert "openFullCommandCenter" in provider
     assert "saveSemanticSettings" in provider
     assert "LLM_SETTING_KEYS" in provider
+    assert 'maxRounds: "cplMaxRounds"' in provider
+    assert 'maxMembers: "cplMaxCouncilMembers"' in provider
     assert "sergeant-command-center-v2.html" in provider
     assert "SERGEANT_HOST_BOOTSTRAP" in provider
     assert "createWebviewPanel" in extension
@@ -123,8 +131,14 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
     assert "sergeantHostSend" in command_center_js
     assert "saveCplSettings" in command_center_js
     assert "window.addEventListener('message'" in command_center_js
-    assert "Deterministic Evidence → Cpl Reasoning Evidence → Verification" in command_center_js
-    assert "Cpl — Corporal Specialist" in command_center_js
+    assert "Cpl Council Reasoning" in command_center_js
+    assert "Verified Experience Retrieval" in command_center_js
+    assert "Recurrence Detection" in command_center_js
+    assert "Council Command" in command_center_js
+    assert "Permanent Officers" in command_center_js
+    assert "Anti-Repeat" in command_center_js
+    assert "cplMaxRoundsInput" in command_center_js
+    assert "cplMaxMembersInput" in command_center_js
     assert "grid-template-columns:270px" in command_center_css
     assert "Math.random" not in command_center_js
     assert "sgtTimer" not in command_center_js
@@ -180,6 +194,8 @@ def test_command_center_visible_controls_are_wired() -> None:
         "quickCopy",
     ]:
         assert f'id="{control_id}"' in command_center
+    for dynamic_control in ["cplMaxRoundsInput", "cplMaxMembersInput"]:
+        assert dynamic_control in command_center_js
 
     assert "onDidReceiveMessage" in provider
     assert "handleMessage" in provider
