@@ -1,6 +1,7 @@
 package com.thetechguyds.sergeant
 
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationManager
@@ -31,6 +32,15 @@ import java.nio.charset.StandardCharsets
 import java.time.Instant
 import javax.swing.JButton
 import javax.swing.JPanel
+
+private val semanticSettingKeys = mapOf(
+    "policy" to "sergeant.llm.policy",
+    "provider" to "sergeant.llm.provider",
+    "baseUrl" to "sergeant.llm.baseUrl",
+    "model" to "sergeant.llm.model",
+    "protocol" to "sergeant.llm.protocol",
+    "council" to "sergeant.llm.council",
+)
 
 class SergeantToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -72,20 +82,46 @@ private class SergeantCommandCenterPanel(private val project: Project) : JPanel(
             val message = JsonParser.parseString(payload).asJsonObject
             when (message.get("type")?.asString.orEmpty()) {
                 "ready", "refresh" -> sendState()
-                "run" -> runMission(message.get("action")?.asString.orEmpty())
+                "run" -> {
+                    saveSemanticSettings(message.getAsJsonObject("settings"))
+                    runMission(message.get("action")?.asString.orEmpty())
+                }
                 "openLast" -> openLastReport()
                 "copyLast" -> copyLastReport()
                 "exportLast" -> exportLastReport()
                 "saveSettings" -> {
-                    val provider = message.getAsJsonObject("settings")?.get("provider")?.asString
-                    if (!provider.isNullOrBlank()) PropertiesComponent.getInstance(project).setValue("sergeant.provider", provider)
-                    sendState()
+                    saveSemanticSettings(message.getAsJsonObject("settings"))
+                    sendState("Semantic review settings saved.")
                 }
                 "selectWorkspace" -> sendState()
             }
         } catch (error: Exception) {
             status = "Needs Attention"
             sendState(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    private fun saveSemanticSettings(settings: JsonObject?) {
+        if (settings == null) return
+        val properties = PropertiesComponent.getInstance(project)
+        for ((publicKey, storageKey) in semanticSettingKeys) {
+            val value = settings.get(publicKey)?.takeIf { !it.isJsonNull }?.asString ?: continue
+            properties.setValue(storageKey, value)
+        }
+    }
+
+    private fun semanticSettings(): Map<String, String> {
+        val properties = PropertiesComponent.getInstance(project)
+        val defaults = mapOf(
+            "policy" to "preferred",
+            "provider" to "auto",
+            "baseUrl" to "",
+            "model" to "",
+            "protocol" to "auto",
+            "council" to "adaptive",
+        )
+        return semanticSettingKeys.mapValues { (publicKey, storageKey) ->
+            properties.getValue(storageKey) ?: defaults.getValue(publicKey)
         }
     }
 
@@ -98,6 +134,7 @@ private class SergeantCommandCenterPanel(private val project: Project) : JPanel(
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = SergeantRunner.run(project, action)
             ApplicationManager.getApplication().invokeLater {
+                if (project.isDisposed) return@invokeLater
                 lastOutput = result.output
                 val verdict = if (result.exitCode == 0) "PASS" else "NEEDS ATTENTION"
                 val summary = mapOf(
@@ -149,7 +186,7 @@ private class SergeantCommandCenterPanel(private val project: Project) : JPanel(
             "history" to history,
             "notice" to notice,
             "error" to (notice.isNotBlank() && status == "Needs Attention"),
-            "settings" to mapOf("provider" to (PropertiesComponent.getInstance(project).getValue("sergeant.provider") ?: "Local Model")),
+            "settings" to semanticSettings(),
         )
         val json = gson.toJson(state)
         browser.cefBrowser.executeJavaScript(
@@ -245,7 +282,7 @@ private class SergeantFallbackPanel(private val project: Project) : JPanel(Borde
         isEditable = false
         lineWrap = false
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
-        text = "Sergeant 0.3.2-preview\n\nJCEF is unavailable. Native fallback is ready to review ${project.name}."
+        text = "Sergeant 0.3.2-preview\n\nJCEF is unavailable. Native fallback is ready to run deterministic and semantic review for ${project.name}."
     }
     private val runButton = JButton("Review Project")
 
@@ -264,10 +301,11 @@ private class SergeantFallbackPanel(private val project: Project) : JPanel(Borde
 
     private fun runReview() {
         runButton.isEnabled = false
-        output.text = "Running Sergeant review…"
+        output.text = "Running Sergeant deterministic and semantic review…"
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = SergeantRunner.review(project)
             ApplicationManager.getApplication().invokeLater {
+                if (project.isDisposed) return@invokeLater
                 output.text = "Exit code: ${result.exitCode}\n\n${result.output}"
                 output.caretPosition = 0
                 runButton.isEnabled = true
