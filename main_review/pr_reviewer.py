@@ -14,6 +14,7 @@ from .diff_review import review_changed_files
 from .llm_review import run_llm_review
 from .review_ingestion import ingest_external_review_file
 from .review_intelligence import run_review_intelligence
+from .semantic_scope import semantic_review_files
 from .standard_engine import run_standard_engine
 from .verdict import review_repository
 
@@ -133,6 +134,7 @@ def run_independent_pr_review(
 ) -> dict[str, Any]:
     root_path = Path(root)
     changed = changed_files or []
+    semantic_files = semantic_review_files(root_path, changed)
     repository_review = review_repository(root_path)
     diff = review_changed_files(changed)
     standard = run_standard_engine(root_path, changed)
@@ -141,6 +143,11 @@ def run_independent_pr_review(
     challenge = run_challenge_mode(repository_review)
 
     semantic_context = {
+        "review_scope": {
+            "changed_files": changed,
+            "semantic_files": semantic_files,
+            "workspace_sample": not bool(changed),
+        },
         "repository_review": repository_review.get("verdict", {}),
         "repository_findings": repository_review.get("evidence", {}).get("findings", []),
         "diff_review": diff.get("verdict", {}),
@@ -150,7 +157,7 @@ def run_independent_pr_review(
         "review_intelligence": intelligence,
         "challenge": challenge,
     }
-    semantic = run_llm_review(root_path, changed, semantic_context)
+    semantic = run_llm_review(root_path, semantic_files, semantic_context)
 
     external_workspace = {"summary": {"total": 0}, "decisions": [], "ready_for_memory": []}
     if external_review_file is not None:
@@ -197,6 +204,7 @@ def run_independent_pr_review(
         "capability_review": capabilities,
         "review_intelligence": intelligence,
         "semantic_review": semantic,
+        "semantic_files": semantic_files,
         "standard": standard,
         "challenge": challenge,
         "external_decisions": external_workspace,
@@ -235,6 +243,7 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
     lines.append(f"- Semantic model: {route.get('model', 'unavailable')}")
     lines.append(f"- Semantic verdict: {semantic.get('verdict')}")
     lines.append(f"- Semantic confidence: {semantic.get('confidence')}")
+    lines.append(f"- Semantic files supplied: {len(packet.get('semantic_files', []))}")
     lines.append(f"- Standard passed: {packet.get('standard', {}).get('passed')}")
     lines.append(f"- Challenge trusted: {packet.get('challenge', {}).get('trusted')}")
     lines.append(f"- Consensus: {packet.get('consensus', {}).get('consensus')}")
