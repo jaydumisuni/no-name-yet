@@ -3,7 +3,7 @@ function createActions({ workspaceRoot, activeRelativeFile, changedFilesCsv }) {
     {
       id: "reviewWorkspace",
       label: "Review Workspace",
-      description: "Full deterministic + semantic verdict",
+      description: "Deterministic + Cpl specialist verdict",
       command: "sergeant.reviewWorkspace",
       title: "Sergeant workspace review",
       args: () => ["pr-review", workspaceRoot(), "--pretty"],
@@ -22,7 +22,7 @@ function createActions({ workspaceRoot, activeRelativeFile, changedFilesCsv }) {
     {
       id: "reviewCurrentFile",
       label: "Review Current File",
-      description: "Editor-aware semantic file review",
+      description: "Editor-aware Cpl file review",
       command: "sergeant.reviewCurrentFile",
       title: "Sergeant current file review",
       args: async () => ["pr-review", workspaceRoot(), "--files", await activeRelativeFile(), "--pretty"],
@@ -31,7 +31,7 @@ function createActions({ workspaceRoot, activeRelativeFile, changedFilesCsv }) {
     {
       id: "reviewChangedFiles",
       label: "Review Changed Files",
-      description: "Git changed-file semantic review",
+      description: "Git changed-file Cpl review",
       command: "sergeant.reviewChangedFiles",
       title: "Sergeant changed files review",
       args: async () => ["pr-review", workspaceRoot(), "--files", await changedFilesCsv(), "--pretty"],
