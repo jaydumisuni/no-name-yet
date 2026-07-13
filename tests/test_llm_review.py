@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from main_review.llm_provider import LLMRoute, LLMSettings
-from main_review.llm_review import run_llm_review
+from main_review.llm_review import run_cpl_review, run_llm_review
 
 
 def _route(*, models: tuple[str, ...] = ("provider/glm-5.2",)) -> LLMRoute:
@@ -32,13 +32,13 @@ def _settings(policy: str = "preferred") -> LLMSettings:
     )
 
 
-def test_semantic_review_accepts_only_evidence_grounded_major_findings(tmp_path: Path, monkeypatch) -> None:
+def test_cpl_accepts_only_evidence_grounded_major_findings(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").write_text(
         "def divide(total, count):\n    return total / count\n",
         encoding="utf-8",
     )
-
+    monkeypatch.setenv("SERGEANT_CPL_DEPTH", "single")
     monkeypatch.setattr(
         "main_review.llm_review.invoke_json",
         lambda route, **kwargs: {
@@ -63,7 +63,7 @@ def test_semantic_review_accepts_only_evidence_grounded_major_findings(tmp_path:
         },
     )
 
-    result = run_llm_review(
+    result = run_cpl_review(
         tmp_path,
         ["src/app.py"],
         {"repository_review": {"verdict": "PASS"}},
@@ -71,16 +71,19 @@ def test_semantic_review_accepts_only_evidence_grounded_major_findings(tmp_path:
         route=_route(),
     )
 
+    assert result["officer"] == "Cpl"
+    assert result["role"] == "Corporal Specialist"
     assert result["status"] == "completed"
     assert result["verdict"] == "NEEDS WORK"
     assert result["findings"][0]["evidence_verified"] is True
     assert result["findings"][0]["path"] == "src/app.py"
+    assert result["passes"][0]["specialist"] == "generalist"
 
 
-def test_semantic_review_discards_hallucinated_major_finding(tmp_path: Path, monkeypatch) -> None:
+def test_cpl_discards_hallucinated_major_finding(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").write_text("print('safe')\n", encoding="utf-8")
-
+    monkeypatch.setenv("SERGEANT_CPL_DEPTH", "single")
     monkeypatch.setattr(
         "main_review.llm_review.invoke_json",
         lambda route, **kwargs: {
@@ -104,7 +107,7 @@ def test_semantic_review_discards_hallucinated_major_finding(tmp_path: Path, mon
         },
     )
 
-    result = run_llm_review(
+    result = run_cpl_review(
         tmp_path,
         ["src/app.py"],
         {},
@@ -117,10 +120,10 @@ def test_semantic_review_discards_hallucinated_major_finding(tmp_path: Path, mon
     assert result["passes"][0]["raw_verdict"] == "BLOCK"
 
 
-def test_required_semantic_review_blocks_when_no_route_is_available(tmp_path: Path, monkeypatch) -> None:
+def test_required_cpl_review_blocks_when_no_route_is_available(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("main_review.llm_review.discover_route", lambda settings: None)
 
-    result = run_llm_review(
+    result = run_cpl_review(
         tmp_path,
         [],
         {},
@@ -130,18 +133,19 @@ def test_required_semantic_review_blocks_when_no_route_is_available(tmp_path: Pa
     assert result["status"] == "unavailable"
     assert result["verdict"] == "NEEDS WORK"
     assert result["policy"] == "required"
+    assert result["officer"] == "Cpl"
 
 
-def test_adaptive_council_uses_a_second_open_model_for_high_risk_changes(tmp_path: Path, monkeypatch) -> None:
+def test_adaptive_cpl_deploys_a_specialist_on_a_second_open_model(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".github" / "workflows").mkdir(parents=True)
     (tmp_path / ".github" / "workflows" / "review.yml").write_text(
         "permissions:\n  contents: read\n",
         encoding="utf-8",
     )
-    calls: list[str] = []
+    calls: list[tuple[str, str]] = []
 
     def fake_invoke(route, **kwargs):
-        calls.append(route.model)
+        calls.append((route.model, kwargs["system_prompt"]))
         return {
             "verdict": "PASS",
             "confidence": 0.85,
@@ -154,9 +158,10 @@ def test_adaptive_council_uses_a_second_open_model_for_high_risk_changes(tmp_pat
         }
 
     monkeypatch.setattr("main_review.llm_review.invoke_json", fake_invoke)
-    monkeypatch.setenv("SERGEANT_LLM_COUNCIL", "adaptive")
+    monkeypatch.setenv("SERGEANT_CPL_DEPTH", "adaptive")
+    monkeypatch.setenv("SERGEANT_CPL_MAX_PASSES", "2")
 
-    result = run_llm_review(
+    result = run_cpl_review(
         tmp_path,
         [".github/workflows/review.yml"],
         {"standard": {"passed": True}},
@@ -164,6 +169,28 @@ def test_adaptive_council_uses_a_second_open_model_for_high_risk_changes(tmp_pat
         route=_route(models=("provider/glm-5.2", "provider/qwen3-coder-next")),
     )
 
-    assert calls == ["provider/glm-5.2", "provider/qwen3-coder-next"]
+    assert [model for model, _ in calls] == ["provider/glm-5.2", "provider/qwen3-coder-next"]
     assert len(result["passes"]) == 2
+    assert result["passes"][1]["specialist"] == "security"
+    assert "CPL SPECIALIST ASSIGNMENT" in calls[1][1]
+    assert result["reasoning_plan"][0]["model"] == "provider/qwen3-coder-next"
     assert result["verdict"] == "PASS"
+
+
+def test_legacy_run_llm_review_name_delegates_to_cpl(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SERGEANT_CPL_DEPTH", "single")
+    monkeypatch.setattr(
+        "main_review.llm_review.invoke_json",
+        lambda route, **kwargs: {
+            "verdict": "PASS",
+            "confidence": 0.8,
+            "summary": "No grounded findings.",
+            "findings": [],
+            "coverage": {"files_reviewed": [], "areas": []},
+        },
+    )
+
+    result = run_llm_review(tmp_path, [], {}, settings=_settings(), route=_route())
+
+    assert result["officer"] == "Cpl"
+    assert result["status"] == "completed"
