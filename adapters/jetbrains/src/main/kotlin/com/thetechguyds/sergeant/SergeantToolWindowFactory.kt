@@ -91,7 +91,7 @@ private class SergeantCommandCenterPanel(private val project: Project) : JPanel(
                 "exportLast" -> exportLastReport()
                 "saveSettings" -> {
                     saveSemanticSettings(message.getAsJsonObject("settings"))
-                    sendState("Semantic review settings saved.")
+                    sendState("Cpl reasoning settings saved.")
                 }
                 "selectWorkspace" -> sendState()
             }
@@ -120,9 +120,15 @@ private class SergeantCommandCenterPanel(private val project: Project) : JPanel(
             "protocol" to "auto",
             "council" to "adaptive",
         )
-        return semanticSettingKeys.mapValues { (publicKey, storageKey) ->
-            properties.getValue(storageKey) ?: defaults.getValue(publicKey)
-        }
+        return semanticSettingKeys
+            .mapValues { (publicKey, storageKey) -> properties.getValue(storageKey) ?: defaults.getValue(publicKey) }
+            .mapValues { (publicKey, value) ->
+                when {
+                    publicKey == "provider" && value == "fcc" -> "cpl"
+                    publicKey == "council" && value == "always" -> "maximum"
+                    else -> value
+                }
+            }
     }
 
     private fun runMission(action: String) {
@@ -282,7 +288,7 @@ private class SergeantFallbackPanel(private val project: Project) : JPanel(Borde
         isEditable = false
         lineWrap = false
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
-        text = "Sergeant 0.4.0-preview\n\nJCEF is unavailable. Native fallback is ready to run deterministic and semantic review for ${project.name}."
+        text = "Sergeant 0.4.0-preview\n\nJCEF is unavailable. Native fallback is ready to run deterministic review and Cpl specialist reasoning for ${project.name}."
     }
     private val runButton = JButton("Review Project")
 
@@ -301,7 +307,7 @@ private class SergeantFallbackPanel(private val project: Project) : JPanel(Borde
 
     private fun runReview() {
         runButton.isEnabled = false
-        output.text = "Running Sergeant deterministic and semantic review…"
+        output.text = "Running Sergeant deterministic review and Cpl specialist reasoning…"
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = SergeantRunner.review(project)
             ApplicationManager.getApplication().invokeLater {
