@@ -164,6 +164,13 @@ def _all_gaps(passes: list[dict[str, Any]], plan: list[dict[str, Any]], errors: 
     return [*_recurrence_gaps(effective, experience), *assess(effective, plan, errors, len(models))]
 
 
+def _final_summary(round_count: int, member_count: int, findings: list[dict[str, Any]], final_gaps: list[dict[str, Any]]) -> str:
+    return (
+        f"Cpl completed {round_count} council round(s) with {member_count} distinct model member(s). "
+        f"{len(findings)} effective grounded finding(s) remain and {len(final_gaps)} council gap(s) are unresolved."
+    )
+
+
 def run_cpl_review(
     root: str | Path,
     changed_files: list[str],
@@ -265,6 +272,8 @@ def run_cpl_review(
     findings, verdict, confidence = _merge_passes(effective_passes)
     _annotate_confirmations(findings, passes)
     final_gaps = _all_gaps(passes, plan, errors, models, experience)
+    if final_gaps and verdict == "PASS":
+        verdict = "NEEDS WORK"
     unique_models = {str(item.get("model")) for item in passes if item.get("model")}
     independence = round(len(unique_models) / max(1, len(passes)), 3)
     if final_gaps:
@@ -277,11 +286,12 @@ def run_cpl_review(
         for gap in final_gaps
         if gap.get("type") == "unanswered_question" and str(gap.get("reason", "")).strip()
     })
+    round_count = 1 + len(rounds)
     result.update({
         "status": "completed" if not errors else "completed_with_warnings",
         "verdict": verdict,
         "confidence": round(confidence, 3),
-        "summary": " ".join(item.get("summary", "") for item in passes if item.get("summary")).strip(),
+        "summary": _final_summary(round_count, len(unique_models), findings, final_gaps),
         "findings": findings,
         "passes": passes,
         "coverage": _coverage(effective_passes, result.get("coverage", {})),
@@ -294,7 +304,7 @@ def run_cpl_review(
         "mode": "elastic_multi_model" if len(unique_models) > 1 else "single_model_role_separated",
         "core_round": 1,
         "rounds": rounds,
-        "round_count": 1 + len(rounds),
+        "round_count": round_count,
         "max_rounds": max_rounds(),
         "members": member_records(passes),
         "member_count": len(unique_models),
