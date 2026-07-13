@@ -35,9 +35,11 @@ def test_independent_pr_review_approves_verified_repo_without_external_reviewer(
     assert packet["verdict"]["verdict"] == "APPROVE"
     assert packet["standard"]["passed"] is True
     assert packet["challenge"]["trusted"] is True
-    assert packet["semantic_review"]["status"] == "disabled"
+    assert packet["cpl_review"]["status"] == "disabled"
+    assert packet["semantic_review"] == packet["cpl_review"]
     assert "External reviewer comments are optional" in rendered
-    assert "Semantic review status: disabled" in rendered
+    assert "Cpl status: disabled" in rendered
+    assert "Cpl role: Corporal Specialist" in rendered
 
 
 def test_independent_pr_review_requests_changes_when_tests_missing(tmp_path: Path) -> None:
