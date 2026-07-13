@@ -1,15 +1,9 @@
 """Run Sergeant against live battle fixtures and score expected findings.
 
-This module is the live comparison layer for battle tests. It fetches a real
-GitHub PR file list, patches, and review comments, materializes them into a
-temporary review workspace, runs Sergeant's existing review engine, and compares
-the resulting structured output against the fixture's expected findings.
-
-The comparison is intentionally transparent and conservative. It uses keyword
-overlap, not an LLM judge. Reports include caveats so the result cannot be
-mistaken for a full historical checkout or a semantic evaluation.
+This live comparison layer fetches validated GitHub PR patches/comments,
+materializes them only inside a temporary sandbox, runs Sergeant's static review
+engine, and compares structured output against fixture expectations.
 """
-
 from __future__ import annotations
 
 import json
@@ -17,11 +11,12 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from main_review.evidence import BattleAwareEvidenceProvider, RiskPathEvidenceProvider, SecretEvidenceProvider, collect_evidence
 from main_review.github_diff_fetch import fetch_pr_diff_live
 from main_review.github_live_fetch import fetch_pr_comments_live
+from main_review.production_hardening import HardeningError, normalize_repository_path
 from main_review.verdict import decide_verdict
 
 _STOPWORDS = {
@@ -73,7 +68,6 @@ def _overlap_score(expected: str, candidates: list[str]) -> tuple[float, str | N
     expected_keywords = _keywords(expected)
     if not expected_keywords:
         return 0.0, None
-
     best_ratio = 0.0
     best_candidate: str | None = None
     for candidate in candidates:
@@ -139,7 +133,6 @@ def _extract_finding_texts(verdict_report: dict[str, Any]) -> list[str]:
     verdict = verdict_report.get("verdict", verdict_report)
     if not isinstance(verdict, dict):
         return texts
-
     for bucket in ("blocking_findings", "major_findings", "minor_findings", "notes", "findings"):
         items = verdict.get(bucket, [])
         if not isinstance(items, list):
@@ -158,21 +151,26 @@ def _extract_finding_texts(verdict_report: dict[str, Any]) -> list[str]:
                     texts.append(text)
             elif isinstance(item, str) and item.strip():
                 texts.append(item.strip())
-
     return texts
 
 
 def _write_patch_workspace(files: list[Any], root: Path) -> list[str]:
+    """Materialize patch text only under the temporary review root."""
+
     written: list[str] = []
     for file in files:
         patch = getattr(file, "patch", None)
         filename = getattr(file, "filename", "")
         if not patch or not filename:
             continue
-        destination = root / filename
+        try:
+            safe_name = normalize_repository_path(root, filename)
+        except HardeningError as error:
+            raise ValueError(f"Unsafe pull-request filename refused: {filename!r}: {error}") from error
+        destination = root / safe_name
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(patch, encoding="utf-8")
-        written.append(filename)
+        written.append(safe_name)
     return written
 
 
@@ -218,19 +216,35 @@ def run_battle_comparison(
     token: str | None = None,
     base_url: str = "https://api.github.com",
     match_threshold: float = 0.5,
+    allowed_hosts: Iterable[str] = (),
+    allow_insecure_loopback: bool = False,
 ) -> BattleRunResult:
-    """Fetch a fixture's real PR patches/comments, run Sergeant, and score agreement."""
+    """Fetch a fixture's real PR evidence, run Sergeant, and score agreement."""
+
     fixture_path = Path(fixture_path)
     payload = json.loads(fixture_path.read_text(encoding="utf-8"))
-
     repository = payload["repository"]
     pr_number = int(payload["pull_request"])
     expected_findings = [str(item) for item in payload.get("expected_sergeant_findings", [])]
 
-    diff = fetch_pr_diff_live(repository, pr_number, token=token, base_url=base_url)
-    comments = fetch_pr_comments_live(repository, pr_number, token=token, base_url=base_url)
+    diff = fetch_pr_diff_live(
+        repository,
+        pr_number,
+        token=token,
+        base_url=base_url,
+        allowed_hosts=allowed_hosts,
+        allow_insecure_loopback=allow_insecure_loopback,
+    )
+    comments = fetch_pr_comments_live(
+        repository,
+        pr_number,
+        token=token,
+        base_url=base_url,
+        allowed_hosts=allowed_hosts,
+        allow_insecure_loopback=allow_insecure_loopback,
+    )
     caveats = [
-        "Files reviewed are GitHub PR patch text plus PR review comments materialized into a temporary workspace, not a full historical repository checkout.",
+        "Files reviewed are GitHub PR patch text plus PR review comments materialized into a temporary sandbox, not a full historical repository checkout.",
         "Agreement scoring is transparent keyword-overlap with documented synonym expansion, not semantic or LLM judged.",
         "Repository-level documentation/test-footprint checks are disabled for patch-only battle comparison to avoid false positives from partial workspaces.",
         "A conceptual match can score low when wording differs between Sergeant output and fixture expectations.",
@@ -257,7 +271,6 @@ def run_battle_comparison(
         matches.append(ExpectedFindingMatch(expected, matched, ratio, candidate))
 
     agreement_rate = matched_count / len(expected_findings) if expected_findings else 0.0
-
     return BattleRunResult(
         repository=repository,
         pull_request=pr_number,
