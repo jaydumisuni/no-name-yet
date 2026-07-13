@@ -1,0 +1,95 @@
+name: Live GitHub Ingestion Proof
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Repository in owner/name form
+        required: false
+        default: jaydumisuni/Sergeant
+      pr_number:
+        description: Pull request number to prove
+        required: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  live-read-only-ingestion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Sergeant
+        run: python -m pip install -e .
+
+      - name: Resolve proof target
+        id: target
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "repository=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "repository=${{ inputs.repository }}" >> "$GITHUB_OUTPUT"
+            echo "pr_number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch real GitHub PR evidence with read-only token
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build
+          python -m main_review.cli live-github-comments \
+            "${{ steps.target.outputs.repository }}" \
+            "${{ steps.target.outputs.pr_number }}" \
+            --token-env GITHUB_TOKEN \
+            --proof-only \
+            --proof-output build/live-github-proof.json \
+            --pretty
+
+      - name: Enforce live-ingestion proof contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          proof = json.loads(Path("build/live-github-proof.json").read_text(encoding="utf-8"))
+          assert proof["proof_version"] == "sergeant.live-github-proof.v1"
+          assert proof["source"] == "live-github-api"
+          assert proof["claims"]["network_fetch_completed"] is True
+          assert proof["claims"]["get_only"] is True
+          assert proof["claims"]["repository_identity_verified"] is True
+          assert proof["claims"]["pagination_verified"] is True
+          assert proof["claims"]["comment_bodies_omitted_from_proof"] is True
+          assert proof["pull_request"]["base"]["repo"]["full_name"] == proof["repository"]
+          assert proof["pull_request"]["repository_visibility"] == "public"
+          assert len(proof["request_evidence"]) >= 3
+          assert all(item["method"] == "GET" for item in proof["request_evidence"])
+          assert "all_comments" not in proof
+          print(json.dumps({
+              "repository": proof["repository"],
+              "pr_number": proof["pr_number"],
+              "requests": len(proof["request_evidence"]),
+              "issue_comments": proof["issue_comment_count"],
+              "review_comments": proof["review_comment_count"],
+              "token_scope_evidence": proof["token_scope_assessment"]["scope_evidence"],
+              "verdict": "PASS",
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload sanitized live proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-github-ingestion-proof
+          path: build/live-github-proof.json
+          if-no-files-found: error
