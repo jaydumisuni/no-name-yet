@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .capability_engine import run_capability_engine
+from .capability_policy import normalize_capability_review
 from .challenge import run_challenge_mode
 from .consensus import build_consensus
 from .decision_workspace import build_decision_workspace
@@ -135,7 +136,7 @@ def run_independent_pr_review(
     repository_review = review_repository(root_path)
     diff = review_changed_files(changed)
     standard = run_standard_engine(root_path, changed)
-    capabilities = run_capability_engine(root_path, changed)
+    capabilities = normalize_capability_review(run_capability_engine(root_path, changed))
     intelligence = run_review_intelligence({"capability_review": capabilities})
     challenge = run_challenge_mode(repository_review)
 
