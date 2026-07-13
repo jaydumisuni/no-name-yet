@@ -62,9 +62,19 @@ def specialist_for_text(value: object) -> str:
     return "correctness"
 
 
-def _finding_key(finding: dict[str, Any]) -> tuple[object, ...]:
+def finding_key(finding: dict[str, Any]) -> tuple[object, ...]:
     message = re.sub(r"\W+", " ", str(finding.get("message", "")).lower()).strip()
     return finding.get("path"), finding.get("line_start"), finding.get("line_end"), message
+
+
+def finding_reference(finding: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "path": finding.get("path"),
+        "line_start": finding.get("line_start"),
+        "line_end": finding.get("line_end"),
+        "message": finding.get("message"),
+        "category": finding.get("category"),
+    }
 
 
 def gap_signature(gap: dict[str, Any]) -> tuple[str, str, str]:
@@ -99,13 +109,19 @@ def assess(passes: list[dict[str, Any]], plan: list[dict[str, Any]], errors: lis
         support: dict[tuple[object, ...], set[str]] = {}
         for report in passes:
             for finding in report.get("findings", []):
-                support.setdefault(_finding_key(finding), set()).add(str(report.get("model")))
+                support.setdefault(finding_key(finding), set()).add(str(report.get("model")))
         for report in passes:
             for finding in report.get("findings", []):
-                if finding.get("severity") not in {"blocker", "major"} or len(support.get(_finding_key(finding), set())) > 1:
+                if finding.get("severity") not in {"blocker", "major"} or len(support.get(finding_key(finding), set())) > 1:
                     continue
                 specialist = CATEGORY_SPECIALIST.get(str(finding.get("category") or "other"), "correctness")
-                gaps.append({"type": "independent_confirmation", "specialist": specialist, "officer": SPECIALISTS[specialist].officer, "reason": f"High-impact finding has one model source: {finding.get('message')}"})
+                gaps.append({
+                    "type": "independent_confirmation",
+                    "specialist": specialist,
+                    "officer": SPECIALISTS[specialist].officer,
+                    "reason": f"High-impact finding has one model source: {finding.get('message')}",
+                    "target_finding": finding_reference(finding),
+                })
 
     resolved = _resolved_signatures(passes)
     unique: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -125,9 +141,10 @@ def instruction(gap: dict[str, Any], round_number: int) -> dict[str, Any]:
         "to_officer": gap.get("officer") or assignment.officer,
         "support_specialist": specialist,
         "instruction": f"Resolve or narrow this tabled gap using current repository evidence: {gap.get('reason')}",
-        "required_evidence": ["path and line range", "grounded evidence", "answer or remaining uncertainty"],
+        "required_evidence": ["path and line range", "grounded evidence", "explicit council resolution"],
         "gap_type": gap.get("type"),
         "gap_signature": list(gap_signature(gap)),
+        "target_finding": gap.get("target_finding"),
     }
 
 
