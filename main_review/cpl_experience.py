@@ -113,10 +113,15 @@ def record_human_outcomes(root: str | Path, outcomes: list[dict[str, Any]]) -> l
         category = str(item.get("category") or "other").lower()
         officer = str(item.get("officer") or OFFICER_BY_CATEGORY.get(category, "Analyst"))
         finding_id = str(item.get("finding_id") or item.get("id") or item.get("message") or "unknown")
+        event_type = {
+            "verified": "confirmed_finding",
+            "rejected": "rejected_finding",
+            "superseded": "superseded_finding",
+        }[status]
         common = {
             "mission_id": item.get("mission_id"),
             "finding_id": finding_id,
-            "event_type": "confirmed_finding" if status == "verified" else "rejected_finding",
+            "event_type": event_type,
             "status": status,
             "category": category,
             "path": item.get("path"),
@@ -196,9 +201,9 @@ def retrieve_experience(root: str | Path, changed_files: list[str], *, officers:
             score += 4.0
         overlap = len(mission_tokens & _tokens(" ".join([path, str(event.get("message")), str(event.get("category"))])))
         score += min(3.0, overlap * 0.5)
-        if event.get("subject_type") == "officer" and str(event.get("subject_id", "")).lower() in officer_set:
+        if score > 0 and event.get("subject_type") == "officer" and str(event.get("subject_id", "")).lower() in officer_set:
             score += 2.0
-        if event.get("status") == "verified":
+        if score > 0 and event.get("status") == "verified":
             score += 0.5
         if score > 0:
             ranked.append((score, event))
