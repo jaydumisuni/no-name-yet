@@ -225,7 +225,7 @@ def command_summary(reports: list[dict[str, object]]) -> dict[str, object]:
         "agents": [report.get("agent") for report in reports],
         "blocking_agents": [report.get("agent") for report in blocking],
         "needs_work_agents": [report.get("agent") for report in needs_work],
-        "rule": "Specialists advise. Cpl councils, remembers, rebriefs, and amplifies. Permanent officers own specialist truth. Sergeant commands the final review.",
+        "rule": "Specialists advise. Cpl amplifies through councils, verified experience, and evidence-driven rebriefs. Permanent officers own specialist truth. Sergeant commands the final review.",
     }
 
 
