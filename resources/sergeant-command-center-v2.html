@@ -99,5 +99,61 @@
 </div>
 <!-- SERGEANT_HOST_BOOTSTRAP -->
 <script>// SERGEANT_JS</script>
+<script>
+(() => {
+  let missionLocked = false;
+  const launchSelector = '[data-action], #deployBtn';
+
+  function launchControls() {
+    return [...document.querySelectorAll(launchSelector)];
+  }
+
+  function showLaunchNotice(message) {
+    const hostNotice = document.querySelector('#hostNotice');
+    if (!hostNotice) return;
+    hostNotice.textContent = message;
+    hostNotice.classList.add('show');
+  }
+
+  function renderMissionLock(locked) {
+    document.body.dataset.missionLocked = locked ? 'true' : 'false';
+    for (const control of launchControls()) {
+      control.disabled = locked;
+      control.setAttribute('aria-disabled', String(locked));
+      control.title = locked ? 'A Sergeant mission is already running.' : '';
+    }
+  }
+
+  function setMissionLock(locked) {
+    missionLocked = Boolean(locked);
+    renderMissionLock(missionLocked);
+  }
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest(launchSelector);
+    if (!trigger) return;
+    if (missionLocked) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      showLaunchNotice('A Sergeant mission is already running. Wait for its verdict before launching another mission.');
+      return;
+    }
+    missionLocked = true;
+    queueMicrotask(() => renderMissionLock(true));
+  }, true);
+
+  window.addEventListener('message', (event) => {
+    const snapshot = event.data?.state;
+    if (!snapshot) return;
+    const running = Boolean(snapshot.running) || String(snapshot.status || '').toLowerCase() === 'running';
+    setMissionLock(running);
+  });
+
+  window.sergeantMissionLock = {
+    isLocked: () => missionLocked,
+    release: () => setMissionLock(false),
+  };
+})();
+</script>
 </body>
 </html>

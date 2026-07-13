@@ -151,3 +151,24 @@ def test_command_center_visible_controls_are_wired() -> None:
     assert "copyLastReport" in extension
     assert "exportLastReport" in extension
     assert "context.globalState" in provider
+
+
+def test_command_center_has_single_mission_execution_boundary() -> None:
+    extension = (VSCODE_ROOT / "extension.js").read_text(encoding="utf-8")
+    command_center = (ROOT / "resources" / "sergeant-command-center-v2.html").read_text(encoding="utf-8")
+    visual_proof = (ROOT / "tests" / "command-center-visual.spec.js").read_text(encoding="utf-8")
+    closure = (ROOT / "docs" / "04-command-center-review-closure.md").read_text(encoding="utf-8")
+
+    assert "let activeRun = null" in extension
+    assert "clearActiveRun" in extension
+    assert "is already running" in extension
+    assert "activeRun.child.kill()" in extension
+    assert "let missionLocked = false" in command_center
+    assert "event.stopImmediatePropagation()" in command_center
+    assert "queueMicrotask" in command_center
+    assert "window.sergeantMissionLock" in command_center
+    assert "sends only one mission while a run is active" in visual_proof
+    assert "toHaveLength(1)" in visual_proof
+    assert ".github/workflows/multiplatform-proof.yml" in closure
+    assert "scripts/build-command-center-preview.js" in closure
+    assert "one active mission per IDE host" in closure

@@ -48,3 +48,36 @@ test('compact IDE width remains usable', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 920 });
   await assertCommandCenter(page, 'command-center-420.png');
 });
+
+test('Command Center sends only one mission while a run is active', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto(previewUrl);
+  await page.evaluate(() => {
+    window.__sergeantPayloads = [];
+    window.sergeantHostSend = (payload) => {
+      window.__sergeantPayloads.push(JSON.parse(payload));
+      return true;
+    };
+  });
+
+  const launchButton = page.locator('.quick-actions [data-action="reviewWorkspace"]');
+  await launchButton.click();
+  await expect(launchButton).toBeDisabled();
+
+  await page.evaluate(() => {
+    const button = document.querySelector('.quick-actions [data-action="reviewWorkspace"]');
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+
+  const runPayloads = await page.evaluate(() => window.__sergeantPayloads.filter((item) => item.type === 'run'));
+  expect(runPayloads).toHaveLength(1);
+  expect(runPayloads[0].action).toBe('reviewWorkspace');
+
+  await page.evaluate(() => {
+    window.postMessage({
+      type: 'sergeantState',
+      state: { status: 'Complete', running: '', workspace: 'sergeant', history: [] },
+    }, '*');
+  });
+  await expect(launchButton).toBeEnabled();
+});

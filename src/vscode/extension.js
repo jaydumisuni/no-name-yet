@@ -9,6 +9,8 @@ const extensionRoot = path.resolve(__dirname, "../..");
 let lastResult = null;
 let commandCenterProvider = null;
 let selectedWorkspaceName = "";
+let activeRun = null;
+let outputChannel = null;
 
 function pythonPath() {
   return vscode.workspace.getConfiguration("sergeant").get("pythonPath") || "python";
@@ -74,27 +76,58 @@ async function actionArgs(action) {
 async function runAction(actionId) {
   const action = ACTIONS.find((item) => item.id === actionId || item.command === actionId);
   if (!action) throw new Error(`Unknown Sergeant action: ${actionId}`);
+  if (activeRun) {
+    vscode.window.showWarningMessage(`${activeRun.title} is already running. Wait for its verdict before launching another Sergeant mission.`);
+    return null;
+  }
   return runSergeant(await actionArgs(action), action.title, action.id);
 }
 
+function clearActiveRun(child) {
+  if (activeRun?.child === child) activeRun = null;
+}
+
 function runSergeant(args, title, actionId = "") {
-  const output = vscode.window.createOutputChannel("Sergeant");
+  if (activeRun) {
+    vscode.window.showWarningMessage(`${activeRun.title} is already running.`);
+    return null;
+  }
+
+  const output = outputChannel || vscode.window.createOutputChannel("Sergeant");
+  outputChannel = output;
   output.clear();
   output.appendLine(`$ ${pythonPath()} sergeant.py ${args.join(" ")}`);
   output.appendLine("");
   commandCenterProvider?.setRunning(actionId, title);
 
   const child = cp.spawn(pythonPath(), [path.join(extensionRoot, "sergeant.py"), ...args], { cwd: workspaceRoot(), shell: false });
+  activeRun = { child, title, actionId };
   let stdout = "";
   let stderr = "";
-  child.stdout.on("data", (data) => { const text = data.toString(); stdout += text; output.append(text); });
-  child.stderr.on("data", (data) => { const text = data.toString(); stderr += text; output.append(text); });
+  let settled = false;
+
+  child.stdout.on("data", (data) => {
+    const text = data.toString();
+    stdout += text;
+    output.append(text);
+  });
+  child.stderr.on("data", (data) => {
+    const text = data.toString();
+    stderr += text;
+    output.append(text);
+  });
   child.on("error", (error) => {
+    if (settled) return;
+    settled = true;
+    clearActiveRun(child);
     output.show(true);
     commandCenterProvider?.setIdle(error.message);
     vscode.window.showErrorMessage(`${title} failed: ${error.message}`);
   });
   child.on("close", async (code) => {
+    if (settled) return;
+    settled = true;
+    clearActiveRun(child);
     const payload = parseJsonOutput(stdout);
     lastResult = { title, actionId, args, payload, stdout, stderr, exitCode: code, finishedAt: new Date().toISOString() };
     await commandCenterProvider?.setResult(lastResult);
@@ -102,6 +135,7 @@ function runSergeant(args, title, actionId = "") {
     if (code === 0) vscode.window.showInformationMessage(`${title} completed.`);
     else vscode.window.showErrorMessage(`${title} exited with code ${code}. See Sergeant Review panel.`);
   });
+  return child;
 }
 
 function showResultPanel(title, args, payload, stdout, stderr, exitCode) {
@@ -133,6 +167,8 @@ async function exportLastReport() {
 }
 
 function activate(context) {
+  outputChannel = vscode.window.createOutputChannel("Sergeant");
+  context.subscriptions.push(outputChannel);
   commandCenterProvider = new SergeantCommandCenterProvider(context, {
     actions: ACTIONS,
     workspaceRoot,
@@ -152,6 +188,9 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand("sergeant.exportLastReport", exportLastReport));
 }
 
-function deactivate() {}
+function deactivate() {
+  if (activeRun?.child && !activeRun.child.killed) activeRun.child.kill();
+  activeRun = null;
+}
 
 module.exports = { activate, deactivate };
