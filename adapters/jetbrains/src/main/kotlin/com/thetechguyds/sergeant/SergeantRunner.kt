@@ -17,9 +17,34 @@ internal object SergeantRunner {
     )
 
     fun run(project: Project, action: String): Result {
-        val root = project.basePath ?: return Result(action, titleFor(action), 2, "Sergeant could not resolve the current project path.")
-        val args = argumentsFor(project, action, root)
-            ?: return Result(action, titleFor(action), 2, "The selected Sergeant mission needs an active file or changed files.")
+        val title = titleFor(action)
+        if (!SergeantMissionGate.tryAcquire(project)) {
+            return Result(
+                action,
+                title,
+                125,
+                "A Sergeant mission is already running for this project. Wait for its verdict before launching another mission.",
+            )
+        }
+
+        return try {
+            val root = project.basePath
+            if (root == null) {
+                Result(action, title, 2, "Sergeant could not resolve the current project path.")
+            } else {
+                val args = argumentsFor(project, action, root)
+                if (args == null) {
+                    Result(action, title, 2, "The selected Sergeant mission needs an active file or changed files.")
+                } else {
+                    execute(action, title, root, args)
+                }
+            }
+        } finally {
+            SergeantMissionGate.release(project)
+        }
+    }
+
+    private fun execute(action: String, title: String, root: String, args: List<String>): Result {
         val configured = System.getenv("SERGEANT_CLI")?.trim().orEmpty()
         val executable = if (configured.isNotEmpty()) configured else "sergeant"
         val command = listOf(executable) + args
@@ -36,14 +61,14 @@ internal object SergeantRunner {
             if (!finished) {
                 process.destroyForcibly()
                 outputFuture.cancel(true)
-                Result(action, titleFor(action), 124, "Sergeant mission timed out after ten minutes.")
+                Result(action, title, 124, "Sergeant mission timed out after ten minutes.")
             } else {
-                Result(action, titleFor(action), process.exitValue(), outputFuture.get())
+                Result(action, title, process.exitValue(), outputFuture.get())
             }
         } catch (error: Exception) {
             Result(
                 action,
-                titleFor(action),
+                title,
                 127,
                 "Unable to start the Sergeant CLI. Install it with 'pipx install sergeant-reviewer' " +
                     "or set SERGEANT_CLI to the executable path.\n\n${error.message}",
