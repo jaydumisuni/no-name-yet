@@ -21,6 +21,7 @@ def report_table(passes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 for finding in item.get("findings", [])[:6]
             ],
             "unanswered_questions": item.get("unanswered_questions", []),
+            "council_resolution": item.get("council_resolution"),
         })
     return rows
 
@@ -36,6 +37,12 @@ def follow_up_prompt(
         "events": experience.get("events", [])[:8],
         "canonical_lessons": experience.get("canonical_lessons", [])[:6],
     }
+    resolution_contract = {
+        "status": "answered | unresolved",
+        "disposition": "confirmed | rejected | narrowed | not_applicable | unresolved",
+        "answer": "direct evidence-based answer to the tabled gap",
+        "target_finding": command.get("target_finding"),
+    }
     return "\n".join([
         base,
         f"\nCPL COUNCIL ROUND {round_number}",
@@ -43,7 +50,12 @@ def follow_up_prompt(
         json.dumps(table, indent=2, sort_keys=True, default=str)[:28000],
         "\nCpl instruction:\n" + json.dumps(command, indent=2, sort_keys=True, default=str),
         "\nRelevant verified/rejected experience:\n" + json.dumps(memory, indent=2, sort_keys=True, default=str)[:12000],
-        "Return the normal grounded review JSON. Resolve the gap or preserve it in unanswered_questions.",
+        "Return the normal grounded review JSON and add this top-level council_resolution object:",
+        json.dumps(resolution_contract, indent=2, sort_keys=True, default=str),
+        "Use answered only when current repository evidence directly resolves the tabled issue. "
+        "Use rejected to disprove the target finding, narrowed to replace it with a more precise finding, "
+        "confirmed to uphold it, and unresolved when the supplied evidence is insufficient. "
+        "A PASS verdict alone is not a council resolution.",
     ])
 
 
