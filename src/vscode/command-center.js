@@ -3,6 +3,15 @@ const fs = require("fs");
 const path = require("path");
 const { collectFindings, escapeHtml, summarizePayload } = require("./results");
 
+const LLM_SETTING_KEYS = {
+  policy: "llmPolicy",
+  provider: "llmProvider",
+  baseUrl: "llmBaseUrl",
+  model: "llmModel",
+  protocol: "llmProtocol",
+  council: "llmCouncil",
+};
+
 class SergeantCommandCenterProvider {
   constructor(context, options) {
     this.context = context;
@@ -93,6 +102,13 @@ class SergeantCommandCenterProvider {
     this.state.last.justFinished = false;
   }
 
+  semanticSettings() {
+    const configuration = vscode.workspace.getConfiguration("sergeant");
+    return Object.fromEntries(
+      Object.entries(LLM_SETTING_KEYS).map(([publicKey, settingKey]) => [publicKey, configuration.get(settingKey)]),
+    );
+  }
+
   async buildState() {
     const editor = vscode.window.activeTextEditor;
     const activeFile = editor ? path.relative(this.options.workspaceRoot(), editor.document.uri.fsPath) || editor.document.uri.fsPath : "";
@@ -107,7 +123,7 @@ class SergeantCommandCenterProvider {
       branch: git.branch,
       changedFilesCount: git.changedFilesCount,
       changedFiles: git.changedFiles,
-      settings: { provider: vscode.workspace.getConfiguration("sergeant").get("provider") || "Local Model" },
+      settings: this.semanticSettings(),
     };
   }
 
@@ -115,6 +131,14 @@ class SergeantCommandCenterProvider {
     const message = { type: "sergeantState", state: await this.buildState() };
     this.sidebarView?.webview.postMessage(message);
     this.fullPanel?.webview.postMessage(message);
+  }
+
+  async saveSemanticSettings(settings) {
+    const configuration = vscode.workspace.getConfiguration("sergeant");
+    for (const [publicKey, settingKey] of Object.entries(LLM_SETTING_KEYS)) {
+      if (!Object.prototype.hasOwnProperty.call(settings || {}, publicKey)) continue;
+      await configuration.update(settingKey, String(settings[publicKey] ?? ""), vscode.ConfigurationTarget.Global);
+    }
   }
 
   async handleMessage(message) {
@@ -128,9 +152,7 @@ class SergeantCommandCenterProvider {
         this.options.selectWorkspace(String(message.workspace || ""));
         await this.postState();
       } else if (message?.type === "saveSettings") {
-        if (message.settings?.provider) {
-          await vscode.workspace.getConfiguration("sergeant").update("provider", message.settings.provider, vscode.ConfigurationTarget.Global);
-        }
+        await this.saveSemanticSettings(message.settings || {});
         await this.postState();
       } else if (message?.type === "refresh" || message?.type === "ready") await this.postState();
     } catch (error) {
@@ -142,7 +164,7 @@ class SergeantCommandCenterProvider {
   renderCompact(webview) {
     const iconUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "resources", "srg-logo-and-icon.png")));
     const actionButtons = this.options.actions.map((action) => `<button class="action ${action.kind === "primary" ? "primary" : ""}" data-run="${escapeHtml(action.id)}"><span>${escapeHtml(action.label)}</span><small>${escapeHtml(action.description)}</small></button>`).join("");
-    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{--bg:#070912;--panel:#101522;--panel2:#0b0f19;--line:#334155;--text:#f8fafc;--muted:#9ca3af;--blue:#38bdf8;--purple:#a855f7}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--vscode-font-family);font-size:13px}.app{min-height:100vh}.hero{padding:16px 13px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,rgba(56,189,248,.14),rgba(168,85,247,.16))}.brand{display:flex;gap:10px;align-items:center}.brand img{width:44px;height:44px;border-radius:8px}h1{margin:0;font-size:19px}.muted,small{color:var(--muted)}.status{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}.tile,.panel{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px}.tile b{display:block}.tile span{font-size:10px;color:var(--muted);text-transform:uppercase}.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px}.tabs button,.action,.open{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:7px;padding:9px;cursor:pointer}.tabs button.active,.action.primary{border-color:var(--purple);background:rgba(168,85,247,.22)}.page{display:none;padding:0 10px 10px}.page.active{display:block}.panel{margin-bottom:8px}.grid{display:grid;gap:7px}.action{text-align:left;width:100%}.action span{display:block;font-weight:700}.open{width:100%;margin-top:10px;border-color:var(--blue);background:linear-gradient(135deg,rgba(56,189,248,.2),rgba(168,85,247,.28));font-weight:800}</style></head><body><div class="app"><header class="hero"><div class="brand"><img src="${iconUri}" alt="Sergeant"><div><h1>SGT Command Center</h1><div class="muted">Observe. Analyze. Verify.</div></div></div><div class="status"><div class="tile"><b id="statusText">Standing By</b><span>Status</span></div><div class="tile"><b id="lastText">No report</b><span>Last result</span></div></div><button class="open" id="openFull">Open Full Command Center</button></header><nav class="tabs"><button class="active" data-page="dashboard">Dashboard</button><button data-page="orders">Mission Planner</button><button data-page="reports">Evidence Locker</button></nav><section id="dashboard" class="page active"><div class="panel"><b>Review Doctrine</b><p class="muted">Evidence first. Verdict second. Nothing is assumed.</p></div><div class="panel"><b>Quick Missions</b><div class="grid">${actionButtons}</div></div></section><section id="orders" class="page"><div class="panel"><b>Mission Planner</b><p class="muted">Open the full Command Center for briefing, officers, armoury, provider selection and permissions.</p><button class="action primary" data-run="reviewWorkspace"><span>Launch Repository Review</span><small>Run live Sergeant evidence collection</small></button></div></section><section id="reports" class="page"><div class="panel"><b>Evidence Locker</b><p class="muted" id="reportTitle">No runtime report yet.</p><button class="action" id="openLast"><span>Open Last Report</span><small>Show evidence and verdict</small></button></div></section></div><script>const vscode=acquireVsCodeApi();const showPage=id=>{document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>showPage(b.dataset.page));document.querySelectorAll('[data-run]').forEach(b=>b.onclick=()=>vscode.postMessage({type:'run',action:b.dataset.run}));document.getElementById('openFull').onclick=()=>vscode.postMessage({type:'openFull'});document.getElementById('openLast').onclick=()=>vscode.postMessage({type:'openLast'});window.addEventListener('message',event=>{const m=event.data;if(!['state','sergeantState'].includes(m.type))return;const s=m.state||{};document.getElementById('statusText').textContent=s.running?'Running':(s.status||'Standing By');document.getElementById('lastText').textContent=s.last?s.last.summary.verdict:'No report';document.getElementById('reportTitle').textContent=s.last?(s.last.title+': '+s.last.summary.verdict):'No runtime report yet.';});vscode.postMessage({type:'ready'});</script></body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{--bg:#070912;--panel:#101522;--panel2:#0b0f19;--line:#334155;--text:#f8fafc;--muted:#9ca3af;--blue:#38bdf8;--purple:#a855f7}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--vscode-font-family);font-size:13px}.app{min-height:100vh}.hero{padding:16px 13px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,rgba(56,189,248,.14),rgba(168,85,247,.16))}.brand{display:flex;gap:10px;align-items:center}.brand img{width:44px;height:44px;border-radius:8px}h1{margin:0;font-size:19px}.muted,small{color:var(--muted)}.status{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}.tile,.panel{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px}.tile b{display:block}.tile span{font-size:10px;color:var(--muted);text-transform:uppercase}.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px}.tabs button,.action,.open{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:7px;padding:9px;cursor:pointer}.tabs button.active,.action.primary{border-color:var(--purple);background:rgba(168,85,247,.22)}.page{display:none;padding:0 10px 10px}.page.active{display:block}.panel{margin-bottom:8px}.grid{display:grid;gap:7px}.action{text-align:left;width:100%}.action span{display:block;font-weight:700}.open{width:100%;margin-top:10px;border-color:var(--blue);background:linear-gradient(135deg,rgba(56,189,248,.2),rgba(168,85,247,.28));font-weight:800}</style></head><body><div class="app"><header class="hero"><div class="brand"><img src="${iconUri}" alt="Sergeant"><div><h1>SGT Command Center</h1><div class="muted">Observe. Analyze. Verify.</div></div></div><div class="status"><div class="tile"><b id="statusText">Standing By</b><span>Status</span></div><div class="tile"><b id="lastText">No report</b><span>Last result</span></div></div><button class="open" id="openFull">Open Full Command Center</button></header><nav class="tabs"><button class="active" data-page="dashboard">Dashboard</button><button data-page="orders">Mission Planner</button><button data-page="reports">Evidence Locker</button></nav><section id="dashboard" class="page active"><div class="panel"><b>Review Doctrine</b><p class="muted">Evidence first. Verdict second. Nothing is assumed.</p></div><div class="panel"><b>Quick Missions</b><div class="grid">${actionButtons}</div></div></section><section id="orders" class="page"><div class="panel"><b>Mission Planner</b><p class="muted">Open the full Command Center for briefing, officers, armoury, semantic provider selection and permissions.</p><button class="action primary" data-run="reviewWorkspace"><span>Launch Repository Review</span><small>Run deterministic and semantic evidence collection</small></button></div></section><section id="reports" class="page"><div class="panel"><b>Evidence Locker</b><p class="muted" id="reportTitle">No runtime report yet.</p><button class="action" id="openLast"><span>Open Last Report</span><small>Show evidence and verdict</small></button></div></section></div><script>const vscode=acquireVsCodeApi();const showPage=id=>{document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>showPage(b.dataset.page));document.querySelectorAll('[data-run]').forEach(b=>b.onclick=()=>vscode.postMessage({type:'run',action:b.dataset.run}));document.getElementById('openFull').onclick=()=>vscode.postMessage({type:'openFull'});document.getElementById('openLast').onclick=()=>vscode.postMessage({type:'openLast'});window.addEventListener('message',event=>{const m=event.data;if(!['state','sergeantState'].includes(m.type))return;const s=m.state||{};document.getElementById('statusText').textContent=s.running?'Running':(s.status||'Standing By');document.getElementById('lastText').textContent=s.last?s.last.summary.verdict:'No report';document.getElementById('reportTitle').textContent=s.last?(s.last.title+': '+s.last.summary.verdict):'No runtime report yet.';});vscode.postMessage({type:'ready'});</script></body></html>`;
   }
 
   renderFull() {
@@ -160,4 +182,4 @@ class SergeantCommandCenterProvider {
   }
 }
 
-module.exports = { SergeantCommandCenterProvider };
+module.exports = { SergeantCommandCenterProvider, LLM_SETTING_KEYS };
