@@ -109,18 +109,82 @@
         },
         "sergeant.provider": {
           "type": "string",
-          "default": "Local Model",
+          "default": "Automatic Open-Source Review",
           "enum": [
-            "Local Model",
-            "OpenAI-compatible API",
-            "GPT",
-            "Claude",
-            "Gemini",
-            "Copilot / Codex Handoff",
-            "Private/Internal Adapter",
-            "Custom Endpoint"
+            "Automatic Open-Source Review",
+            "Free Claude Code (FCC)",
+            "Ollama",
+            "LM Studio",
+            "OpenAI-compatible Endpoint",
+            "Disabled"
           ],
-          "description": "Provider selected in the Sergeant Command Center. Provider execution remains subject to configured adapters and permissions."
+          "description": "Legacy display preference retained for compatibility. New routing uses the llmProvider setting."
+        },
+        "sergeant.llmPolicy": {
+          "type": "string",
+          "default": "preferred",
+          "enum": [
+            "preferred",
+            "required",
+            "disabled"
+          ],
+          "enumDescriptions": [
+            "Use semantic LLM review by default and fall back to deterministic Sergeant evidence when no route is available.",
+            "Require semantic LLM review before Sergeant can approve.",
+            "Disable semantic LLM review."
+          ],
+          "description": "Semantic-review gate policy."
+        },
+        "sergeant.llmProvider": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "fcc",
+            "ollama",
+            "lm-studio",
+            "openai-compatible",
+            "disabled"
+          ],
+          "enumDescriptions": [
+            "Discover FCC, Ollama, or LM Studio on loopback and prefer the strongest discovered open model.",
+            "Use Free Claude Code at its configured local port.",
+            "Use Ollama's OpenAI-compatible endpoint.",
+            "Use LM Studio's OpenAI-compatible endpoint.",
+            "Use the explicitly configured llmBaseUrl.",
+            "Disable semantic review."
+          ],
+          "description": "Semantic-review provider route."
+        },
+        "sergeant.llmBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Explicit OpenAI-compatible endpoint. Remote endpoints are never auto-discovered; API credentials remain in SERGEANT_LLM_API_KEY."
+        },
+        "sergeant.llmModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional provider model slug. Blank uses Sergeant's open-model preference: GLM-5.2, Qwen3-Coder-Next, Kimi K2.5, then provider fallback."
+        },
+        "sergeant.llmProtocol": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "responses",
+            "chat_completions"
+          ],
+          "description": "Wire protocol. FCC uses OpenAI Responses; most generic providers use Chat Completions."
+        },
+        "sergeant.llmCouncil": {
+          "type": "string",
+          "default": "adaptive",
+          "enum": [
+            "adaptive",
+            "always",
+            "single"
+          ],
+          "description": "Adaptive uses a second discovered open model for high-risk or disputed changes."
         }
       }
     }
