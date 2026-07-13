@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from main_review.app_bridge import handle_app_review_request
 from main_review.cli import main
+from main_review.production_hardening import HardeningError
 from main_review.v2_mission import (
     MISSION_TYPES,
     V2_CONTRACT_VERSION,
@@ -61,7 +61,6 @@ def test_v2_rejects_unknown_mission_type() -> None:
 
 def test_v2_weapon_manifests_declare_required_safety_fields() -> None:
     manifests = default_weapon_manifests()
-
     assert manifests
     assert {manifest["weapon_id"] for manifest in manifests} >= {"repository_scanner", "capability_engine", "evidence_consensus"}
     for manifest in manifests:
@@ -75,7 +74,6 @@ def test_v2_weapon_manifests_declare_required_safety_fields() -> None:
 
 def test_v2_mission_builds_briefing_loadout_confidence_and_audit(tmp_path: Path) -> None:
     _make_repo(tmp_path)
-
     payload = run_v2_mission({
         "root": str(tmp_path),
         "mode": "pull_request",
@@ -103,20 +101,13 @@ def test_v2_mission_builds_briefing_loadout_confidence_and_audit(tmp_path: Path)
 
 def test_v2_security_mission_deploys_medic_and_blocks_network_weapon_by_default(tmp_path: Path) -> None:
     _make_repo(tmp_path)
-
-    payload = run_v2_mission({
-        "root": str(tmp_path),
-        "mission_type": "security_review",
-        "changed_files": ["src/app.py"],
-    })
-
+    payload = run_v2_mission({"root": str(tmp_path), "mission_type": "security_review", "changed_files": ["src/app.py"]})
     assert "medic" in payload["deployment"]["deployed_officers"]
     assert any(item["weapon_id"] == "github_live_reader" for item in payload["armoury"]["unavailable_weapons"])
 
 
 def test_v2_app_bridge_preserves_v1_response_and_adds_optional_v2_packet(tmp_path: Path) -> None:
     _make_repo(tmp_path)
-
     payload = handle_app_review_request({
         "root": str(tmp_path),
         "mode": "pull_request",
@@ -127,6 +118,7 @@ def test_v2_app_bridge_preserves_v1_response_and_adds_optional_v2_packet(tmp_pat
     assert payload["ok"] is True
     assert payload["schema_version"] == "sergeant.review.v1"
     assert payload["request"]["mode"] == "pull_request"
+    assert payload["request"]["execution_permissions"]["read_only"] is True
     assert "markdown" in payload
     assert payload["v2"]["schema_version"] == V2_CONTRACT_VERSION
     assert payload["v2"]["interfaces"]["optional_v2_fields"] is True
@@ -134,28 +126,22 @@ def test_v2_app_bridge_preserves_v1_response_and_adds_optional_v2_packet(tmp_pat
 
 def test_v2_cli_runs(tmp_path: Path) -> None:
     _make_repo(tmp_path)
-
     assert main(["v2-mission", str(tmp_path), "--mission-type", "pull_request_review", "--mode", "pull_request", "--files", "src/app.py,tests/test_app.py"]) == 0
 
 
 def test_v2_cli_rejects_unknown_mission_type(tmp_path: Path) -> None:
     _make_repo(tmp_path)
-
     with pytest.raises(SystemExit) as exc:
         main(["v2-mission", str(tmp_path), "--mission-type", "random_review"])
-
     assert exc.value.code == 2
 
 
-def test_v2_cli_allow_write_clears_read_only(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_v2_cli_refuses_write_and_untrusted_code_escalation(tmp_path: Path) -> None:
     _make_repo(tmp_path)
-
-    assert main(["v2-mission", str(tmp_path), "--allow-write"]) == 0
-
-    payload = json.loads(capsys.readouterr().out)
-    permissions = payload["mission"]["execution_permissions"]
-    assert permissions["allow_write"] is True
-    assert permissions["read_only"] is False
+    with pytest.raises(HardeningError, match="cannot elevate"):
+        main(["v2-mission", str(tmp_path), "--allow-write"])
+    with pytest.raises(HardeningError, match="cannot elevate"):
+        main(["v2-mission", str(tmp_path), "--allow-untrusted-code"])
 
 
 def test_v2_declares_all_core_mission_types() -> None:
