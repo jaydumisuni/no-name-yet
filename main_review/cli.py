@@ -17,8 +17,10 @@ from .final_proof import assert_final_proof, run_final_proof
 from .github_collector import collect_github_comments_file
 from .github_live_fetch import fetch_pr_comments_live
 from .ide_bench import build_ide_bench_contract
+from .llm_provider import LLMSettings, discover_route
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
 from .memory_ingestion import write_learning_candidates_to_memory
+from .pr_reviewer import run_independent_pr_review
 from .proof_suite import assert_end_to_end_proof, run_end_to_end_proof
 from .review_batch import batch_summary, run_review_learning_batch
 from .review_contract import github_comments_to_external_provider, load_review_request_file
@@ -41,9 +43,27 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_parser.add_argument("path", nargs="?", default=".")
     evidence_parser.add_argument("--pretty", action="store_true")
 
-    review_parser = subparsers.add_parser("review", help="Run static evidence collection and produce a verdict.")
+    review_parser = subparsers.add_parser("review", help="Run deterministic static evidence collection and produce a verdict.")
     review_parser.add_argument("path", nargs="?", default=".")
     review_parser.add_argument("--pretty", action="store_true")
+
+    pr_review_parser = subparsers.add_parser(
+        "pr-review",
+        help="Run the full independent Sergeant reviewer, including semantic LLM review when available.",
+    )
+    pr_review_parser.add_argument("path", nargs="?", default=".")
+    pr_review_source = pr_review_parser.add_mutually_exclusive_group()
+    pr_review_source.add_argument("--files")
+    pr_review_source.add_argument("--file-list")
+    pr_review_parser.add_argument("--external-review-file")
+    pr_review_parser.add_argument("--pretty", action="store_true")
+
+    llm_status_parser = subparsers.add_parser(
+        "llm-status",
+        help="Show the semantic-review policy and resolved FCC/OpenAI-compatible/local model route.",
+    )
+    llm_status_parser.add_argument("--require", action="store_true", help="Return a failure code when no model route is available.")
+    llm_status_parser.add_argument("--pretty", action="store_true")
 
     v2_parser = subparsers.add_parser("v2-mission", help="Build the Sergeant V2 mission, briefing, loadout, confidence, and audit packet.")
     v2_parser.add_argument("path", nargs="?", default=".")
@@ -204,6 +224,24 @@ def _changed_from_args(files: str | None, file_list: str | None) -> list[str]:
     return parse_changed_files_text(files or "")
 
 
+def _llm_status_payload() -> dict[str, object]:
+    settings = LLMSettings.from_environment()
+    route = discover_route(settings)
+    return {
+        "enabled": settings.enabled,
+        "policy": settings.policy,
+        "status": "ready" if route is not None else "disabled" if not settings.enabled else "unavailable",
+        "settings": settings.public_dict(),
+        "route": route.public_dict() if route is not None else None,
+        "default_model_policy": ["GLM-5.2", "Qwen3-Coder-Next", "Kimi K2.5", "provider fallback"],
+        "safety": {
+            "automatic_discovery": "loopback endpoints only",
+            "remote_endpoint": "must be explicitly configured",
+            "api_key_output": "never emitted",
+        },
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -217,6 +255,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "review":
         _print_json(review_repository(Path(args.path)), pretty=args.pretty)
         return 0
+    if args.command == "pr-review":
+        _print_json(
+            run_independent_pr_review(
+                Path(args.path),
+                changed_files=_changed_from_args(args.files, args.file_list),
+                external_review_file=Path(args.external_review_file) if args.external_review_file else None,
+            ),
+            pretty=args.pretty,
+        )
+        return 0
+    if args.command == "llm-status":
+        payload = _llm_status_payload()
+        _print_json(payload, pretty=args.pretty)
+        return 2 if args.require and payload["status"] != "ready" else 0
     if args.command == "v2-mission":
         _print_json(run_v2_mission({
             "root": args.path,
