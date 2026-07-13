@@ -57,6 +57,6 @@ def test_pr_review_command_runs_full_reviewer_with_workspace_semantic_scope(tmp_
 
     assert payload["verdict"]["verdict"] in {"APPROVE", "COMMENT", "REQUEST_CHANGES"}
     assert payload["semantic_review"]["status"] == "disabled"
+    assert payload["semantic_review"]["policy"] == "preferred"
     assert payload["semantic_files"]
     assert "src/app.py" in payload["semantic_files"]
-    assert payload["semantic_review"]["policy"] == "disabled"
