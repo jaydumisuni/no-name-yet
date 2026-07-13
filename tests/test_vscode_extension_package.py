@@ -12,6 +12,7 @@ def test_vscode_extension_manifest_installs_sergeant_commands() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     commands = {item["command"] for item in package["contributes"]["commands"]}
     containers = package["contributes"]["viewsContainers"]["activitybar"]
+    properties = package["contributes"]["configuration"]["properties"]
 
     assert "activationEvents" not in package
     assert package["displayName"] == "Sergeant"
@@ -41,7 +42,12 @@ def test_vscode_extension_manifest_installs_sergeant_commands() -> None:
     }:
         assert command in commands
     assert (ROOT / package["icon"]).is_file()
-    assert package["contributes"]["configuration"]["properties"]["sergeant.provider"]["default"] == "Local Model"
+    assert properties["sergeant.provider"]["default"] == "Automatic Open-Source Review"
+    assert properties["sergeant.llmPolicy"]["default"] == "preferred"
+    assert properties["sergeant.llmProvider"]["default"] == "auto"
+    assert properties["sergeant.llmCouncil"]["default"] == "adaptive"
+    assert "fcc" in properties["sergeant.llmProvider"]["enum"]
+    assert "openai-compatible" in properties["sergeant.llmProvider"]["enum"]
 
 
 def test_vscode_runtime_uses_bundled_full_command_center() -> None:
@@ -56,7 +62,12 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
     assert 'path.join(extensionRoot, "sergeant.py")' in extension
     assert "registerWebviewViewProvider" in extension
     assert "SergeantCommandCenterProvider" in extension
+    assert "semanticEnvironment" in extension
+    assert "SERGEANT_LLM_PROVIDER" in extension
+    assert "SERGEANT_LLM_COUNCIL" in extension
     assert "openFullCommandCenter" in provider
+    assert "saveSemanticSettings" in provider
+    assert "LLM_SETTING_KEYS" in provider
     assert "sergeant-command-center-v2.html" in provider
     assert "SERGEANT_HOST_BOOTSTRAP" in provider
     assert "createWebviewPanel" in extension
@@ -66,9 +77,8 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
     assert "Raw Evidence" in results
 
     for action in [
-        '"review"',
+        '"pr-review"',
         '"app-review"',
-        '"changed_files"',
         '"v2-mission"',
         '"proof-suite"',
         '"final-proof"',
@@ -83,18 +93,23 @@ def test_vscode_runtime_uses_bundled_full_command_center() -> None:
         "Mission Planner",
         "Evidence Locker",
         "Officer System / Armoury",
-        "AI / Provider Selector",
+        "Semantic Review Router",
+        "Free Claude Code (FCC)",
+        "GLM-5.2",
+        "Qwen3-Coder-Next",
+        "Kimi K2.5",
         "Pass to Writer",
         "Sergeant V2 Review Doctrine",
         "Post‑V2 Roadmap",
         "◇ What is Sergeant?",
         "Commander → Mission → Officers → Weapon Manifest → Evidence → Verdict → Audit Trail",
-        "Runtime Evidence",
+        "Semantic Evidence",
     ]:
         assert expected in command_center
     assert "sergeantHostSend" in command_center_js
+    assert "saveSemanticSettings" in command_center_js
     assert "window.addEventListener('message'" in command_center_js
-    assert "Commander → Mission → Officers → Weapon Manifest → Evidence → Verification → Commander Verdict → Audit Trail" in command_center_js
+    assert "Deterministic Evidence → Semantic Evidence → Verification" in command_center_js
     assert "grid-template-columns:270px" in command_center_css
     assert "Math.random" not in command_center_js
     assert "sgtTimer" not in command_center_js
@@ -140,6 +155,11 @@ def test_command_center_visible_controls_are_wired() -> None:
         "exportBattleReport",
         "copyVerdict",
         "providerSelect",
+        "llmPolicySelect",
+        "llmModelInput",
+        "llmBaseUrlInput",
+        "llmProtocolSelect",
+        "llmCouncilSelect",
         "workspaceSelect",
         "globalSearch",
         "quickCopy",
