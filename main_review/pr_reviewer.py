@@ -77,11 +77,12 @@ def _decide(
     intelligence_verdict = intelligence.get("verdict")
     cpl_verdict = cpl.get("verdict")
     notes = ["External reviewer comments are optional learning inputs, not required gates."]
-    if cpl.get("status") in {"unavailable", "disabled"} and cpl.get("policy") != "required":
+    if cpl.get("status") in {"unavailable", "disabled", "error"} and cpl.get("policy") != "required":
         notes.append("Cpl reasoning was not available; deterministic Sergeant evidence remained authoritative.")
     if cpl.get("status") == "completed_with_warnings":
         notes.append("Cpl completed with one or more council or officer-support warnings.")
-    if cpl.get("council", {}).get("complete") is False:
+    council_state = cpl.get("council", {})
+    if council_state.get("mode") not in {None, "not_deployed"} and council_state.get("complete") is False:
         notes.append("Cpl preserved unresolved council gaps for Sergeant instead of inventing certainty.")
 
     if actions or consensus_value == "BLOCK" or intelligence_verdict == "BLOCK" or cpl_verdict == "BLOCK":
