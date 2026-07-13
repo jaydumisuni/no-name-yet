@@ -33,9 +33,11 @@ def follow_up_prompt(
     experience: dict[str, Any],
     round_number: int,
 ) -> str:
+    profiles = experience.get("profiles", {}) if isinstance(experience.get("profiles", {}), dict) else {}
     memory = {
         "events": experience.get("events", [])[:8],
         "canonical_lessons": experience.get("canonical_lessons", [])[:6],
+        "relevant_profiles": dict(list(profiles.items())[:16]),
     }
     resolution_contract = {
         "status": "answered | unresolved",
@@ -49,7 +51,7 @@ def follow_up_prompt(
         "Cpl has tabled the officer reports below. Treat them as claims to verify; repository excerpts remain authoritative.",
         json.dumps(table, indent=2, sort_keys=True, default=str)[:28000],
         "\nCpl instruction:\n" + json.dumps(command, indent=2, sort_keys=True, default=str),
-        "\nRelevant verified/rejected experience:\n" + json.dumps(memory, indent=2, sort_keys=True, default=str)[:12000],
+        "\nRelevant verified/rejected experience and service records:\n" + json.dumps(memory, indent=2, sort_keys=True, default=str)[:16000],
         "Return the normal grounded review JSON and add this top-level council_resolution object:",
         json.dumps(resolution_contract, indent=2, sort_keys=True, default=str),
         "Use answered only when current repository evidence directly resolves the tabled issue. "
