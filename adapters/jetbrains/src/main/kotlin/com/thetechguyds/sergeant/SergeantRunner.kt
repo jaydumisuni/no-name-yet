@@ -54,7 +54,7 @@ internal object SergeantRunner {
             val builder = ProcessBuilder(command)
                 .directory(File(root))
                 .redirectErrorStream(true)
-            applySemanticEnvironment(project, builder.environment())
+            applyCplEnvironment(project, builder.environment())
             val process = builder.start()
             val outputFuture = CompletableFuture.supplyAsync {
                 process.inputStream.readBytes().toString(StandardCharsets.UTF_8)
@@ -78,23 +78,23 @@ internal object SergeantRunner {
         }
     }
 
-    private fun applySemanticEnvironment(project: Project, environment: MutableMap<String, String>) {
+    private fun applyCplEnvironment(project: Project, environment: MutableMap<String, String>) {
         val properties = PropertiesComponent.getInstance(project)
         val policy = properties.getValue("sergeant.llm.policy") ?: "preferred"
         val provider = properties.getValue("sergeant.llm.provider") ?: "auto"
         val baseUrl = properties.getValue("sergeant.llm.baseUrl").orEmpty()
         val model = properties.getValue("sergeant.llm.model").orEmpty()
         val protocol = properties.getValue("sergeant.llm.protocol") ?: "auto"
-        val council = properties.getValue("sergeant.llm.council") ?: "adaptive"
+        val depth = properties.getValue("sergeant.llm.council") ?: "adaptive"
         val disabled = policy == "disabled" || provider == "disabled"
 
-        environment["SERGEANT_LLM_ENABLED"] = if (disabled) "false" else "true"
-        environment["SERGEANT_LLM_POLICY"] = policy
-        environment["SERGEANT_LLM_PROVIDER"] = if (provider == "openai-compatible") "configured" else provider
-        environment["SERGEANT_LLM_PROTOCOL"] = protocol
-        environment["SERGEANT_LLM_COUNCIL"] = council
-        if (baseUrl.isNotBlank()) environment["SERGEANT_LLM_BASE_URL"] = baseUrl else environment.remove("SERGEANT_LLM_BASE_URL")
-        if (model.isNotBlank()) environment["SERGEANT_LLM_MODEL"] = model else environment.remove("SERGEANT_LLM_MODEL")
+        environment["SERGEANT_CPL_ENABLED"] = if (disabled) "false" else "true"
+        environment["SERGEANT_CPL_POLICY"] = policy
+        environment["SERGEANT_CPL_PROVIDER"] = if (provider == "openai-compatible") "configured" else provider
+        environment["SERGEANT_CPL_PROTOCOL"] = protocol
+        environment["SERGEANT_CPL_DEPTH"] = depth
+        if (baseUrl.isNotBlank()) environment["SERGEANT_CPL_BASE_URL"] = baseUrl else environment.remove("SERGEANT_CPL_BASE_URL")
+        if (model.isNotBlank()) environment["SERGEANT_CPL_MODEL"] = model else environment.remove("SERGEANT_CPL_MODEL")
     }
 
     fun review(project: Project): Result = run(project, "reviewWorkspace")
