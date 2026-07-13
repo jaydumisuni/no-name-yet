@@ -33,7 +33,7 @@ def test_jetbrains_plugin_bundles_shared_command_center() -> None:
     ).read_text(encoding="utf-8")
 
     assert 'resources.srcDir("../../resources")' in build
-    assert "pluginVersion=0.3.2-preview" in properties
+    assert "pluginVersion=0.4.0-preview" in properties
     assert "complete Command Center" in plugin_xml
     assert "JBCefBrowser" in tool_window
     assert "JBCefJSQuery" in tool_window
@@ -43,9 +43,11 @@ def test_jetbrains_plugin_bundles_shared_command_center() -> None:
     assert "sergeantHostSend" in tool_window
     assert "sergeantState" in tool_window
     assert "saveSettings" in tool_window
+    assert "saveSemanticSettings" in tool_window
     assert "copyLastReport" in tool_window
     assert "exportLastReport" in tool_window
     assert "SergeantFallbackPanel" in tool_window
+    assert 'listOf("pr-review", root, "--pretty")' in runner
 
     for action in [
         "reviewWorkspace",

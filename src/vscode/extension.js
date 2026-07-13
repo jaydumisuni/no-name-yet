@@ -16,6 +16,36 @@ function pythonPath() {
   return vscode.workspace.getConfiguration("sergeant").get("pythonPath") || "python";
 }
 
+function semanticSettings() {
+  const configuration = vscode.workspace.getConfiguration("sergeant");
+  return {
+    policy: configuration.get("llmPolicy") || "preferred",
+    provider: configuration.get("llmProvider") || "auto",
+    baseUrl: configuration.get("llmBaseUrl") || "",
+    model: configuration.get("llmModel") || "",
+    protocol: configuration.get("llmProtocol") || "auto",
+    council: configuration.get("llmCouncil") || "adaptive",
+  };
+}
+
+function semanticEnvironment() {
+  const settings = semanticSettings();
+  const disabled = settings.policy === "disabled" || settings.provider === "disabled";
+  const environment = {
+    ...process.env,
+    SERGEANT_LLM_ENABLED: disabled ? "false" : "true",
+    SERGEANT_LLM_POLICY: settings.policy,
+    SERGEANT_LLM_PROVIDER: settings.provider === "openai-compatible" ? "configured" : settings.provider,
+    SERGEANT_LLM_PROTOCOL: settings.protocol,
+    SERGEANT_LLM_COUNCIL: settings.council,
+  };
+  if (settings.baseUrl) environment.SERGEANT_LLM_BASE_URL = settings.baseUrl;
+  else delete environment.SERGEANT_LLM_BASE_URL;
+  if (settings.model) environment.SERGEANT_LLM_MODEL = settings.model;
+  else delete environment.SERGEANT_LLM_MODEL;
+  return environment;
+}
+
 function workspaceFolder() {
   const folders = vscode.workspace.workspaceFolders || [];
   if (selectedWorkspaceName) {
@@ -98,9 +128,16 @@ function runSergeant(args, title, actionId = "") {
   output.clear();
   output.appendLine(`$ ${pythonPath()} sergeant.py ${args.join(" ")}`);
   output.appendLine("");
+  const settings = semanticSettings();
+  output.appendLine(`Semantic review: ${settings.policy} · ${settings.provider} · ${settings.model || "automatic open model"}`);
+  output.appendLine("");
   commandCenterProvider?.setRunning(actionId, title);
 
-  const child = cp.spawn(pythonPath(), [path.join(extensionRoot, "sergeant.py"), ...args], { cwd: workspaceRoot(), shell: false });
+  const child = cp.spawn(
+    pythonPath(),
+    [path.join(extensionRoot, "sergeant.py"), ...args],
+    { cwd: workspaceRoot(), shell: false, env: semanticEnvironment() },
+  );
   activeRun = { child, title, actionId };
   let stdout = "";
   let stderr = "";
@@ -193,4 +230,4 @@ function deactivate() {
   activeRun = null;
 }
 
-module.exports = { activate, deactivate };
+module.exports = { activate, deactivate, semanticEnvironment, semanticSettings };

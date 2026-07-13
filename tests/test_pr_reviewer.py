@@ -35,7 +35,9 @@ def test_independent_pr_review_approves_verified_repo_without_external_reviewer(
     assert packet["verdict"]["verdict"] == "APPROVE"
     assert packet["standard"]["passed"] is True
     assert packet["challenge"]["trusted"] is True
-    assert "External reviewers are optional" in rendered
+    assert packet["semantic_review"]["status"] == "disabled"
+    assert "External reviewer comments are optional" in rendered
+    assert "Semantic review status: disabled" in rendered
 
 
 def test_independent_pr_review_requests_changes_when_tests_missing(tmp_path: Path) -> None:
@@ -57,7 +59,11 @@ def test_independent_pr_review_can_consume_external_learning_without_needing_it(
         encoding="utf-8",
     )
 
-    packet = run_independent_pr_review(tmp_path, changed_files=["src/app.py", "tests/test_app.py"], external_review_file=comments)
+    packet = run_independent_pr_review(
+        tmp_path,
+        changed_files=["src/app.py", "tests/test_app.py"],
+        external_review_file=comments,
+    )
 
     assert packet["verdict"]["verdict"] == "APPROVE"
     assert packet["external_decisions"]["summary"]["fix"] == 1

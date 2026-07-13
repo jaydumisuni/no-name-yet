@@ -40,12 +40,36 @@ class EvidenceProvider(Protocol):
         ...
 
 
+# The generic assignment pattern is anchored to the actual key/variable at the
+# start of a line. This still catches Python/JS assignments and JSON/YAML/TOML
+# keys, but it does not treat a quoted example such as
+# ``"evidence": "PASSWORD = 'fake-value'"`` as a live credential.
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("private key", re.compile(r"-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
-    ("generic api key assignment", re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"][^'\"]{12,}['\"]")),
+    (
+        "generic api key assignment",
+        re.compile(
+            r"(?i)^\s*(?:(?:export\s+)?(?:const|let|var)\s+)?[\"']?"
+            r"(api[_-]?key|secret|token|password)[\"']?\s*[:=]\s*"
+            r"[\"']([^\"']{12,})[\"']"
+        ),
+    ),
     ("github token", re.compile(r"gh[pousr]_[A-Za-z0-9_]{20,}")),
     ("aws access key", re.compile(r"AKIA[0-9A-Z]{16}")),
 )
+
+SECRET_PLACEHOLDERS = {
+    "changeme",
+    "change-me",
+    "example",
+    "example-key",
+    "fake-secret",
+    "placeholder",
+    "replace-me",
+    "test-secret",
+    "your-api-key",
+    "your_api_key",
+}
 
 TEXT_EXTENSIONS = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".java", ".kt", ".c", ".h", ".cpp", ".hpp",
@@ -67,6 +91,14 @@ def _read_text_files(root: Path, insight: RepositoryInsight) -> list[tuple[str, 
     return texts
 
 
+def _placeholder_secret(match: re.Match[str]) -> bool:
+    if match.lastindex is None or match.lastindex < 2:
+        return False
+    value = match.group(2).strip().lower()
+    normalized = re.sub(r"[^a-z0-9_-]+", "", value)
+    return normalized in SECRET_PLACEHOLDERS or normalized.startswith(("example-", "fake-", "test-", "your-"))
+
+
 class SecretEvidenceProvider:
     name = "secret-scanner"
 
@@ -82,8 +114,21 @@ class SecretEvidenceProvider:
                 continue
             for number, line in enumerate(lines, start=1):
                 for label, pattern in SECRET_PATTERNS:
-                    if pattern.search(line):
-                        findings.append(EvidenceFinding(self.name, "blocker", "security", f"Possible {label} detected.", path=file.path, line=number, evidence="Sensitive-looking value matched a secret pattern.", confidence=0.9))
+                    match = pattern.search(line)
+                    if match is None or (label == "generic api key assignment" and _placeholder_secret(match)):
+                        continue
+                    findings.append(
+                        EvidenceFinding(
+                            self.name,
+                            "blocker",
+                            "security",
+                            f"Possible {label} detected.",
+                            path=file.path,
+                            line=number,
+                            evidence="Sensitive-looking value matched a secret pattern.",
+                            confidence=0.9,
+                        )
+                    )
         return findings
 
 

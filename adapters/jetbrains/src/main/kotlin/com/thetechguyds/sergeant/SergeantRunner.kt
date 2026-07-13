@@ -1,5 +1,6 @@
 package com.thetechguyds.sergeant
 
+import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtilCore
@@ -36,7 +37,7 @@ internal object SergeantRunner {
                 if (args == null) {
                     Result(action, title, 2, "The selected Sergeant mission needs an active file or changed files.")
                 } else {
-                    execute(action, title, root, args)
+                    execute(project, action, title, root, args)
                 }
             }
         } finally {
@@ -44,16 +45,17 @@ internal object SergeantRunner {
         }
     }
 
-    private fun execute(action: String, title: String, root: String, args: List<String>): Result {
+    private fun execute(project: Project, action: String, title: String, root: String, args: List<String>): Result {
         val configured = System.getenv("SERGEANT_CLI")?.trim().orEmpty()
         val executable = if (configured.isNotEmpty()) configured else "sergeant"
         val command = listOf(executable) + args
 
         return try {
-            val process = ProcessBuilder(command)
+            val builder = ProcessBuilder(command)
                 .directory(File(root))
                 .redirectErrorStream(true)
-                .start()
+            applySemanticEnvironment(project, builder.environment())
+            val process = builder.start()
             val outputFuture = CompletableFuture.supplyAsync {
                 process.inputStream.readBytes().toString(StandardCharsets.UTF_8)
             }
@@ -76,16 +78,35 @@ internal object SergeantRunner {
         }
     }
 
+    private fun applySemanticEnvironment(project: Project, environment: MutableMap<String, String>) {
+        val properties = PropertiesComponent.getInstance(project)
+        val policy = properties.getValue("sergeant.llm.policy") ?: "preferred"
+        val provider = properties.getValue("sergeant.llm.provider") ?: "auto"
+        val baseUrl = properties.getValue("sergeant.llm.baseUrl").orEmpty()
+        val model = properties.getValue("sergeant.llm.model").orEmpty()
+        val protocol = properties.getValue("sergeant.llm.protocol") ?: "auto"
+        val council = properties.getValue("sergeant.llm.council") ?: "adaptive"
+        val disabled = policy == "disabled" || provider == "disabled"
+
+        environment["SERGEANT_LLM_ENABLED"] = if (disabled) "false" else "true"
+        environment["SERGEANT_LLM_POLICY"] = policy
+        environment["SERGEANT_LLM_PROVIDER"] = if (provider == "openai-compatible") "configured" else provider
+        environment["SERGEANT_LLM_PROTOCOL"] = protocol
+        environment["SERGEANT_LLM_COUNCIL"] = council
+        if (baseUrl.isNotBlank()) environment["SERGEANT_LLM_BASE_URL"] = baseUrl else environment.remove("SERGEANT_LLM_BASE_URL")
+        if (model.isNotBlank()) environment["SERGEANT_LLM_MODEL"] = model else environment.remove("SERGEANT_LLM_MODEL")
+    }
+
     fun review(project: Project): Result = run(project, "reviewWorkspace")
 
     private fun argumentsFor(project: Project, action: String, root: String): List<String>? = when (action) {
-        "reviewWorkspace" -> listOf("review", root, "--pretty")
+        "reviewWorkspace" -> listOf("pr-review", root, "--pretty")
         "appReviewWorkspace" -> listOf("app-review", root, "--pretty")
         "reviewCurrentFile" -> activeFile(project, root)?.let {
-            listOf("app-review", root, "--mode", "changed_files", "--files", it, "--pretty")
+            listOf("pr-review", root, "--files", it, "--pretty")
         }
         "reviewChangedFiles" -> changedFiles(root)?.let {
-            listOf("app-review", root, "--mode", "changed_files", "--files", it, "--pretty")
+            listOf("pr-review", root, "--files", it, "--pretty")
         }
         "v2Mission" -> listOf("v2-mission", root, "--mission-type", "release_gate_review", "--pretty")
         "proofSuite" -> listOf("proof-suite", root, "--pretty")

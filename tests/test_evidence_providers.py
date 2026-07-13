@@ -38,6 +38,43 @@ def test_evidence_detects_secret_and_high_risk_path(tmp_path: Path) -> None:
     assert any(finding["provider"] == "risk-path-checker" for finding in findings)  # type: ignore[index]
 
 
+def test_secret_scanner_does_not_treat_quoted_review_evidence_as_live_assignment(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('safe')\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_review.py").write_text(
+        'finding = {"evidence": "PASSWORD = \'production-secret\'"}\n',
+        encoding="utf-8",
+    )
+
+    findings = collect_evidence(tmp_path)["findings"]  # type: ignore[index]
+
+    assert not [finding for finding in findings if finding["provider"] == "secret-scanner"]  # type: ignore[index]
+
+
+def test_secret_scanner_ignores_explicit_placeholder_but_detects_real_json_key(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "example.json").write_text('{"api_key": "your-api-key"}\n', encoding="utf-8")
+    (tmp_path / "config" / "live.json").write_text(
+        '{\n  "api_key": "1234567890abcdef"\n}\n',
+        encoding="utf-8",
+    )
+
+    findings = collect_evidence(tmp_path)["findings"]  # type: ignore[index]
+    secret_paths = {
+        finding["path"]
+        for finding in findings
+        if finding["provider"] == "secret-scanner"  # type: ignore[index]
+    }
+
+    assert "config/live.json" in secret_paths
+    assert "config/example.json" not in secret_paths
+
+
 def test_clean_small_repository_has_no_major_findings(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
     (tmp_path / "src").mkdir()

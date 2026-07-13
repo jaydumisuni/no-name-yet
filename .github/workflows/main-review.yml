@@ -11,33 +11,100 @@ permissions:
 jobs:
   main-review:
     runs-on: ubuntu-latest
+    env:
+      # Semantic review remains off in public CI unless the repository owner
+      # explicitly configures a route. Product/IDE default is preferred mode.
+      SERGEANT_LLM_ENABLED: ${{ vars.SERGEANT_LLM_ENABLED || 'false' }}
+      SERGEANT_LLM_POLICY: ${{ vars.SERGEANT_LLM_POLICY || 'preferred' }}
+      SERGEANT_LLM_PROVIDER: ${{ vars.SERGEANT_LLM_PROVIDER || 'auto' }}
+      SERGEANT_LLM_BASE_URL: ${{ vars.SERGEANT_LLM_BASE_URL }}
+      SERGEANT_LLM_MODEL: ${{ vars.SERGEANT_LLM_MODEL }}
+      SERGEANT_LLM_PROTOCOL: ${{ vars.SERGEANT_LLM_PROTOCOL || 'auto' }}
+      SERGEANT_LLM_COUNCIL: ${{ vars.SERGEANT_LLM_COUNCIL || 'adaptive' }}
+      SERGEANT_LLM_API_KEY: ${{ secrets.SERGEANT_LLM_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install Main Review
         run: |
           python -m pip install --upgrade pip pytest
           python -m pip install -e .
+
       - name: Build changed file list
         run: |
           git fetch origin ${{ github.base_ref }} --depth=1
           git diff --name-only origin/${{ github.base_ref }}...HEAD > changed-files.txt
+
       - name: Run independent Main Review
         run: |
           python - <<'PY'
           from pathlib import Path
           from main_review.github_bot import write_github_review_payload
+
           files = Path('changed-files.txt').read_text(encoding='utf-8').splitlines()
           write_github_review_payload('main-review-result.json', '.', changed_files=files)
           PY
+
+      - name: Publish Sergeant verdict summary
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          path = Path('main-review-result.json')
+          if not path.exists():
+              print('## Sergeant Main Review\n\nNo review payload was produced.')
+              raise SystemExit(0)
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          packet = payload.get('packet', {})
+          verdict = packet.get('verdict', {})
+          semantic = packet.get('semantic_review', {})
+          route = semantic.get('route') or {}
+          print('## Sergeant Main Review')
+          print()
+          print(f"- Action: **{payload.get('action', 'UNKNOWN')}**")
+          print(f"- Consensus: **{packet.get('consensus', {}).get('consensus', 'UNKNOWN')}**")
+          print(f"- Required actions: **{len(verdict.get('required_actions', []))}**")
+          print(f"- Semantic status: **{semantic.get('status', 'unknown')}**")
+          print(f"- Semantic model: **{route.get('model', 'unavailable')}**")
+          print(f"- Semantic verdict: **{semantic.get('verdict', 'unknown')}**")
+          PY
+
+      - name: Enforce actual Sergeant verdict
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('main-review-result.json').read_text(encoding='utf-8'))
+          action = payload.get('action')
+          packet = payload.get('packet', {})
+          required = packet.get('verdict', {}).get('required_actions', [])
+          consensus = packet.get('consensus', {}).get('consensus')
+          if action != 'APPROVE' or required or consensus != 'PASS':
+              print(payload.get('body', 'Sergeant did not approve this change.'))
+              raise SystemExit(
+                  f"Sergeant gate failed: action={action}, consensus={consensus}, required_actions={len(required)}"
+              )
+          print('Sergeant gate passed: APPROVE / PASS / no required actions.')
+          PY
+
       - name: Upload Main Review result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: main-review-result
           path: main-review-result.json
+          if-no-files-found: error
