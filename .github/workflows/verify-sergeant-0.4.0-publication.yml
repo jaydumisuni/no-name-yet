@@ -1,0 +1,172 @@
+name: Verify Sergeant 0.4.0 Publication
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-sergeant-0.4.0-publication.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  github-release:
+    name: GitHub release and assets 0.4.0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for complete published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            echo "GitHub release asset check $attempt/40"
+            if gh api repos/jaydumisuni/Sergeant/releases/tags/v0.4.0 > release.json 2>/dev/null; then
+              ASSETS=$(python - <<'PY'
+          import json
+          data=json.load(open('release.json'))
+          assert data['tag_name']=='v0.4.0'
+          assert data['draft'] is False
+          assert data['prerelease'] is False
+          print('\n'.join(asset['name'] for asset in data.get('assets', [])))
+          PY
+              )
+              printf '%s\n' "$ASSETS"
+              missing=0
+              grep -Fx 'sergeant-reviewer-0.4.0.vsix' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Fx 'sergeant-reviewer-0.4.0.vsix.sha256' <<<"$ASSETS" >/dev/null || missing=1
+              grep -E '^sergeant_reviewer-0\.4\.0-.*\.whl$' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Fx 'sergeant_reviewer-0.4.0.tar.gz' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Fx 'SHA256SUMS-PYPI.txt' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Ei '^sergeant.*0\.4\.0-preview.*\.zip$' <<<"$ASSETS" >/dev/null || missing=1
+              grep -Ei '^sergeant.*0\.4\.0-preview.*\.zip\.sha256$' <<<"$ASSETS" >/dev/null || missing=1
+              if [ "$missing" -eq 0 ]; then
+                echo 'GITHUB_RELEASE_0_4_0_ASSETS_OK'
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo 'Complete GitHub release assets were not visible before timeout.'
+          exit 1
+
+  pypi:
+    name: PyPI 0.4.0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for wheel and source distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            echo "PyPI check $attempt/40"
+            if curl -fsSL https://pypi.org/pypi/sergeant-reviewer/json -o pypi.json; then
+              if python - <<'PY'
+          import json
+          data=json.load(open('pypi.json'))
+          files=data.get('releases',{}).get('0.4.0',[])
+          names={item['filename'] for item in files}
+          assert any(name.endswith('.whl') for name in names), names
+          assert any(name.endswith('.tar.gz') for name in names), names
+          print('PYPI_0_4_0_OK', sorted(names))
+          PY
+              then exit 0; fi
+            fi
+            sleep 15
+          done
+          exit 1
+
+  visual-studio-marketplace:
+    name: Visual Studio Marketplace 0.4.0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for extension version
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > query.json <<'JSON'
+          {"filters":[{"criteria":[{"filterType":7,"value":"thetechguyds.sergeant-reviewer"}]}],"flags":914}
+          JSON
+          for attempt in $(seq 1 40); do
+            echo "Visual Studio Marketplace check $attempt/40"
+            if curl -fsSL -X POST \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json;api-version=7.2-preview.1' \
+              --data @query.json \
+              https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
+              -o marketplace.json; then
+              if python - <<'PY'
+          import json
+          data=json.load(open('marketplace.json'))
+          extensions=[item for result in data.get('results',[]) for item in result.get('extensions',[])]
+          assert extensions, data
+          versions=[item.get('version') for item in extensions[0].get('versions',[])]
+          assert '0.4.0' in versions, versions[:20]
+          print('VSMARKET_0_4_0_OK', versions[:10])
+          PY
+              then exit 0; fi
+            fi
+            sleep 15
+          done
+          exit 1
+
+  open-vsx:
+    name: Open VSX 0.4.0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for extension version
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            echo "Open VSX check $attempt/40"
+            if curl -fsSL https://open-vsx.org/api/thetechguyds/sergeant-reviewer -o openvsx.json; then
+              if python - <<'PY'
+          import json
+          data=json.load(open('openvsx.json'))
+          versions=data.get('allVersions',{})
+          assert data.get('version')=='0.4.0' or '0.4.0' in versions, (data.get('version'), sorted(versions))
+          print('OPENVSX_0_4_0_OK', data.get('version'))
+          PY
+              then exit 0; fi
+            fi
+            sleep 15
+          done
+          exit 1
+
+  jetbrains:
+    name: JetBrains 0.4.0 preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.0.0"
+      - name: Publish or confirm preview version
+        shell: bash
+        env:
+          JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: |
+          test -n "$JETBRAINS_MARKETPLACE_TOKEN" || { echo 'JETBRAINS_MARKETPLACE_TOKEN is missing'; exit 1; }
+          set +e
+          OUTPUT=$(gradle -p adapters/jetbrains publishPlugin --stacktrace 2>&1)
+          STATUS=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+          if [ "$STATUS" -eq 0 ]; then
+            echo 'JETBRAINS_0_4_0_UPLOAD_ACCEPTED'
+            exit 0
+          fi
+          printf '%s' "$OUTPUT" | grep -Fqi 'already contains version 0.4.0-preview in channel preview' && {
+            echo 'JETBRAINS_0_4_0_ALREADY_PRESENT'
+            exit 0
+          }
+          exit "$STATUS"
