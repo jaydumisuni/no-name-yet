@@ -20,17 +20,31 @@ def test_select_model_prefers_open_source_deep_coding_route() -> None:
     assert select_model(models, "provider/qwen3-coder-next") == "provider/qwen3-coder-next"
 
 
-def test_settings_are_enabled_by_default_but_do_not_expose_api_key(monkeypatch) -> None:
-    monkeypatch.setenv("SERGEANT_LLM_API_KEY", "secret-value")
-    monkeypatch.delenv("SERGEANT_LLM_ENABLED", raising=False)
-    monkeypatch.delenv("SERGEANT_LLM_POLICY", raising=False)
+def test_cpl_settings_are_enabled_by_default_but_do_not_expose_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("SERGEANT_CPL_API_KEY", "secret-value")
+    monkeypatch.delenv("SERGEANT_CPL_ENABLED", raising=False)
+    monkeypatch.delenv("SERGEANT_CPL_POLICY", raising=False)
 
     settings = LLMSettings.from_environment()
 
     assert settings.enabled is True
     assert settings.policy == "preferred"
+    assert settings.public_dict()["officer"] == "Cpl"
+    assert settings.public_dict()["role"] == "Corporal Specialist"
     assert "api_key" not in settings.public_dict()
     assert "secret-value" not in str(settings.public_dict())
+
+
+def test_cpl_environment_takes_precedence_over_legacy_llm_environment(monkeypatch) -> None:
+    monkeypatch.setenv("SERGEANT_LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("SERGEANT_CPL_PROVIDER", "cpl")
+    monkeypatch.setenv("SERGEANT_LLM_MODEL", "legacy-model")
+    monkeypatch.setenv("SERGEANT_CPL_MODEL", "cpl-model")
+
+    settings = LLMSettings.from_environment()
+
+    assert settings.provider == "cpl"
+    assert settings.model == "cpl-model"
 
 
 def test_discover_route_uses_explicit_openai_compatible_endpoint(monkeypatch) -> None:
@@ -65,11 +79,11 @@ def test_discover_route_uses_explicit_openai_compatible_endpoint(monkeypatch) ->
     )
 
 
-def test_discover_route_uses_responses_protocol_for_fcc(monkeypatch) -> None:
+def test_discover_route_uses_responses_protocol_for_cpl(monkeypatch) -> None:
     settings = LLMSettings(
         enabled=True,
         policy="preferred",
-        provider="fcc",
+        provider="cpl",
         base_url="",
         model="",
         protocol="auto",
@@ -85,6 +99,16 @@ def test_discover_route_uses_responses_protocol_for_fcc(monkeypatch) -> None:
     route = discover_route(settings)
 
     assert route is not None
-    assert route.provider == "fcc"
+    assert route.provider == "cpl"
     assert route.protocol == "responses"
     assert route.model == "gateway/qwen3-coder-next"
+    assert route.public_dict()["officer"] == "Cpl"
+
+
+def test_legacy_gateway_provider_name_is_normalized_to_cpl(monkeypatch) -> None:
+    monkeypatch.setenv("SERGEANT_LLM_PROVIDER", "fcc")
+    monkeypatch.delenv("SERGEANT_CPL_PROVIDER", raising=False)
+
+    settings = LLMSettings.from_environment()
+
+    assert settings.provider == "cpl"
