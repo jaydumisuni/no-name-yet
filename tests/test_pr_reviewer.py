@@ -61,7 +61,7 @@ def test_not_deployed_cpl_does_not_claim_unresolved_council_gaps() -> None:
     )
 
     assert verdict.verdict == "APPROVE"
-    assert "Cpl reasoning was not available" in verdict.notes
+    assert any("Cpl reasoning was not available" in note for note in verdict.notes)
     assert not any("unresolved council gaps" in note for note in verdict.notes)
 
 
