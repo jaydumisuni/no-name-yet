@@ -218,6 +218,10 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
     if actions:
         lines.extend(["", "## Required actions"])
         lines.extend(f"- {action}" for action in actions)
+    notes = verdict.get("notes", [])
+    if notes:
+        lines.extend(["", "## Review notes"])
+        lines.extend(f"- {note}" for note in notes)
     lines.extend(["", "## Evidence summary"])
     lines.append(f"- Repository verdict: {packet.get('repository_review', {}).get('verdict')}")
     lines.append(f"- Diff verdict: {packet.get('diff_review', {}).get('verdict')}")
@@ -261,6 +265,6 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
             lines.append(f"  - Safer alternative: {finding.get('safer_alternative')}")
     lines.extend(["", "## Rule"])
     lines.append(
-        "Sergeant is the reviewer. Deterministic evidence remains authoritative; provider-routed LLMs are independent, evidence-validated review sources."
+        "Sergeant is the reviewer. Main Review is the reviewer core. Deterministic evidence remains authoritative; provider-routed LLMs are independent, evidence-validated review sources. External reviewer comments are optional learning inputs, not required gates."
     )
     return "\n".join(lines) + "\n"
