@@ -10,6 +10,8 @@ from .cpl_council import (
     agreement,
     assess,
     available_models,
+    finding_key,
+    finding_reference,
     gap_signature,
     instruction,
     max_members,
@@ -29,6 +31,8 @@ from .llm_review import (
     run_cpl_review as run_cpl_review_once,
 )
 
+ALLOWED_RESOLUTION_DISPOSITIONS = {"confirmed", "rejected", "narrowed", "not_applicable", "unresolved"}
+
 
 def _annotate_base(result: dict[str, Any]) -> None:
     plan = {str(item.get("specialist")): item for item in result.get("reasoning_plan", []) if isinstance(item, dict)}
@@ -37,6 +41,13 @@ def _annotate_base(result: dict[str, Any]) -> None:
         report.setdefault("council_round", 1)
         report.setdefault("council_member_role", "core_member")
         report.setdefault("supported_officer", plan.get(specialist, {}).get("officer") or ("Cpl" if specialist == "generalist" else None))
+
+
+def _bounded_route(route: LLMRoute, member_limit: int) -> LLMRoute:
+    models = available_models(route)[:member_limit]
+    if route.model not in models:
+        models.insert(0, route.model)
+    return replace(route, discovered_models=tuple(models[:member_limit]))
 
 
 def _choose_model(models: list[str], used: set[str], fallback: str, member_limit: int) -> tuple[str, str]:
@@ -60,14 +71,77 @@ def _resolved(passes: list[dict[str, Any]]) -> set[tuple[str, str, str]]:
     }
 
 
+def _normalize_resolution(payload: dict[str, Any], command: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+    raw = payload.get("council_resolution")
+    raw = raw if isinstance(raw, dict) else {}
+    status = str(raw.get("status") or "unresolved").strip().lower()
+    disposition = str(raw.get("disposition") or "unresolved").strip().lower()
+    if disposition not in ALLOWED_RESOLUTION_DISPOSITIONS:
+        disposition = "unresolved"
+    answer = str(raw.get("answer") or "").strip()
+    target = command.get("target_finding")
+
+    answered = status == "answered" and disposition != "unresolved" and bool(answer) and not report.get("unanswered_questions")
+    if target and disposition not in {"confirmed", "rejected", "narrowed"}:
+        answered = False
+    if not target and disposition not in {"confirmed", "rejected", "narrowed", "not_applicable"}:
+        answered = False
+
+    return {
+        "status": "answered" if answered else "unresolved",
+        "disposition": disposition if answered else "unresolved",
+        "answer": answer,
+        "target_finding": target,
+        "gap_signature": command.get("gap_signature", []),
+    }
+
+
+def _effective_passes(passes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rejected: set[tuple[object, ...]] = set()
+    for report in passes:
+        resolution = report.get("council_resolution")
+        if not isinstance(resolution, dict) or resolution.get("status") != "answered":
+            continue
+        if resolution.get("disposition") not in {"rejected", "narrowed"}:
+            continue
+        target = resolution.get("target_finding")
+        if isinstance(target, dict):
+            rejected.add(finding_key(target))
+
+    effective: list[dict[str, Any]] = []
+    for report in passes:
+        clone = dict(report)
+        clone["findings"] = [finding for finding in report.get("findings", []) if finding_key(finding) not in rejected]
+        effective.append(clone)
+    return effective
+
+
+def _annotate_confirmations(findings: list[dict[str, Any]], passes: list[dict[str, Any]]) -> None:
+    by_key = {finding_key(finding): finding for finding in findings}
+    for report in passes:
+        resolution = report.get("council_resolution")
+        if not isinstance(resolution, dict) or resolution.get("status") != "answered" or resolution.get("disposition") != "confirmed":
+            continue
+        target = resolution.get("target_finding")
+        if not isinstance(target, dict):
+            continue
+        finding = by_key.get(finding_key(target))
+        if finding is None:
+            continue
+        confirmations = finding.setdefault("council_confirmed_by", [])
+        model = report.get("model")
+        if model and model not in confirmations:
+            confirmations.append(model)
+
+
 def _recurrence_gaps(passes: list[dict[str, Any]], experience: dict[str, Any]) -> list[dict[str, Any]]:
     findings, _, _ = _merge_passes(passes)
     resolved = _resolved(passes)
     gaps: list[dict[str, Any]] = []
     for recurrence in detect_recurrences(findings, experience):
+        matching = next((item for item in findings if item.get("message") == recurrence.get("current_finding")), {})
         specialist = specialist_for_text(recurrence.get("current_finding"))
         if specialist == "correctness":
-            matching = next((item for item in findings if item.get("message") == recurrence.get("current_finding")), {})
             specialist = CATEGORY_SPECIALIST.get(str(matching.get("category") or "other"), "correctness")
         gap = {
             "type": "recurrence",
@@ -78,6 +152,7 @@ def _recurrence_gaps(passes: list[dict[str, Any]], experience: dict[str, Any]) -
                 f"{recurrence.get('current_finding')}. Determine why prior prevention did not stop it."
             ),
             "recurrence": recurrence,
+            "target_finding": finding_reference(matching) if matching else None,
         }
         if gap_signature(gap) not in resolved:
             gaps.append(gap)
@@ -85,7 +160,8 @@ def _recurrence_gaps(passes: list[dict[str, Any]], experience: dict[str, Any]) -
 
 
 def _all_gaps(passes: list[dict[str, Any]], plan: list[dict[str, Any]], errors: list[str], models: list[str], experience: dict[str, Any]) -> list[dict[str, Any]]:
-    return [*_recurrence_gaps(passes, experience), *assess(passes, plan, errors, len(models))]
+    effective = _effective_passes(passes)
+    return [*_recurrence_gaps(effective, experience), *assess(effective, plan, errors, len(models))]
 
 
 def run_cpl_review(
@@ -109,7 +185,9 @@ def run_cpl_review(
             "anti_repeat_rule": experience.get("anti_repeat_rule"),
         },
     }
-    resolved_route = route or (discover_route(settings) if settings.enabled else None)
+    discovered_route = route or (discover_route(settings) if settings.enabled else None)
+    member_limit = max_members()
+    resolved_route = _bounded_route(discovered_route, member_limit) if discovered_route is not None else None
     result = run_cpl_review_once(root_path, changed_files, enriched_context, settings=settings, route=resolved_route)
     result["experience"] = experience
     result["memory_checked"] = True
@@ -127,7 +205,6 @@ def run_cpl_review(
     used = {str(item.get("model")) for item in passes if item.get("model")}
     rounds: list[dict[str, Any]] = []
     recruitment: list[dict[str, Any]] = []
-    previous_signature: tuple[tuple[str, str, str], ...] | None = None
     files, excerpts = collect_changed_file_excerpts(root_path, changed_files)
     base_prompt = _build_user_prompt(changed_files, excerpts, enriched_context)
 
@@ -135,15 +212,11 @@ def run_cpl_review(
         gaps_before = _all_gaps(passes, plan, errors, models, experience)
         if not gaps_before:
             break
-        signature = tuple(gap_signature(item) for item in gaps_before)
-        if signature == previous_signature:
-            break
-        previous_signature = signature
         gap = gaps_before[0]
         specialist = str(gap.get("specialist") or "correctness")
         assignment = SPECIALISTS.get(specialist, SPECIALISTS["correctness"])
         command = instruction(gap, round_number)
-        selected_model, admission = _choose_model(models, used, resolved_route.model, max_members())
+        selected_model, admission = _choose_model(models, used, resolved_route.model, member_limit)
         selected_route = replace(resolved_route, model=selected_model)
         recruited = {
             "round": round_number,
@@ -163,15 +236,16 @@ def run_cpl_review(
                 user_prompt=follow_up_prompt(base_prompt, table, command, experience, round_number),
             )
             officer_report = _validate_pass(payload, files, route=selected_route, assignment=assignment)
-            answered = not officer_report.get("unanswered_questions")
+            resolution = _normalize_resolution(payload, command, officer_report)
             officer_report.update({
                 "council_round": round_number,
                 "council_member_role": "recruited_gap_specialist",
                 "supported_officer": assignment.officer,
                 "instruction_received": command,
                 "admission": admission,
-                "resolved_gap_signature": command.get("gap_signature", []),
-                "resolution_status": "answered" if answered else "unresolved",
+                "council_resolution": resolution,
+                "resolved_gap_signature": resolution.get("gap_signature", []),
+                "resolution_status": resolution.get("status"),
             })
             passes.append(officer_report)
             used.add(selected_model)
@@ -187,7 +261,9 @@ def run_cpl_review(
             "gaps_after": _all_gaps(passes, plan, errors, models, experience),
         })
 
-    findings, verdict, confidence = _merge_passes(passes)
+    effective_passes = _effective_passes(passes)
+    findings, verdict, confidence = _merge_passes(effective_passes)
+    _annotate_confirmations(findings, passes)
     final_gaps = _all_gaps(passes, plan, errors, models, experience)
     unique_models = {str(item.get("model")) for item in passes if item.get("model")}
     independence = round(len(unique_models) / max(1, len(passes)), 3)
@@ -196,6 +272,11 @@ def run_cpl_review(
     if len(passes) > 1 and len(unique_models) == 1:
         confidence = max(0.0, confidence - 0.12)
 
+    unresolved_questions = sorted({
+        str(gap.get("reason"))
+        for gap in final_gaps
+        if gap.get("type") == "unanswered_question" and str(gap.get("reason", "")).strip()
+    })
     result.update({
         "status": "completed" if not errors else "completed_with_warnings",
         "verdict": verdict,
@@ -203,10 +284,10 @@ def run_cpl_review(
         "summary": " ".join(item.get("summary", "") for item in passes if item.get("summary")).strip(),
         "findings": findings,
         "passes": passes,
-        "coverage": _coverage(passes, result.get("coverage", {})),
-        "unanswered_questions": sorted({question for item in passes for question in item.get("unanswered_questions", [])}),
+        "coverage": _coverage(effective_passes, result.get("coverage", {})),
+        "unanswered_questions": unresolved_questions,
         "errors": errors,
-        "reason": "Cpl retrieved verified experience, tabled officer reports, recruited council support for named gaps, and returned grounded evidence to Sergeant.",
+        "reason": "Cpl retrieved verified experience, tabled officer reports, recruited council support for named gaps, explicitly adjudicated earlier findings, and returned grounded evidence to Sergeant.",
     })
     result["recurrences"] = detect_recurrences(findings, experience)
     result["council"] = {
@@ -217,7 +298,7 @@ def run_cpl_review(
         "max_rounds": max_rounds(),
         "members": member_records(passes),
         "member_count": len(unique_models),
-        "max_members": max_members(),
+        "max_members": member_limit,
         "recruitment": recruitment,
         "agreement": agreement(passes),
         "model_independence": independence,
@@ -226,6 +307,7 @@ def run_cpl_review(
         "complete": not final_gaps,
         "limitations": ["Only one model served multiple role-separated passes."] if len(unique_models) == 1 and len(passes) > 1 else [],
         "officer_instructions": [command for item in rounds for command in item.get("instructions", [])],
+        "effective_findings": findings,
     }
     return result
 
