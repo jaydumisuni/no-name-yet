@@ -8,7 +8,6 @@ to Sergeant's deterministic consensus layer.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from dataclasses import asdict, dataclass, replace
@@ -64,16 +63,19 @@ SPECIALISTS: dict[str, CplAssignment] = {
 }
 
 SECURITY_TERMS = (
-    "auth", "permission", "secret", "token", "password", "payment", "billing",
-    "webhook", "crypto", "exec", "shell", "subprocess", "injection", "cors",
+    "auth", "authentication", "authorization", "permission", "secret", "token",
+    "password", "payment", "billing", "webhook", "crypto", "exec", "shell",
+    "subprocess", "injection", "cors", "security", "src/auth", "src/security",
 )
 ARCHITECTURE_TERMS = (
-    "deploy", "workflow", "database", "migration", "schema", "adapter", "provider",
-    "router", "bridge", "service", "controller", "repository", "package.json", "pyproject",
+    "deploy", "deployment", "workflow", ".github/workflows/", "database", "migration",
+    "schema", "adapter", "provider", "router", "bridge", "service", "controller",
+    "package.json", "pyproject.toml", "build.gradle", "dockerfile",
 )
 TEST_CONTRACT_TERMS = (
-    "test", "spec", "api", "contract", "workflow", "readme", "docs/", "manifest",
-    "package.json", "pyproject", "gradle", "release",
+    "test", "tests/", "spec", "api_contract", "contract", ".github/workflows/",
+    "readme", "docs/", "manifest", "package.json", "pyproject.toml", "gradle",
+    "release", "proof",
 )
 PERFORMANCE_TERMS = (
     "async", "await", "thread", "lock", "queue", "cache", "retry", "timeout",
@@ -83,6 +85,20 @@ CORRECTNESS_TERMS = (
     ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".kt",
     ".c", ".cpp", ".cs", ".php", ".rb", ".swift",
 )
+
+# Only evidence-bearing fields are allowed to influence adaptive deployment.
+# Generic metadata such as a capability named "security_taint" being available
+# must not silently deploy the Security Specialist on every mission.
+EVIDENCE_KEYS = {
+    "findings",
+    "ranked_findings",
+    "repository_findings",
+    "diff_findings",
+    "blockers",
+    "required_actions",
+    "unanswered_questions",
+    "errors",
+}
 
 
 def _env(primary: str, legacy: str, default: str) -> str:
@@ -121,12 +137,34 @@ def cpl_max_passes() -> int:
     return min(8, max(1, value))
 
 
+def _evidence_strings(value: object, *, inside_evidence: bool = False) -> list[str]:
+    strings: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            strings.extend(_evidence_strings(item, inside_evidence=inside_evidence or key in EVIDENCE_KEYS))
+    elif isinstance(value, list):
+        for item in value:
+            strings.extend(_evidence_strings(item, inside_evidence=inside_evidence))
+    elif inside_evidence and value is not None:
+        strings.append(str(value))
+    return strings
+
+
 def _context_text(changed_files: list[str], deterministic_context: dict[str, Any]) -> str:
-    return ("\n".join(changed_files) + "\n" + json.dumps(deterministic_context, default=str)).lower()
+    evidence = _evidence_strings(deterministic_context)
+    return ("\n".join(changed_files) + "\n" + "\n".join(evidence)).lower()
 
 
 def _contains(text: str, terms: tuple[str, ...]) -> bool:
-    return any(term in text for term in terms)
+    for term in terms:
+        normalized = term.lower()
+        if any(not char.isalnum() and char != "_" for char in normalized):
+            if normalized in text:
+                return True
+            continue
+        if re.search(rf"(?<![a-z0-9_]){re.escape(normalized)}(?![a-z0-9_])", text):
+            return True
+    return False
 
 
 def plan_cpl_assignments(
@@ -152,6 +190,8 @@ def plan_cpl_assignments(
         if name not in selected:
             selected.append(name)
 
+    # Priority is risk first, then system shape, contracts, correctness, and
+    # expensive runtime behavior. The pass budget truncates this exact order.
     if _contains(text, SECURITY_TERMS):
         add("security")
     if len(changed_files) >= 4 or _contains(text, ARCHITECTURE_TERMS):
