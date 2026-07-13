@@ -1,8 +1,9 @@
-"""Evidence-grounded LLM review for Sergeant.
+"""Evidence-grounded Cpl reasoning for Sergeant.
 
-The semantic layer is additive: deterministic evidence remains authoritative and
-an LLM may only contribute findings that can be tied back to supplied repository
-text.  Unsupported or out-of-scope findings are rejected before consensus.
+Cpl is Sergeant's native Corporal Specialist. The officer is provider-agnostic:
+it decomposes review missions into specialist passes, rotates available models,
+and contributes only findings tied back to supplied repository text.
+Deterministic Sergeant evidence remains authoritative.
 """
 
 from __future__ import annotations
@@ -10,46 +11,43 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from .cpl_reasoning import (
+    CplAssignment,
+    cpl_depth,
+    plan_cpl_assignments,
+    route_for_assignment,
+    specialist_system_prompt,
+)
 from .llm_provider import (
     LLMProviderError,
     LLMRoute,
     LLMSettings,
-    PREFERRED_MODEL_NEEDLES,
     discover_route,
     invoke_json,
 )
 
 ALLOWED_VERDICTS = {"PASS", "NEEDS WORK", "BLOCK"}
 ALLOWED_SEVERITIES = {"blocker", "major", "minor", "note"}
-HIGH_RISK_PATH_PARTS = (
-    ".github/",
-    "scripts/",
-    "deploy/",
-    "auth",
-    "security",
-    "payment",
-    "billing",
-    "database",
-    "migration",
-    "permissions",
-    "secrets",
-)
 
-SYSTEM_PROMPT = """You are Sergeant's independent semantic code reviewer.
+SYSTEM_PROMPT = """You are Cpl, Sergeant's Corporal Specialist reasoning officer.
+
+Command relationship:
+- Sergeant Main Review is the reviewer core and final engineering authority.
+- You are Cpl, the provider-agnostic reasoning specialist serving Sergeant.
+- A model is only one engine available to Cpl. Never present the model or gateway as the product identity.
 
 Rules:
 1. Review only the supplied changed-file excerpts and deterministic evidence.
 2. Never invent files, lines, behavior, tests, or runtime results.
-3. Every blocker or major finding must name a supplied path, a line range, and
-   exact evidence grounded in that range.
-4. Distinguish a demonstrated defect from a question or missing proof.
-5. Treat deterministic tests and runtime evidence as stronger than speculation.
-6. Stay read-only. Do not propose automatic merge or direct repository writes.
-7. Return JSON only. Do not wrap it in Markdown.
+3. Every blocker or major finding must name a supplied path, a line range, and exact evidence grounded in that range.
+4. Distinguish a demonstrated defect from a question, uncertainty, or missing proof.
+5. Treat deterministic tests, runtime evidence, explicit contracts, and verified repository facts as stronger than speculation.
+6. Look for interactions and second-order effects, not only isolated syntax.
+7. Stay read-only. Do not propose automatic merge or direct repository writes.
+8. Return JSON only. Do not wrap it in Markdown.
 
 Return this shape:
 {
@@ -78,9 +76,16 @@ Return this shape:
 """
 
 
-def _int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
+def _env(primary: str, legacy: str, default: str) -> str:
+    value = os.getenv(primary)
+    if value is not None:
+        return value
+    return os.getenv(legacy, default)
+
+
+def _int_env_pair(primary: str, legacy: str, default: int, *, minimum: int, maximum: int) -> int:
     try:
-        value = int(os.getenv(name, str(default)))
+        value = int(_env(primary, legacy, str(default)))
     except ValueError:
         return default
     return min(maximum, max(minimum, value))
@@ -124,11 +129,19 @@ def collect_changed_file_excerpts(
     """Return raw text and numbered excerpts for safe changed files."""
 
     root_path = Path(root)
-    total_limit = max_total_chars or _int_env(
-        "SERGEANT_LLM_MAX_INPUT_CHARS", 120_000, minimum=8_000, maximum=1_000_000
+    total_limit = max_total_chars or _int_env_pair(
+        "SERGEANT_CPL_MAX_INPUT_CHARS",
+        "SERGEANT_LLM_MAX_INPUT_CHARS",
+        120_000,
+        minimum=8_000,
+        maximum=1_000_000,
     )
-    file_limit = max_file_chars or _int_env(
-        "SERGEANT_LLM_MAX_FILE_CHARS", 18_000, minimum=2_000, maximum=200_000
+    file_limit = max_file_chars or _int_env_pair(
+        "SERGEANT_CPL_MAX_FILE_CHARS",
+        "SERGEANT_LLM_MAX_FILE_CHARS",
+        18_000,
+        minimum=2_000,
+        maximum=200_000,
     )
     raw: dict[str, str] = {}
     excerpts: dict[str, str] = {}
@@ -242,8 +255,6 @@ def _normalize_finding(raw: object, files: dict[str, str]) -> dict[str, Any] | N
     line_text = _line_range(files[path], line_start, line_end)
     supported = _evidence_supported(evidence, line_text, files[path])
     if not supported:
-        # Unsupported major/blocker claims are discarded rather than allowed to
-        # influence the merge verdict. Unsupported minor claims become notes.
         if severity in {"blocker", "major"}:
             return None
         severity = "note"
@@ -267,6 +278,7 @@ def _validate_pass(
     files: dict[str, str],
     *,
     route: LLMRoute,
+    assignment: CplAssignment | None = None,
 ) -> dict[str, Any]:
     raw_verdict = str(payload.get("verdict", "PASS")).strip().upper()
     if raw_verdict not in ALLOWED_VERDICTS:
@@ -299,12 +311,17 @@ def _validate_pass(
     areas = coverage.get("areas", [])
     if not isinstance(areas, list):
         areas = []
-
     questions = payload.get("unanswered_questions", [])
     if not isinstance(questions, list):
         questions = []
 
+    specialist = assignment.specialist if assignment is not None else "generalist"
+    title = assignment.title if assignment is not None else "General Reasoning Specialist"
     return {
+        "officer": "Cpl",
+        "role": "Corporal Specialist",
+        "specialist": specialist,
+        "specialist_title": title,
         "model": route.model,
         "provider": route.provider,
         "protocol": route.protocol,
@@ -319,28 +336,6 @@ def _validate_pass(
             "areas": [str(item) for item in areas if str(item).strip()],
         },
     }
-
-
-def _high_risk(changed_files: list[str], deterministic_context: dict[str, Any], primary: dict[str, Any]) -> bool:
-    if primary.get("verdict") != "PASS":
-        return True
-    if len(changed_files) >= 8:
-        return True
-    if any(part in path.lower() for path in changed_files for part in HIGH_RISK_PATH_PARTS):
-        return True
-    text = json.dumps(deterministic_context, default=str).lower()
-    return '"verdict": "block"' in text or '"verdict": "needs work"' in text or '"passed": false' in text
-
-
-def _select_challenger(route: LLMRoute) -> str:
-    configured = os.getenv("SERGEANT_LLM_CHALLENGER_MODEL", "").strip()
-    if configured and configured != route.model:
-        return configured
-    for needle in PREFERRED_MODEL_NEEDLES:
-        for model in route.discovered_models:
-            if model != route.model and needle in model.lower():
-                return model
-    return ""
 
 
 def _finding_key(finding: dict[str, Any]) -> tuple[object, ...]:
@@ -359,11 +354,18 @@ def _merge_passes(passes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], s
         for finding in item.get("findings", []):
             key = _finding_key(finding)
             if key not in merged:
-                merged[key] = {**finding, "supporting_models": [item.get("model")]}
+                merged[key] = {
+                    **finding,
+                    "supporting_models": [item.get("model")],
+                    "supporting_specialists": [item.get("specialist")],
+                }
             else:
                 models = merged[key].setdefault("supporting_models", [])
                 if item.get("model") not in models:
                     models.append(item.get("model"))
+                specialists = merged[key].setdefault("supporting_specialists", [])
+                if item.get("specialist") not in specialists:
+                    specialists.append(item.get("specialist"))
     findings = list(merged.values())
     if any(item.get("severity") == "blocker" for item in findings):
         verdict = "BLOCK"
@@ -377,7 +379,7 @@ def _merge_passes(passes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], s
     return findings, verdict, round(confidence, 3)
 
 
-def run_llm_review(
+def run_cpl_review(
     root: str | Path,
     changed_files: list[str],
     deterministic_context: dict[str, Any],
@@ -385,30 +387,39 @@ def run_llm_review(
     settings: LLMSettings | None = None,
     route: LLMRoute | None = None,
 ) -> dict[str, Any]:
-    """Run Sergeant's provider-routed semantic review council."""
+    """Run Cpl's provider-routed adaptive specialist review."""
 
     settings = settings or LLMSettings.from_environment()
+    identity = {"officer": "Cpl", "role": "Corporal Specialist"}
     if not settings.enabled:
         return {
+            **identity,
             "enabled": False,
             "status": "disabled",
             "policy": settings.policy,
+            "depth": cpl_depth(),
             "verdict": "PASS",
             "confidence": 0.0,
             "findings": [],
-            "reason": "Semantic review is disabled by configuration.",
+            "passes": [],
+            "reasoning_plan": [],
+            "reason": "Cpl reasoning is disabled by configuration.",
         }
 
     route = route or discover_route(settings)
     if route is None:
         return {
+            **identity,
             "enabled": True,
             "status": "unavailable",
             "policy": settings.policy,
+            "depth": cpl_depth(),
             "verdict": "NEEDS WORK" if settings.policy == "required" else "PASS",
             "confidence": 0.0,
             "findings": [],
-            "reason": "No configured or local FCC/OpenAI-compatible/Ollama/LM Studio model endpoint was available.",
+            "passes": [],
+            "reasoning_plan": [],
+            "reason": "No configured Cpl, OpenAI-compatible, Ollama, or LM Studio model endpoint was available.",
             "settings": settings.public_dict(),
         }
 
@@ -424,35 +435,41 @@ def run_llm_review(
     except LLMProviderError as error:
         errors.append(str(error))
         return {
+            **identity,
             "enabled": True,
             "status": "error",
             "policy": settings.policy,
+            "depth": cpl_depth(),
             "route": route.public_dict(),
             "verdict": "NEEDS WORK" if settings.policy == "required" else "PASS",
             "confidence": 0.0,
             "findings": [],
-            "reason": "The semantic reviewer could not complete its primary pass.",
+            "passes": [],
+            "reasoning_plan": [],
+            "reason": "Cpl could not complete its primary reasoning pass.",
             "errors": errors,
         }
 
-    council_mode = os.getenv("SERGEANT_LLM_COUNCIL", "adaptive").strip().lower()
-    challenger_model = _select_challenger(route)
-    should_challenge = council_mode == "always" or (
-        council_mode not in {"single", "off", "disabled"}
-        and challenger_model
-        and _high_risk(changed_files, deterministic_context, primary)
+    assignments = plan_cpl_assignments(
+        changed_files,
+        deterministic_context,
+        primary_verdict=primary.get("verdict", "PASS"),
     )
-    if should_challenge and challenger_model:
-        challenger_route = replace(route, model=challenger_model)
+    used_models = {route.model}
+    completed_plan: list[dict[str, object]] = []
+    for assignment in assignments:
+        specialist_route = route_for_assignment(route, assignment, used_models=used_models)
+        completed_plan.append({**assignment.to_dict(), "model": specialist_route.model})
         try:
-            challenger_payload = invoke_json(
-                challenger_route,
-                system_prompt=SYSTEM_PROMPT,
+            payload = invoke_json(
+                specialist_route,
+                system_prompt=specialist_system_prompt(SYSTEM_PROMPT, assignment),
                 user_prompt=user_prompt,
             )
-            passes.append(_validate_pass(challenger_payload, files, route=challenger_route))
+            passes.append(_validate_pass(payload, files, route=specialist_route, assignment=assignment))
+            used_models.add(specialist_route.model)
         except LLMProviderError as error:
-            errors.append(str(error))
+            errors.append(f"{assignment.specialist}: {error}")
 
     findings, verdict, confidence = _merge_passes(passes)
     reviewed_files = sorted({path for item in passes for path in item.get("coverage", {}).get("files_reviewed", [])})
@@ -460,15 +477,18 @@ def run_llm_review(
     questions = sorted({question for item in passes for question in item.get("unanswered_questions", [])})
 
     return {
+        **identity,
         "enabled": True,
         "status": "completed" if not errors else "completed_with_warnings",
         "policy": settings.policy,
+        "depth": cpl_depth(),
         "route": route.public_dict(),
         "verdict": verdict,
         "confidence": confidence,
         "summary": " ".join(item.get("summary", "") for item in passes if item.get("summary")).strip(),
         "findings": findings,
         "passes": passes,
+        "reasoning_plan": completed_plan,
         "coverage": {
             "declared_changed_files": list(dict.fromkeys(changed_files)),
             "readable_files_supplied": sorted(files),
@@ -477,5 +497,24 @@ def run_llm_review(
         },
         "unanswered_questions": questions,
         "errors": errors,
-        "reason": "Semantic findings were validated against supplied repository text before entering consensus.",
+        "reason": "Cpl specialist findings were validated against supplied repository text before entering Sergeant consensus.",
     }
+
+
+def run_llm_review(
+    root: str | Path,
+    changed_files: list[str],
+    deterministic_context: dict[str, Any],
+    *,
+    settings: LLMSettings | None = None,
+    route: LLMRoute | None = None,
+) -> dict[str, Any]:
+    """Compatibility alias for integrations using Sergeant 0.4.0 naming."""
+
+    return run_cpl_review(
+        root,
+        changed_files,
+        deterministic_context,
+        settings=settings,
+        route=route,
+    )
