@@ -282,7 +282,7 @@ private class SergeantFallbackPanel(private val project: Project) : JPanel(Borde
         isEditable = false
         lineWrap = false
         font = Font(Font.MONOSPACED, Font.PLAIN, 12)
-        text = "Sergeant 0.3.2-preview\n\nJCEF is unavailable. Native fallback is ready to run deterministic and semantic review for ${project.name}."
+        text = "Sergeant 0.4.0-preview\n\nJCEF is unavailable. Native fallback is ready to run deterministic and semantic review for ${project.name}."
     }
     private val runButton = JButton("Review Project")
 
