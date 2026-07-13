@@ -18,18 +18,25 @@ def _profile(experience: dict[str, Any], model: str) -> dict[str, Any]:
 
 
 def model_score(model: str, experience: dict[str, Any], specialist: str | None = None) -> float:
-    """Score a model from verified outcomes without pretending unknown means bad."""
+    """Score a model conservatively from verified outcomes.
+
+    A neutral prior prevents one successful mission from creating instant trust.
+    Repeated verified outcomes move the score gradually; rejected outcomes pull it
+    down, and domain evidence adds only a small scoped bonus.
+    """
 
     profile = _profile(experience, model)
     if not profile:
         return 0.5
-    reliability = float(profile.get("observed_reliability", 0.5))
-    missions = int(profile.get("missions_recorded", 0) or 0)
+    verified = int(profile.get("verified_outcomes", 0) or 0)
+    rejected = int(profile.get("rejected_outcomes", 0) or 0)
+    missions = max(int(profile.get("missions_recorded", 0) or 0), verified + rejected)
+    posterior_reliability = (verified + 2.0) / (verified + rejected + 4.0)
     categories = {str(item) for item in profile.get("categories", [])}
     required = SPECIALIST_CATEGORIES.get(str(specialist or ""), set())
-    category_bonus = 0.12 if required and categories & required else 0.0
-    evidence_bonus = min(0.08, missions * 0.01)
-    return round(min(1.0, reliability * 0.8 + 0.1 + category_bonus + evidence_bonus), 4)
+    category_bonus = 0.08 if required and categories & required else 0.0
+    evidence_bonus = min(0.06, missions * 0.01)
+    return round(min(1.0, posterior_reliability * 0.78 + 0.11 + category_bonus + evidence_bonus), 4)
 
 
 def rank_models(models: Iterable[str], experience: dict[str, Any], specialist: str | None = None) -> list[str]:
