@@ -1,9 +1,13 @@
-"""Cpl reasoning doctrine and specialist mission planning.
+"""Cpl reasoning doctrine and officer-support mission planning.
 
 Cpl is Sergeant's native Corporal Specialist. It is not a model name or a thin
-provider proxy. Cpl decomposes a review mission, assigns evidence-focused
-specialist passes, chooses available models, and returns the validated evidence
-to Sergeant's deterministic consensus layer.
+provider proxy. Cpl decomposes a review mission, assigns evidence-focused model
+bots to permanent officers, chooses available engines, and returns validated
+evidence to Sergeant's deterministic consensus layer.
+
+Permanent officers keep their doctrine and authority. Cpl amplifies them with
+shared field intelligence and mission-specific reasoning support; it does not
+replace them.
 """
 
 from __future__ import annotations
@@ -21,6 +25,8 @@ CplDepth = Literal["adaptive", "deep", "maximum", "single"]
 @dataclass(frozen=True)
 class CplAssignment:
     specialist: str
+    officer: str
+    officer_role: str
     title: str
     mission: str
     focus: tuple[str, ...]
@@ -32,32 +38,42 @@ class CplAssignment:
 SPECIALISTS: dict[str, CplAssignment] = {
     "correctness": CplAssignment(
         "correctness",
-        "Correctness Specialist",
-        "Trace control flow, boundary conditions, state transitions, error handling, and behavior changes.",
+        "Engineer",
+        "Technical Construction",
+        "Correctness Support Bot",
+        "Help Engineer trace control flow, boundary conditions, state transitions, error handling, and behavior changes.",
         ("logic", "boundaries", "state", "errors", "regressions"),
     ),
     "security": CplAssignment(
         "security",
-        "Security Specialist",
-        "Trace trust boundaries, authentication, authorization, secrets, injection paths, and unsafe execution.",
+        "Medic",
+        "Security, Diagnosis, and Safe Remediation",
+        "Security Support Bot",
+        "Help Medic trace trust boundaries, authentication, authorization, secrets, injection paths, unsafe execution, and repair risk.",
         ("trust boundaries", "auth", "permissions", "secrets", "injection"),
     ),
     "architecture": CplAssignment(
         "architecture",
-        "Architecture Specialist",
-        "Review contracts between modules, coupling, lifecycle, deployment effects, data ownership, and blast radius.",
+        "Engineer",
+        "Technical Construction",
+        "Architecture Support Bot",
+        "Help Engineer review contracts between modules, coupling, lifecycle, deployment effects, data ownership, and blast radius.",
         ("contracts", "coupling", "lifecycle", "deployment", "data flow"),
     ),
     "tests_contracts": CplAssignment(
         "tests_contracts",
-        "Tests and Contracts Specialist",
-        "Check whether tests, API contracts, workflow proof, documentation, and failure cases cover the changed behavior.",
+        "Engineer",
+        "Technical Construction",
+        "Tests and Contracts Support Bot",
+        "Help Engineer check whether tests, API contracts, workflow proof, documentation, and failure cases cover the changed behavior.",
         ("tests", "API contracts", "workflow proof", "docs", "failure cases"),
     ),
     "performance_concurrency": CplAssignment(
         "performance_concurrency",
-        "Performance and Concurrency Specialist",
-        "Inspect resource lifetime, asynchronous behavior, locking, retries, caching, scaling, and expensive paths.",
+        "Mechanic",
+        "Runtime Behavior",
+        "Performance and Concurrency Support Bot",
+        "Help Mechanic inspect resource lifetime, asynchronous behavior, locking, retries, caching, scaling, and expensive paths.",
         ("async", "locking", "retries", "caching", "resource lifetime"),
     ),
 }
@@ -88,7 +104,7 @@ CORRECTNESS_TERMS = (
 
 # Only evidence-bearing fields are allowed to influence adaptive deployment.
 # Generic metadata such as a capability named "security_taint" being available
-# must not silently deploy the Security Specialist on every mission.
+# must not silently deploy the Medic security support bot on every mission.
 EVIDENCE_KEYS = {
     "findings",
     "ranked_findings",
@@ -173,10 +189,10 @@ def plan_cpl_assignments(
     *,
     primary_verdict: str = "PASS",
 ) -> list[CplAssignment]:
-    """Plan additional specialist passes after Cpl's general review.
+    """Plan permanent-officer support bots after Cpl's general field pass.
 
     The plan is deterministic and auditable. Model output cannot choose which
-    specialist gets deployed or silently expand the files in scope.
+    officer receives support or silently expand the files in scope.
     """
 
     depth = cpl_depth()
@@ -226,7 +242,7 @@ def model_for_assignment(
     *,
     used_models: set[str],
 ) -> str:
-    """Choose an explicit specialist model or rotate through preferred models."""
+    """Choose an explicit officer-support model or rotate preferred models."""
 
     primary_env, legacy_env = _model_env_name(assignment.specialist)
     configured = _env(primary_env, legacy_env, "").strip()
@@ -258,10 +274,15 @@ def specialist_system_prompt(base_prompt: str, assignment: CplAssignment) -> str
     focus = ", ".join(assignment.focus)
     return (
         f"{base_prompt}\n\n"
-        "CPL SPECIALIST ASSIGNMENT\n"
-        "Officer: Cpl — Corporal Specialist\n"
-        f"Specialty: {assignment.title}\n"
+        "CPL SPECIALIST ASSIGNMENT — OFFICER SUPPORT\n"
+        "Commanding officer: Cpl — Corporal Specialist\n"
+        f"Supported permanent officer: {assignment.officer}\n"
+        f"Officer doctrine: {assignment.officer_role}\n"
+        f"Support unit: {assignment.title}\n"
         f"Mission: {assignment.mission}\n"
         f"Focus: {focus}.\n"
-        "Do not repeat generic observations merely to fill the report. Return only findings that this specialty can prove from the supplied evidence."
+        "You are a replaceable model-powered support bot attached to the named permanent officer. "
+        "Cpl owns orchestration; the permanent officer owns the specialty, evidence obligations, and officer report. "
+        "Do not impersonate Cpl or replace the permanent officer. Do not repeat generic observations merely to fill the report. "
+        "Return only findings this support assignment can prove from the supplied evidence."
     )
