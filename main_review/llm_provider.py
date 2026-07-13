@@ -1,12 +1,13 @@
-"""Provider routing for Sergeant's optional semantic review layer.
+"""Provider routing beneath Sergeant's Cpl reasoning officer.
 
-The router deliberately speaks stable HTTP protocols instead of importing a
-specific proxy implementation.  It can therefore use Free Claude Code (FCC),
-any explicit OpenAI-compatible endpoint, Ollama, or LM Studio without making
-those projects runtime dependencies of Sergeant.
+Cpl is Sergeant's native Corporal Specialist.  It owns provider-independent
+reasoning policy while this module supplies stable HTTP transports.  Cpl can use
+a local Cpl gateway, Ollama, LM Studio, or an explicitly configured
+OpenAI-compatible service without importing provider-specific SDKs.
 
-Automatic discovery probes loopback endpoints only.  Remote code transmission
-requires an explicit ``SERGEANT_LLM_BASE_URL`` configuration.
+Automatic discovery probes loopback endpoints only. Remote code transmission
+requires an explicit ``SERGEANT_CPL_BASE_URL`` (or legacy
+``SERGEANT_LLM_BASE_URL``) configuration.
 """
 
 from __future__ import annotations
@@ -22,12 +23,12 @@ from typing import Any, Literal
 LLMProtocol = Literal["responses", "chat_completions"]
 LLMPolicy = Literal["preferred", "required", "disabled"]
 
-DEFAULT_FCC_BASE_URL = "http://127.0.0.1:8082/v1"
+DEFAULT_CPL_BASE_URL = "http://127.0.0.1:8082/v1"
 DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1"
 DEFAULT_LM_STUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
 
-# Order matters.  Sergeant first prefers the strongest deep coding route, then
-# efficient coding-specialist and multimodal agentic routes.
+# Order matters. Cpl first prefers strong deep coding routes, then efficient
+# coding-specialist and agentic routes. Owners may always pin another model.
 PREFERRED_MODEL_NEEDLES = (
     "glm-5.2",
     "qwen3-coder-next",
@@ -39,7 +40,7 @@ PREFERRED_MODEL_NEEDLES = (
 
 
 class LLMProviderError(RuntimeError):
-    """Raised when a configured model endpoint cannot satisfy a request."""
+    """Raised when a configured Cpl model endpoint cannot satisfy a request."""
 
 
 @dataclass(frozen=True)
@@ -56,27 +57,42 @@ class LLMSettings:
 
     @classmethod
     def from_environment(cls) -> "LLMSettings":
-        policy_raw = os.getenv("SERGEANT_LLM_POLICY", "preferred").strip().lower()
+        policy_raw = _env("SERGEANT_CPL_POLICY", "SERGEANT_LLM_POLICY", "preferred").strip().lower()
         policy: LLMPolicy = (
             policy_raw if policy_raw in {"preferred", "required", "disabled"} else "preferred"
         )  # type: ignore[assignment]
-        enabled_raw = os.getenv("SERGEANT_LLM_ENABLED", "auto").strip().lower()
+        enabled_raw = _env("SERGEANT_CPL_ENABLED", "SERGEANT_LLM_ENABLED", "auto").strip().lower()
         enabled = policy != "disabled" and enabled_raw not in {"0", "false", "no", "off", "disabled"}
+        provider = _normalize_provider(_env("SERGEANT_CPL_PROVIDER", "SERGEANT_LLM_PROVIDER", "auto"))
         return cls(
             enabled=enabled,
             policy=policy,
-            provider=os.getenv("SERGEANT_LLM_PROVIDER", "auto").strip() or "auto",
-            base_url=os.getenv("SERGEANT_LLM_BASE_URL", "").strip(),
-            model=os.getenv("SERGEANT_LLM_MODEL", "").strip(),
-            protocol=os.getenv("SERGEANT_LLM_PROTOCOL", "auto").strip().lower() or "auto",
-            api_key=os.getenv("SERGEANT_LLM_API_KEY", "").strip(),
-            timeout_seconds=_float_env("SERGEANT_LLM_TIMEOUT_SECONDS", 90.0, minimum=1.0, maximum=900.0),
-            max_output_tokens=_int_env("SERGEANT_LLM_MAX_OUTPUT_TOKENS", 5000, minimum=256, maximum=32000),
+            provider=provider,
+            base_url=_env("SERGEANT_CPL_BASE_URL", "SERGEANT_LLM_BASE_URL", "").strip(),
+            model=_env("SERGEANT_CPL_MODEL", "SERGEANT_LLM_MODEL", "").strip(),
+            protocol=_env("SERGEANT_CPL_PROTOCOL", "SERGEANT_LLM_PROTOCOL", "auto").strip().lower() or "auto",
+            api_key=_env("SERGEANT_CPL_API_KEY", "SERGEANT_LLM_API_KEY", "").strip(),
+            timeout_seconds=_float_env_pair(
+                "SERGEANT_CPL_TIMEOUT_SECONDS",
+                "SERGEANT_LLM_TIMEOUT_SECONDS",
+                90.0,
+                minimum=1.0,
+                maximum=900.0,
+            ),
+            max_output_tokens=_int_env_pair(
+                "SERGEANT_CPL_MAX_OUTPUT_TOKENS",
+                "SERGEANT_LLM_MAX_OUTPUT_TOKENS",
+                5000,
+                minimum=256,
+                maximum=32000,
+            ),
         )
 
     def public_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload.pop("api_key", None)
+        payload["officer"] = "Cpl"
+        payload["role"] = "Corporal Specialist"
         return payload
 
 
@@ -93,6 +109,8 @@ class LLMRoute:
 
     def public_dict(self) -> dict[str, object]:
         return {
+            "officer": "Cpl",
+            "role": "Corporal Specialist",
             "provider": self.provider,
             "base_url": self.base_url,
             "model": self.model,
@@ -103,17 +121,50 @@ class LLMRoute:
         }
 
 
-def _float_env(name: str, default: float, *, minimum: float, maximum: float) -> float:
+def _env(primary: str, legacy: str, default: str) -> str:
+    value = os.getenv(primary)
+    if value is not None:
+        return value
+    return os.getenv(legacy, default)
+
+
+def _normalize_provider(value: str) -> str:
+    provider = value.strip().lower() or "auto"
+    # 0.4.0 briefly exposed the upstream gateway nickname. Preserve it only as
+    # an input compatibility alias; Sergeant reports and UI always call the
+    # native reasoning officer Cpl.
+    if provider == "fcc":
+        return "cpl"
+    if provider == "openai-compatible":
+        return "configured"
+    return provider
+
+
+def _float_env_pair(
+    primary: str,
+    legacy: str,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
     try:
-        value = float(os.getenv(name, str(default)))
+        value = float(_env(primary, legacy, str(default)))
     except ValueError:
         return default
     return min(maximum, max(minimum, value))
 
 
-def _int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
+def _int_env_pair(
+    primary: str,
+    legacy: str,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
     try:
-        value = int(os.getenv(name, str(default)))
+        value = int(_env(primary, legacy, str(default)))
     except ValueError:
         return default
     return min(maximum, max(minimum, value))
@@ -130,7 +181,7 @@ def _request_headers(api_key: str) -> dict[str, str]:
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "sergeant-reviewer/llm-router",
+        "User-Agent": "sergeant-reviewer/cpl-router",
     }
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -143,16 +194,16 @@ def _load_json_response(request: urllib.request.Request, timeout: float) -> dict
             body = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")[:1000]
-        raise LLMProviderError(f"LLM endpoint returned HTTP {error.code}: {detail}") from error
+        raise LLMProviderError(f"Cpl model endpoint returned HTTP {error.code}: {detail}") from error
     except (urllib.error.URLError, TimeoutError, socket.timeout, OSError) as error:
-        raise LLMProviderError(f"LLM endpoint is unavailable: {error}") from error
+        raise LLMProviderError(f"Cpl model endpoint is unavailable: {error}") from error
 
     try:
         payload = json.loads(body)
     except json.JSONDecodeError as error:
-        raise LLMProviderError("LLM endpoint returned a non-JSON response.") from error
+        raise LLMProviderError("Cpl model endpoint returned a non-JSON response.") from error
     if not isinstance(payload, dict):
-        raise LLMProviderError("LLM endpoint returned an unexpected JSON shape.")
+        raise LLMProviderError("Cpl model endpoint returned an unexpected JSON shape.")
     return payload
 
 
@@ -193,7 +244,7 @@ def _protocol_for(provider: str, base_url: str, configured: str) -> LLMProtocol:
     if configured in {"chat", "chat_completions", "openai_chat"}:
         return "chat_completions"
     normalized = f"{provider} {base_url}".lower()
-    return "responses" if "fcc" in normalized or ":8082" in normalized else "chat_completions"
+    return "responses" if "cpl" in normalized or ":8082" in normalized else "chat_completions"
 
 
 def discover_route(settings: LLMSettings | None = None) -> LLMRoute | None:
@@ -205,9 +256,9 @@ def discover_route(settings: LLMSettings | None = None) -> LLMRoute | None:
     if explicit_base:
         candidates = [(settings.provider if settings.provider != "auto" else "configured", explicit_base)]
     else:
-        provider = settings.provider.lower()
+        provider = _normalize_provider(settings.provider)
         local_candidates = [
-            ("fcc", DEFAULT_FCC_BASE_URL),
+            ("cpl", DEFAULT_CPL_BASE_URL),
             ("ollama", DEFAULT_OLLAMA_BASE_URL),
             ("lm-studio", DEFAULT_LM_STUDIO_BASE_URL),
         ]
@@ -221,8 +272,8 @@ def discover_route(settings: LLMSettings | None = None) -> LLMRoute | None:
                 timeout_seconds=min(settings.timeout_seconds, 4.0),
             )
         except LLMProviderError:
-            # An explicitly configured endpoint may hide model listing while still
-            # accepting requests.  A configured model is enough to try it.
+            # Explicit endpoints may hide model listing while still accepting
+            # requests. A configured model is enough for Cpl to attempt it.
             if explicit_base and settings.model:
                 models = ()
             else:
@@ -274,7 +325,7 @@ def _extract_text(payload: dict[str, Any], protocol: LLMProtocol) -> str:
                         parts.append(part["text"])
         if parts:
             return "\n".join(parts)
-    raise LLMProviderError("LLM response did not contain text output.")
+    raise LLMProviderError("Cpl model response did not contain text output.")
 
 
 def _parse_json_text(text: str) -> dict[str, Any]:
@@ -292,13 +343,13 @@ def _parse_json_text(text: str) -> dict[str, Any]:
         start = candidate.find("{")
         end = candidate.rfind("}")
         if start < 0 or end <= start:
-            raise LLMProviderError("LLM output did not contain a JSON object.")
+            raise LLMProviderError("Cpl model output did not contain a JSON object.")
         try:
             payload = json.loads(candidate[start : end + 1])
         except json.JSONDecodeError as error:
-            raise LLMProviderError("LLM output contained invalid JSON.") from error
+            raise LLMProviderError("Cpl model output contained invalid JSON.") from error
     if not isinstance(payload, dict):
-        raise LLMProviderError("LLM output JSON must be an object.")
+        raise LLMProviderError("Cpl model output JSON must be an object.")
     return payload
 
 
@@ -353,3 +404,10 @@ def invoke_json(route: LLMRoute, *, system_prompt: str, user_prompt: str) -> dic
         except LLMProviderError:
             raise first_error
     return _parse_json_text(_extract_text(response, route.protocol))
+
+
+# Public Cpl aliases allow new code to use the officer identity while preserving
+# the 0.4.0 Python API for integrations that imported LLM* names.
+CplProviderError = LLMProviderError
+CplSettings = LLMSettings
+CplRoute = LLMRoute
