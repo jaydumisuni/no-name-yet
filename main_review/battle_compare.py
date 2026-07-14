@@ -1,8 +1,9 @@
 """Run Sergeant against live battle fixtures and score expected findings.
 
-This live comparison layer fetches validated GitHub PR patches/comments,
-materializes them only inside a temporary sandbox, runs Sergeant's static review
-engine, and compares structured output against fixture expectations.
+This live comparison layer fetches validated GitHub PR patch evidence,
+materializes it only inside a temporary sandbox, runs Sergeant's static review
+engine, and compares structured output against fixture expectations. Existing
+review comments are excluded by default so the run remains blind.
 """
 from __future__ import annotations
 
@@ -218,6 +219,7 @@ def run_battle_comparison(
     match_threshold: float = 0.5,
     allowed_hosts: Iterable[str] = (),
     allow_insecure_loopback: bool = False,
+    include_comments: bool = False,
 ) -> BattleRunResult:
     """Fetch a fixture's real PR evidence, run Sergeant, and score agreement."""
 
@@ -235,16 +237,19 @@ def run_battle_comparison(
         allowed_hosts=allowed_hosts,
         allow_insecure_loopback=allow_insecure_loopback,
     )
-    comments = fetch_pr_comments_live(
-        repository,
-        pr_number,
-        token=token,
-        base_url=base_url,
-        allowed_hosts=allowed_hosts,
-        allow_insecure_loopback=allow_insecure_loopback,
-    )
+    comments = None
+    if include_comments:
+        comments = fetch_pr_comments_live(
+            repository,
+            pr_number,
+            token=token,
+            base_url=base_url,
+            allowed_hosts=allowed_hosts,
+            allow_insecure_loopback=allow_insecure_loopback,
+        )
     caveats = [
-        "Files reviewed are GitHub PR patch text plus PR review comments materialized into a temporary sandbox, not a full historical repository checkout.",
+        "Files reviewed are GitHub PR patch text materialized into a temporary sandbox, not a full historical repository checkout.",
+        "Existing PR review comments are excluded by default so the comparison measures independent discovery.",
         "Agreement scoring is transparent keyword-overlap with documented synonym expansion, not semantic or LLM judged.",
         "Repository-level documentation/test-footprint checks are disabled for patch-only battle comparison to avoid false positives from partial workspaces.",
         "A conceptual match can score low when wording differs between Sergeant output and fixture expectations.",
@@ -253,11 +258,13 @@ def run_battle_comparison(
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_root = Path(temp_dir)
         files_written = _write_patch_workspace(diff.files, temp_root)
-        comment_file = _write_comment_workspace(comments.all_comments, temp_root)
-        if comment_file:
-            files_written.append(comment_file)
+        if comments is not None:
+            comment_file = _write_comment_workspace(comments.all_comments, temp_root)
+            if comment_file:
+                files_written.append(comment_file)
+                caveats.append("This run explicitly included existing reviewer comments and is assisted rather than blind.")
         if not files_written:
-            caveats.append("No reviewable patches or comments were returned by GitHub for this PR.")
+            caveats.append("No reviewable patch evidence was returned by GitHub for this PR.")
         verdict_report = _review_patch_workspace(temp_root)
 
     finding_texts = _extract_finding_texts(verdict_report)
