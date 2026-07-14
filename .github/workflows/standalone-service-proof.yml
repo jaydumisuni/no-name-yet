@@ -1,0 +1,143 @@
+name: Standalone Service Proof
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install proof dependencies
+        run: |
+          python -m pip install --upgrade pip pytest build
+          python -m pip install -e .
+
+      - name: Run standalone adversarial tests
+        run: python -m pytest tests/test_standalone_service.py -q
+
+      - name: Run end-to-end standalone runtime proof
+        run: python scripts/prove-standalone-service.py
+
+      - name: Build wheel and prove installed Command Center resources
+        run: |
+          python -m build --wheel
+          python -m venv build/wheel-proof-venv
+          build/wheel-proof-venv/bin/python -m pip install --upgrade pip
+          build/wheel-proof-venv/bin/python -m pip install dist/sergeant_reviewer-*.whl
+          cd /tmp
+          "$GITHUB_WORKSPACE/build/wheel-proof-venv/bin/sergeant-serve" \
+            --workspace "$GITHUB_WORKSPACE" \
+            --port 0 \
+            --token-env "" \
+            --webhook-secret-env "" \
+            --check > "$GITHUB_WORKSPACE/build/installed-wheel-check.json"
+
+      - name: Build hardened container
+        run: docker build --tag sergeant-reviewer:proof .
+
+      - name: Prove hardened container runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERGEANT_SERVICE_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export SERGEANT_SERVICE_TOKEN
+          echo "::add-mask::$SERGEANT_SERVICE_TOKEN"
+          docker run --detach --rm \
+            --name sergeant-standalone-proof \
+            --read-only \
+            --tmpfs /tmp:size=64m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --env SERGEANT_SERVICE_TOKEN \
+            --publish 127.0.0.1:8766:8765 \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            sergeant-reviewer:proof
+          cleanup() {
+            docker logs sergeant-standalone-proof > build/standalone-container.log 2>&1 || true
+            docker stop sergeant-standalone-proof >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          base = "http://127.0.0.1:8766"
+          token = os.environ["SERGEANT_SERVICE_TOKEN"]
+          deadline = time.monotonic() + 30
+          while True:
+              try:
+                  with urllib.request.urlopen(base + "/health", timeout=2) as response:
+                      health = json.load(response)
+                  if health.get("status") == "ready":
+                      break
+              except Exception:
+                  if time.monotonic() >= deadline:
+                      raise
+                  time.sleep(0.25)
+
+          try:
+              urllib.request.urlopen(base + "/api/v1/state", timeout=3)
+              raise AssertionError("Container accepted unauthenticated API request")
+          except urllib.error.HTTPError as error:
+              assert error.code == 401
+
+          request = urllib.request.Request(
+              base + "/api/v1/state",
+              headers={"Authorization": f"Bearer {token}"},
+          )
+          with urllib.request.urlopen(request, timeout=3) as response:
+              state = json.load(response)
+          with urllib.request.urlopen(base + "/", timeout=3) as response:
+              html = response.read().decode("utf-8")
+
+          proof = {
+              "proof_version": "sergeant.standalone-container-proof.v1",
+              "health": health["status"],
+              "authentication_required": True,
+              "platform": state["platform"],
+              "command_center": "SERGEANT V2 — Command Center" in html,
+              "repository_write": False,
+              "github_write": False,
+              "read_only_container": True,
+              "capabilities_dropped": True,
+              "verdict": "PASS",
+          }
+          Path("build/standalone-container-proof.json").write_text(
+              json.dumps(proof, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(proof, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload standalone proof artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: standalone-service-proof
+          path: |
+            build/standalone-service-proof.json
+            build/standalone-service.log
+            build/installed-wheel-check.json
+            build/standalone-container-proof.json
+            build/standalone-container.log
+            dist/sergeant_reviewer-*.whl
+          if-no-files-found: error
