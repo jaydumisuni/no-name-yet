@@ -2,7 +2,7 @@
 
 ## Current status
 
-Sergeant has moved past the original R&D-only state into a working, production-hardened reviewer/proof system with a first standalone product surface.
+Sergeant has moved past the original R&D-only state into a working, production-hardened reviewer/proof system with a proven standalone product surface.
 
 Completed foundation and product work:
 
@@ -25,7 +25,8 @@ Completed foundation and product work:
 - HMAC-verified GitHub webhook intake
 - Installed-wheel Command Center packaging
 - Hardened non-root container and Compose deployment
-- Release proof through PRs where CI and Main Review are green
+- Standalone source, installed-wheel, and container runtime proof
+- Release proof through merged PRs where CI and Main Review are green
 
 Current defensible claim:
 
@@ -201,11 +202,13 @@ Detailed contract: [`36-production-hardening.md`](36-production-hardening.md).
 
 ## Phase 8 — Standalone product path
 
-Status: in progress; Phase 8A self-hosted service is implemented and entering proof/release review.
+Status: in progress; Phase 8A self-hosted service is implemented, proven, and merged. Phase 8B is next.
 
 ### Phase 8A — Self-hosted service
 
-Implemented:
+Status: complete.
+
+Implemented and proven:
 
 - dependency-free HTTP service
 - loopback-safe default binding
@@ -220,10 +223,13 @@ Implemented:
 - non-root/read-only/capability-dropped Docker deployment
 - Docker Compose profile
 - source, wheel and container proof workflow
+- merged release with CI, clean-clone, Main Review, live-ingestion, standalone, browser, PyPI, VSIX, and JetBrains gates green
 
 Detailed contract: [`37-standalone-service.md`](37-standalone-service.md).
 
 ### Phase 8B — GitHub App delivery
+
+Status: next active phase.
 
 Still required:
 
@@ -247,6 +253,6 @@ The collector, analyzer, reasoner and poster must remain separate trust zones.
 
 ## Current next step
 
-Freeze and prove Phase 8A through normal CI, Main Review, standalone runtime proof, installed-wheel proof, hardened container proof and multiplatform packaging.
+Begin Phase 8B with GitHub App installation authentication and installation/repository routing while preserving separate collector, analyzer, reasoner, and poster trust zones.
 
-After Phase 8A is merged, continue with GitHub App installation and delivery as a separate trust-zone implementation rather than adding write authority to the reviewer runtime.
+Do not add GitHub write authority to the standalone reviewer runtime. The future poster must remain isolated and receive only a finalized, bounded delivery packet.

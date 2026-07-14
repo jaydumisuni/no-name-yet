@@ -41,7 +41,7 @@ def test_submission_docs_keep_sergeant_as_reviewer_not_patch_writer() -> None:
     assert "does not execute" in combined or "executes pull-request-controlled code" in combined
 
 
-def test_roadmap_marks_phase_7_complete_and_phase_8a_implemented() -> None:
+def test_roadmap_marks_phase_7_complete_and_phase_8a_released() -> None:
     roadmap = read_doc("docs/08-roadmap.md")
     standalone = read_doc("docs/37-standalone-service.md")
 
@@ -51,8 +51,13 @@ def test_roadmap_marks_phase_7_complete_and_phase_8a_implemented() -> None:
     assert "## Phase 7 — Production hardening" in roadmap
     assert "Status: complete for the current public reviewer boundary." in roadmap
     assert "## Phase 8 — Standalone product path" in roadmap
-    assert "Phase 8A self-hosted service is implemented" in roadmap
+    assert "Phase 8A self-hosted service is implemented, proven, and merged." in roadmap
+    assert "### Phase 8A — Self-hosted service" in roadmap
+    assert "Status: complete." in roadmap
     assert "### Phase 8B — GitHub App delivery" in roadmap
+    assert "Status: next active phase." in roadmap
+    assert "Begin Phase 8B with GitHub App installation authentication" in roadmap
+    assert "Do not add GitHub write authority to the standalone reviewer runtime." in roadmap
     assert "dependency-free standalone service" in standalone
     assert "repository writes" in standalone
     assert "GitHub App installation authentication" in standalone
