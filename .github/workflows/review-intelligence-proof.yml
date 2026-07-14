@@ -50,6 +50,7 @@ jobs:
             tests/test_review_benchmark.py \
             tests/test_review_intelligence.py \
             tests/test_review_intelligence_proof.py \
+            tests/test_review_noise_regressions.py \
             tests/test_learning_proof.py \
             tests/test_capability_policy.py \
             tests/test_battle_compare.py \
@@ -71,8 +72,8 @@ jobs:
           args=(
             review-benchmarks/blind
             --mode "$BENCHMARK_MODE"
-            --minimum-precision 0.60
-            --minimum-recall 0.75
+            --minimum-precision 0.90
+            --minimum-recall 0.90
             --output "build/review-benchmark-${BENCHMARK_MODE}.json"
             --pretty
           )
@@ -94,8 +95,8 @@ jobs:
           cd /tmp
           "$GITHUB_WORKSPACE/build/benchmark-wheel-venv/bin/sergeant-bench" \
             --mode deterministic \
-            --minimum-precision 0.60 \
-            --minimum-recall 0.75 \
+            --minimum-precision 0.90 \
+            --minimum-recall 0.90 \
             --output "$GITHUB_WORKSPACE/build/installed-wheel-review-benchmark.json" \
             --pretty
 
