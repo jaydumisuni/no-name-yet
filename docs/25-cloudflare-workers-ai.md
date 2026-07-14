@@ -15,8 +15,9 @@ The repository contains:
 - deterministic and multi-model benchmark contracts;
 - no THETECHGUY account IDs, tokens or private model-routing policy.
 
-Every user supplies their own Cloudflare Account ID, scoped API token and model
-selection.
+Every user supplies their own Cloudflare Account ID and scoped API token. Model
+selection is optional: `SERGEANT_CLOUDFLARE_MODELS` overrides the built-in public
+starter roster when a user wants different models.
 
 ## Create a scoped Workers AI token
 
@@ -67,7 +68,8 @@ sergeant-cloudflare --pretty test-models --require
 ```
 
 This makes one small structured-output call to each configured model. A model is
-not considered ready merely because an HTTP endpoint responded.
+not considered ready merely because an HTTP endpoint responded: it must return
+the complete structured proof contract.
 
 ## Run the local gateway
 
@@ -75,16 +77,17 @@ not considered ready merely because an HTTP endpoint responded.
 sergeant-cloudflare --pretty gateway
 ```
 
-The gateway binds to `127.0.0.1:8082` by default and exposes:
+The gateway binds to a loopback address only and defaults to `127.0.0.1:8082`.
+It exposes:
 
 - `GET /health`
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 
-It refuses models outside the configured roster and does not support streaming
-in the first release. Binding to a non-loopback address requires the explicit
-`--allow-network` option and should be protected by an external authentication
-and network policy.
+It refuses models outside the configured roster, requires a non-empty messages
+array and does not support streaming in the first release. Network binding is
+not available in this release because an unauthenticated remote gateway could
+expose the operator's Cloudflare quota and billing account.
 
 In another terminal, print the environment for Sergeant:
 
@@ -110,10 +113,14 @@ A valid proof requires:
 - at least two configured models;
 - completed real model passes;
 - more than one distinct model in the result;
-- `true_model_independence: true`.
+- `true_model_independence: true`;
+- a complete council;
+- no provider errors;
+- no unresolved final gaps.
 
-`council_complete` may remain false when the council correctly reports an
-unresolved objection. That is different from a route failure.
+A complete council may correctly return `PASS`, `NEEDS WORK` or `BLOCK`. The
+proof certifies that the council operated correctly; it does not force the code
+under review to receive a passing verdict.
 
 ## Cost and privacy boundary
 
@@ -125,10 +132,12 @@ The first model is the default worker. Later roster members are not called merel
 because they are configured: Cpl recruits them when disagreement, missing proof,
 independent confirmation or another unresolved gap requires them.
 
-The gateway sends the bounded repository excerpts and deterministic evidence
-that Cpl normally sends to a configured remote model. Users should not enable a
-remote route for repositories whose policy forbids sending source code to that
-provider.
+The gateway forwards OpenAI-compatible JSON submitted by local Sergeant, IDE or
+other compatible clients after applying its documented path, size, model,
+streaming and messages validation. It does not guarantee that every request was
+created by Cpl or contains only repository excerpts. Users and client
+integrations are responsible for ensuring the submitted content complies with
+the repository's privacy policy and the provider's data-handling policy.
 
 ## Future website and IDE connection
 
