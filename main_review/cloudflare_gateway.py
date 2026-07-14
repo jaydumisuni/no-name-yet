@@ -29,8 +29,8 @@ DEFAULT_PORT = 8082
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_REQUEST_BYTES = 1_500_000
 DEFAULT_MODELS = (
-    "@cf/openai/gpt-oss-120b",
     "@cf/zai-org/glm-4.7-flash",
+    "@cf/openai/gpt-oss-120b",
     "@cf/moonshotai/kimi-k2.7-code",
 )
 ACCOUNT_ID_RE = re.compile(r"^[A-Fa-f0-9]{32}$")
