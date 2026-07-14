@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 IMPACT_ONLY_CAPABILITIES = {"call_graph", "cross_file"}
+EVALUATION_PREFIXES = ("review-benchmarks/", "battle-tests/")
 DEMONSTRATED_SECURITY_SINK_RE = re.compile(
     r"(?:\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\.|"
     r"\bchild_process\.exec\s*\(|\bcp\.exec\s*\(|\bquery\s*\(|\bexecute\s*\(|"
@@ -86,6 +87,11 @@ def _safe_text(root: Path | None, relative: object) -> str:
         return ""
 
 
+def _is_evaluation_path(relative: str) -> bool:
+    normalized = relative.replace("\\", "/")
+    return normalized.startswith(EVALUATION_PREFIXES)
+
+
 def _is_test_path(relative: str) -> bool:
     path = Path(relative)
     lowered = relative.lower()
@@ -131,13 +137,17 @@ def _finding_exists(findings: list[object], capability: str, path: str, marker: 
     )
 
 
-def _augment_security_findings(findings: list[object], root: Path | None, changed_files: list[object]) -> None:
+def _augment_security_findings(
+    findings: list[object],
+    root: Path | None,
+    changed_files: list[object],
+) -> None:
     """Add high-confidence path and authorization findings from changed code."""
 
     if root is None:
         return
     for item in changed_files:
-        if not isinstance(item, str) or _is_test_path(item):
+        if not isinstance(item, str) or _is_test_path(item) or _is_evaluation_path(item):
             continue
         text = _safe_text(root, item)
         if not text:
