@@ -15,6 +15,7 @@ from .diff_policy import normalize_diff_review
 from .diff_review import review_changed_files
 from .review_ingestion import ingest_external_review_file
 from .review_intelligence import run_review_intelligence
+from .review_scope import scope_repository_review
 from .semantic_scope import semantic_review_files
 from .standard_engine import run_standard_engine
 from .verdict import review_repository
@@ -49,7 +50,7 @@ def _required_actions(
     if isinstance(diff_verdict, dict) and diff_verdict.get("verdict") != "PASS":
         actions.append(str(diff_verdict.get("suggested_next_action", "Answer changed-file review findings.")))
     if intelligence.get("verdict") in {"BLOCK", "NEEDS WORK"}:
-        for finding in intelligence.get("ranked_findings", []):
+        for finding in intelligence.get("promoted_findings", intelligence.get("ranked_findings", [])):
             if finding.get("severity") in {"blocker", "major"}:
                 actions.append(f"Answer {finding.get('root_cause')} finding: {finding.get('message')}")
 
@@ -139,7 +140,8 @@ def run_independent_pr_review(
     root_path = Path(root)
     changed = changed_files or []
     semantic_files = semantic_review_files(root_path, changed)
-    repository_review = review_repository(root_path)
+    raw_repository_review = review_repository(root_path)
+    repository_review = scope_repository_review(raw_repository_review, changed)
     diff = normalize_diff_review(review_changed_files(changed), root_path, changed)
     standard = run_standard_engine(root_path, changed)
     capabilities = normalize_capability_review(run_capability_engine(root_path, changed), root_path)
@@ -183,7 +185,7 @@ def run_independent_pr_review(
         {
             "source": "review-intelligence",
             "verdict": intelligence.get("verdict"),
-            "evidence": intelligence.get("ranked_findings", []),
+            "evidence": intelligence.get("promoted_findings", []),
         },
         {
             "source": "standard-engine",
@@ -204,13 +206,13 @@ def run_independent_pr_review(
     return {
         "verdict": verdict.to_dict(),
         "repository_review": repository_review.get("verdict", {}),
+        "repository_review_scope": repository_review.get("scope", {}),
+        "repository_background": repository_review.get("background", {}),
         "diff_review": diff.get("verdict", {}),
         "diff_review_policy": diff.get("policy_adjustments", []),
         "capability_review": capabilities,
         "review_intelligence": intelligence,
         "cpl_review": cpl,
-        # Compatibility alias for 0.4.0 integrations. Product-facing output and
-        # new code should use cpl_review.
         "semantic_review": cpl,
         "semantic_files": semantic_files,
         "standard": standard,
@@ -244,7 +246,13 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
     lines.append(f"- Diff verdict: {packet.get('diff_review', {}).get('verdict')}")
     lines.append(f"- Capability verdict: {packet.get('capability_review', {}).get('verdict')}")
     lines.append(f"- Review intelligence verdict: {packet.get('review_intelligence', {}).get('verdict')}")
-    lines.append(f"- Review quality score: {packet.get('review_intelligence', {}).get('quality_score')}")
+    quality = packet.get("review_intelligence", {}).get("quality_score")
+    quality_text = f"{quality}/100 review-output completeness" if quality is not None else "not evaluated (no ranked findings)"
+    lines.append(f"- Review quality score: {quality_text}")
+    scope = packet.get("repository_review_scope", {})
+    if scope:
+        lines.append(f"- Repository findings in changed scope: {scope.get('scoped_finding_count', 0)}")
+        lines.append(f"- Repository background findings: {scope.get('background_finding_count', 0)}")
     cpl = packet.get("cpl_review", packet.get("semantic_review", {}))
     route = cpl.get("route", {}) if isinstance(cpl, dict) else {}
     council = cpl.get("council", {}) if isinstance(cpl, dict) else {}
@@ -283,9 +291,7 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
     if plan:
         lines.extend(["", "## Cpl specialist plan"])
         for assignment in plan:
-            lines.append(
-                f"- **{assignment.get('title')}** using `{assignment.get('model')}`: {assignment.get('mission')}"
-            )
+            lines.append(f"- **{assignment.get('title')}** using `{assignment.get('model')}`: {assignment.get('mission')}")
 
     rounds = council.get("rounds", []) if isinstance(council, dict) else []
     if rounds:
@@ -303,9 +309,7 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
     if recurrences:
         lines.extend(["", "## Recurrence review"])
         for recurrence in recurrences:
-            lines.append(
-                f"- `{recurrence.get('previous_event_id')}` may have recurred: {recurrence.get('current_finding')}"
-            )
+            lines.append(f"- `{recurrence.get('previous_event_id')}` may have recurred: {recurrence.get('current_finding')}")
             lines.append(f"  - Required response: {recurrence.get('required_response')}")
 
     assurance = packet.get("diff_review_policy", [])
