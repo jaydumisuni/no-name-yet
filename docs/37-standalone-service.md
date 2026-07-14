@@ -1,10 +1,10 @@
-# Phase 8A — Standalone Self-Hosted Service
+# Standalone Self-Hosted Service
 
 ## Status
 
-Implemented as the first complete Phase 8 product deployment surface.
+Implemented and proven as a public Sergeant deployment surface.
 
-Sergeant can now run as:
+Sergeant can run as:
 
 - a local self-hosted HTTP service;
 - an installed Python console service;
@@ -12,7 +12,7 @@ Sergeant can now run as:
 - the existing Command Center connected to real service APIs;
 - an HMAC-verified GitHub webhook intake endpoint.
 
-This phase does **not** add GitHub posting, patch application, repository writes, pull-request code execution, or automatic merging.
+The service does **not** add GitHub posting, patch application, repository writes, pull-request code execution, or automatic merging.
 
 ## Product boundary
 
@@ -124,8 +124,6 @@ Contract version:
 sergeant.standalone.v1
 ```
 
-Endpoints:
-
 | Method | Path | Purpose | Authentication |
 | --- | --- | --- | --- |
 | `GET` | `/health` | Minimal liveness/readiness check | Public |
@@ -162,7 +160,7 @@ write_learning = false
 
 This prevents a network client from writing repository memory or changing reviewer doctrine.
 
-Changed-file and current-file missions remain subject to the Phase 7 path-containment boundary.
+Changed-file and current-file missions remain subject to the production path-containment boundary.
 
 ## GitHub webhook intake
 
@@ -192,7 +190,7 @@ The normalized packet declares:
 authority = intake-only-no-posting
 ```
 
-GitHub App installation authentication, check-run creation, review-comment posting, and durable delivery queues remain Phase 8B work.
+Installation authentication, review-comment posting, check-run creation, durable delivery queues, and merge actions are not implemented by this service.
 
 ## Request and browser controls
 
@@ -298,18 +296,8 @@ standalone-service-proof/sergeant_reviewer-*.whl
 - **Rollback:** `docker compose down` removes the service without modifying the reviewed repository.
 - **Proof:** the declarations are regression-tested and the equivalent constrained container runtime is exercised in CI.
 
-## Phase 8 boundary
+## Public boundary
 
-Phase 8A completes a usable self-hosted product surface.
+This document describes implemented, testable public Sergeant behavior only.
 
-Phase 8B remains:
-
-- GitHub App installation authentication;
-- installation-token collector service;
-- isolated comment/check poster;
-- durable webhook delivery queue;
-- installation/repository routing;
-- signed audit exports;
-- deployment behind a production reverse proxy.
-
-Those capabilities must preserve the Zone 1 collector → Zone 2 analyzer → Zone 3 reasoner → Zone 4 poster separation from the security model.
+Detailed internal planning, private integrations, private deployment sequencing, and private memory-system roadmaps do not belong in the open-source repository. Public development remains open-ended and is represented by implemented changes, issues, pull requests, and release notes rather than the private roadmap.
