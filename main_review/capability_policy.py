@@ -30,6 +30,19 @@ _LINE_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "api_contract": (re.compile(r"\b(?:app|router)\.(?:get|post|put|patch|delete)\s*\("),),
     "architecture": (re.compile(r"^\s*(?:from|import)\s+", re.M),),
 }
+_ROOT_CAUSES = {
+    "security_taint": "unsafe-data-flow",
+    "data_flow": "unsafe-data-flow",
+    "api_contract": "change-impact",
+    "regression": "change-impact",
+    "cross_file": "change-impact",
+    "call_graph": "change-impact",
+    "test_impact": "proof-gap",
+    "performance": "runtime-risk",
+    "concurrency": "runtime-risk",
+    "architecture": "architecture-boundary",
+}
+
 
 
 def _safe_text(root: Path | None, relative: object) -> str:
@@ -82,6 +95,7 @@ def _first_matching_line(text: str, patterns: tuple[re.Pattern[str], ...]) -> in
 def _annotate_location(finding: dict[str, Any], root: Path | None) -> str:
     text = _safe_text(root, finding.get("path"))
     capability = str(finding.get("capability") or "")
+    finding.setdefault("root_cause", _ROOT_CAUSES.get(capability, capability or "general-review"))
     if not finding.get("line_start"):
         line = _first_matching_line(text, _LINE_PATTERNS.get(capability, ()))
         if line is not None:
@@ -144,6 +158,19 @@ def normalize_capability_review(packet: dict[str, Any], root: str | Path | None 
                 finding["test_coverage_path"] = coverage_path
                 finding["evidence"] = f"{finding.get('evidence', '')} Focused changed-test coverage: {coverage_path}.".strip()
                 continue
+
+        if capability == "api_contract" and severity == "minor" and str(finding.get("message") or "").startswith("API-adjacent"):
+            adjustments.append({
+                "capability": capability,
+                "path": finding.get("path"),
+                "from": severity,
+                "to": "note",
+                "reason": "An API-adjacent filename is context, not a demonstrated contract change.",
+            })
+            finding["severity"] = "note"
+            finding["context_signal"] = True
+            finding["direct_evidence"] = False
+            continue
 
         if capability == "security_taint" and severity in {"blocker", "major"}:
             if text and not DEMONSTRATED_SECURITY_SINK_RE.search(text):
