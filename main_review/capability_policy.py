@@ -1,8 +1,9 @@
-"""Policy normalization for Tier 1 capability findings.
+"""Evidence-aware policy normalization for Tier 1 capability findings.
 
-Capability scanners intentionally over-collect signals. This policy layer
-separates blast radius and lexical co-presence from demonstrated defects before
-those findings enter review intelligence and consensus.
+Capability scanners intentionally over-collect signals. This layer separates
+blast radius and lexical co-presence from demonstrated defects, adds precise
+source locations when available, and prevents generic signals from dominating
+review intelligence.
 """
 from __future__ import annotations
 
@@ -18,6 +19,17 @@ DEMONSTRATED_SECURITY_SINK_RE = re.compile(
     r"\binnerHTML\b|\bdangerouslySetInnerHTML\b|\bshell\s*:\s*true\b)",
     re.I,
 )
+_LINE_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
+    "security_taint": (DEMONSTRATED_SECURITY_SINK_RE,),
+    "data_flow": (DEMONSTRATED_SECURITY_SINK_RE,),
+    "performance": (re.compile(r"\bfor\b"), re.compile(r"\.map\s*\(")),
+    "concurrency": (
+        re.compile(r"\basyncio\.create_task\b|\bPromise\.all\b|\bsetTimeout\b|\bsetInterval\b"),
+        re.compile(r"\bglobal\b|\bshared\b|\bcounter\b|\bcache\b|\bstate\b", re.I),
+    ),
+    "api_contract": (re.compile(r"\b(?:app|router)\.(?:get|post|put|patch|delete)\s*\("),),
+    "architecture": (re.compile(r"^\s*(?:from|import)\s+", re.M),),
+}
 
 
 def _safe_text(root: Path | None, relative: object) -> str:
@@ -58,11 +70,31 @@ def _changed_test_covering_target(root: Path | None, changed_files: list[object]
     return ""
 
 
-def normalize_capability_review(
-    packet: dict[str, Any],
-    root: str | Path | None = None,
-) -> dict[str, Any]:
-    """Return a capability packet with evidence-aware blocking severity."""
+def _first_matching_line(text: str, patterns: tuple[re.Pattern[str], ...]) -> int | None:
+    if not text:
+        return None
+    for number, line in enumerate(text.splitlines(), start=1):
+        if any(pattern.search(line) for pattern in patterns):
+            return number
+    return None
+
+
+def _annotate_location(finding: dict[str, Any], root: Path | None) -> str:
+    text = _safe_text(root, finding.get("path"))
+    capability = str(finding.get("capability") or "")
+    if not finding.get("line_start"):
+        line = _first_matching_line(text, _LINE_PATTERNS.get(capability, ()))
+        if line is not None:
+            finding["line_start"] = line
+            finding["line_end"] = line
+    if finding.get("path") and finding.get("line_start"):
+        finding["evidence_ref"] = f"{finding['path']}:{finding['line_start']}"
+    finding["direct_evidence"] = bool(finding.get("evidence") and (finding.get("path") or capability == "test_impact"))
+    return text
+
+
+def normalize_capability_review(packet: dict[str, Any], root: str | Path | None = None) -> dict[str, Any]:
+    """Return a capability packet with evidence-aware severity and location."""
 
     normalized = deepcopy(packet)
     raw_findings = normalized.get("findings", [])
@@ -77,34 +109,36 @@ def normalize_capability_review(
             continue
         capability = str(finding.get("capability", ""))
         severity = str(finding.get("severity", ""))
+        text = _annotate_location(finding, root_path)
 
         if capability in IMPACT_ONLY_CAPABILITIES and severity in {"blocker", "major"}:
-            adjustments.append(
-                {
-                    "capability": capability,
-                    "path": finding.get("path"),
-                    "from": severity,
-                    "to": "minor",
-                    "reason": "Dependency or caller presence is blast-radius evidence, not a demonstrated defect.",
-                }
-            )
+            adjustments.append({
+                "capability": capability,
+                "path": finding.get("path"),
+                "from": severity,
+                "to": "minor",
+                "reason": "Dependency or caller presence is blast-radius evidence, not a demonstrated defect.",
+            })
             finding["severity"] = "minor"
             finding["impact_signal"] = True
             continue
 
-        if capability == "regression" and severity in {"blocker", "major"}:
+        if capability in {"regression", "api_contract"} and severity in {"blocker", "major"}:
             coverage_path = _changed_test_covering_target(root_path, changed_files, finding.get("path"))
             if coverage_path:
-                adjustments.append(
-                    {
-                        "capability": capability,
-                        "path": finding.get("path"),
-                        "from": severity,
-                        "to": "minor",
-                        "coverage_path": coverage_path,
-                        "reason": "Blast radius remains review evidence, but the same change set includes focused changed-test coverage for the target module.",
-                    }
+                reason = (
+                    "Blast radius remains review evidence, but the same change set includes focused changed-test coverage for the target module."
+                    if capability == "regression"
+                    else "The public contract surface remains review evidence, but focused changed-test coverage exists for the target module."
                 )
+                adjustments.append({
+                    "capability": capability,
+                    "path": finding.get("path"),
+                    "from": severity,
+                    "to": "minor",
+                    "coverage_path": coverage_path,
+                    "reason": reason,
+                })
                 finding["severity"] = "minor"
                 finding["impact_signal"] = True
                 finding["test_coverage_path"] = coverage_path
@@ -112,19 +146,17 @@ def normalize_capability_review(
                 continue
 
         if capability == "security_taint" and severity in {"blocker", "major"}:
-            text = _safe_text(root_path, finding.get("path"))
             if text and not DEMONSTRATED_SECURITY_SINK_RE.search(text):
-                adjustments.append(
-                    {
-                        "capability": capability,
-                        "path": finding.get("path"),
-                        "from": severity,
-                        "to": "note",
-                        "reason": "Input and security-related words co-occur, but no executable sensitive sink was demonstrated.",
-                    }
-                )
+                adjustments.append({
+                    "capability": capability,
+                    "path": finding.get("path"),
+                    "from": severity,
+                    "to": "note",
+                    "reason": "Input and security-related words co-occur, but no executable sensitive sink was demonstrated.",
+                })
                 finding["severity"] = "note"
                 finding["lexical_signal"] = True
+                finding["direct_evidence"] = False
                 finding["message"] = "Input and security-related configuration coexist; no direct sensitive sink was demonstrated."
                 finding["evidence"] = "Static lexical scan found input and security terminology, but no eval/exec/query/raw/shell:true sink."
 
