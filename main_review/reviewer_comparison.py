@@ -1,0 +1,568 @@
+"""Evidence-first side-by-side comparison of Sergeant and an external reviewer.
+
+The comparator does not declare a winner from comment volume or unsupported
+heuristics. It normalizes both reports, matches equivalent findings, preserves
+unique findings, and optionally attaches explicit human/Judge adjudication.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Iterable, Literal
+
+from .github_live_fetch import GitHubFetchError, fetch_pr_comments_live
+from .review_ingestion import ExternalReviewComment, load_external_comments
+
+COMPARISON_SCHEMA = "sergeant.reviewer-comparison.v1"
+FindingSeverity = Literal["blocker", "major", "minor"]
+DecisionStatus = Literal["confirmed", "suggestion", "false_positive", "duplicate", "uncertain"]
+_ALLOWED_SEVERITIES = {"blocker", "major", "minor"}
+_TOKEN_RE = re.compile(r"[a-z0-9_]+", re.I)
+_HEADING_RE = re.compile(r"^\s*(?:#+\s*)?(?:\[[^]]+\]\s*)?(.*)$")
+
+
+class ReviewerComparisonError(ValueError):
+    """Raised when comparison evidence is invalid or incomplete."""
+
+
+@dataclass(frozen=True)
+class ComparisonFinding:
+    finding_id: str
+    reviewer: str
+    severity: FindingSeverity
+    category: str
+    message: str
+    evidence: str
+    path: str | None = None
+    line_start: int | None = None
+    line_end: int | None = None
+    root_cause: str | None = None
+    url: str | None = None
+    source_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class FindingPair:
+    sergeant: ComparisonFinding
+    reference: ComparisonFinding
+    match_score: float
+    path_match: bool
+    line_match: bool | None
+    category_match: bool
+    token_overlap: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sergeant": self.sergeant.to_dict(),
+            "reference": self.reference.to_dict(),
+            "match_score": self.match_score,
+            "path_match": self.path_match,
+            "line_match": self.line_match,
+            "category_match": self.category_match,
+            "token_overlap": self.token_overlap,
+        }
+
+
+def _text(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _tokens(*values: object) -> set[str]:
+    stop = {
+        "the", "and", "for", "with", "from", "this", "that", "into", "when",
+        "should", "could", "would", "may", "might", "file", "line", "code",
+    }
+    return {
+        token.lower()
+        for value in values
+        for token in _TOKEN_RE.findall(_text(value))
+        if len(token) > 2 and token.lower() not in stop
+    }
+
+
+def _first_message_line(body: str) -> str:
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("<!--", "<details", "</details", "```")):
+            continue
+        match = _HEADING_RE.match(line)
+        value = _text(match.group(1) if match else line)
+        value = re.sub(r"^(?:potential issue|bug|issue|warning|suggestion|nitpick)\s*[:\-]\s*", "", value, flags=re.I)
+        if value:
+            return value[:400]
+    return body.strip()[:400] or "External reviewer finding"
+
+
+def _infer_severity(body: str) -> FindingSeverity | None:
+    lowered = body.lower()
+    if any(marker in lowered for marker in ("nitpick", "nit:", "style-only", "style only")):
+        return None
+    if any(marker in lowered for marker in ("critical", "blocker", "p0", "severity: critical")):
+        return "blocker"
+    if any(marker in lowered for marker in ("major", "high severity", "security vulnerability", "potential issue")):
+        return "major"
+    return "minor"
+
+
+def _infer_category(body: str, tags: Iterable[str] = ()) -> str:
+    text = " ".join([body, *tags]).lower()
+    categories = (
+        ("security", ("security", "auth", "authorization", "credential", "secret", "injection", "traversal")),
+        ("correctness", ("incorrect", "bug", "broken", "wrong", "exception", "failure")),
+        ("concurrency", ("race", "concurrent", "async", "thread", "lock")),
+        ("performance", ("performance", "slow", "latency", "complexity", "memory")),
+        ("api_contract", ("api", "contract", "schema", "compatibility", "route")),
+        ("architecture", ("architecture", "boundary", "coupling", "dependency", "layer")),
+        ("testing", ("test", "coverage", "regression proof")),
+        ("documentation", ("documentation", "readme", "docstring")),
+    )
+    return next((name for name, markers in categories if any(marker in text for marker in markers)), "other")
+
+
+def _normalized_author(value: object) -> str:
+    return _text(value).lower().removesuffix("[bot]").removesuffix("-bot")
+
+
+def extract_sergeant_findings(packet: dict[str, Any], reviewer_name: str = "Sergeant") -> list[ComparisonFinding]:
+    """Extract actionable, evidence-challenged findings from a Sergeant packet."""
+
+    intelligence = packet.get("review_intelligence", {}) if isinstance(packet, dict) else {}
+    rows = intelligence.get("ranked_findings", []) if isinstance(intelligence, dict) else []
+    if not isinstance(rows, list) or not rows:
+        capability = packet.get("capability_review", {}) if isinstance(packet, dict) else {}
+        rows = capability.get("findings", []) if isinstance(capability, dict) else []
+
+    findings: list[ComparisonFinding] = []
+    seen: set[tuple[object, ...]] = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        severity = _text(row.get("severity")).lower()
+        if severity not in _ALLOWED_SEVERITIES:
+            continue
+        challenge = _text(row.get("challenge_result"))
+        if severity in {"blocker", "major"} and challenge and not challenge.startswith("survived:"):
+            continue
+        message = _text(row.get("message"))
+        evidence = _text(row.get("evidence"))
+        path = _text(row.get("path")) or None
+        line_start = row.get("line_start") or row.get("line")
+        line_end = row.get("line_end") or line_start
+        key = (_text(row.get("capability")), message.lower(), path, line_start)
+        if key in seen:
+            continue
+        seen.add(key)
+        finding_id = _text(row.get("finding_id")) or f"sergeant-{index + 1}"
+        findings.append(ComparisonFinding(
+            finding_id=finding_id,
+            reviewer=reviewer_name,
+            severity=severity,  # type: ignore[arg-type]
+            category=_text(row.get("capability") or row.get("category")) or "other",
+            message=message or "Sergeant finding",
+            evidence=evidence,
+            path=path,
+            line_start=int(line_start) if isinstance(line_start, int) else None,
+            line_end=int(line_end) if isinstance(line_end, int) else None,
+            root_cause=_text(row.get("root_cause")) or None,
+            source_id=_text(row.get("evidence_ref")) or None,
+        ))
+    return findings
+
+
+def extract_external_findings(
+    comments: Iterable[ExternalReviewComment],
+    reviewer_name: str,
+) -> list[ComparisonFinding]:
+    """Normalize actionable external comments without treating summaries as defects."""
+
+    findings: list[ComparisonFinding] = []
+    seen: set[tuple[object, ...]] = set()
+    for index, comment in enumerate(comments):
+        body = comment.body.strip()
+        if not body:
+            continue
+        severity = _infer_severity(body)
+        if severity is None:
+            continue
+        # Unscoped walkthroughs and summaries are context, not findings.
+        if not comment.path and not any(
+            marker in body.lower()
+            for marker in ("potential issue", "bug", "critical", "blocker", "security vulnerability")
+        ):
+            continue
+        message = _first_message_line(body)
+        category = _infer_category(body, comment.tags)
+        key = (message.lower(), comment.path, comment.line, category)
+        if key in seen:
+            continue
+        seen.add(key)
+        findings.append(ComparisonFinding(
+            finding_id=f"reference-{index + 1}",
+            reviewer=reviewer_name,
+            severity=severity,
+            category=category,
+            message=message,
+            evidence=body[:4000],
+            path=comment.path,
+            line_start=comment.line,
+            line_end=comment.line,
+            url=comment.url,
+            source_id=_text(comment.author) or None,
+        ))
+    return findings
+
+
+def load_live_external_comments(
+    repository: str,
+    pr_number: int,
+    *,
+    author: str,
+    token: str | None = None,
+    base_url: str = "https://api.github.com",
+    allowed_hosts: Iterable[str] = (),
+    allow_private: bool = False,
+    expected_head_sha: str | None = None,
+) -> tuple[list[ExternalReviewComment], dict[str, Any]]:
+    """Fetch one external reviewer's comments from a frozen PR head."""
+
+    result = fetch_pr_comments_live(
+        repository,
+        pr_number,
+        token=token,
+        base_url=base_url,
+        allowed_hosts=allowed_hosts,
+        allow_private=allow_private,
+    )
+    head = result.pull_request.get("head", {})
+    actual_head = head.get("sha") if isinstance(head, dict) else None
+    if expected_head_sha and actual_head != expected_head_sha:
+        raise ReviewerComparisonError(
+            f"PR head changed during comparison: expected {expected_head_sha}, got {actual_head}."
+        )
+
+    wanted = _normalized_author(author)
+    comments: list[ExternalReviewComment] = []
+    for item in result.all_comments:
+        user = item.get("user") if isinstance(item.get("user"), dict) else {}
+        login = _text(user.get("login"))
+        if _normalized_author(login) != wanted:
+            continue
+        comments.append(ExternalReviewComment(
+            source="live-github-review",
+            body=_text(item.get("body")),
+            repository=repository,
+            pr_number=pr_number,
+            path=_text(item.get("path")) or None,
+            line=item.get("line") if isinstance(item.get("line"), int) else None,
+            author=login or author,
+            url=_text(item.get("html_url")) or None,
+        ))
+    metadata = {
+        "repository": repository,
+        "pr_number": pr_number,
+        "head_sha": actual_head,
+        "reference_author": author,
+        "fetched_comment_count": len(result.all_comments),
+        "matched_author_comment_count": len(comments),
+        "proof": result.proof_dict(),
+    }
+    return comments, metadata
+
+
+def _path_match(left: ComparisonFinding, right: ComparisonFinding) -> bool:
+    return bool(left.path and right.path and left.path.replace("\\", "/") == right.path.replace("\\", "/"))
+
+
+def _line_match(left: ComparisonFinding, right: ComparisonFinding) -> bool | None:
+    if left.line_start is None or right.line_start is None:
+        return None
+    left_end = left.line_end or left.line_start
+    right_end = right.line_end or right.line_start
+    return left.line_start <= right_end + 3 and right.line_start <= left_end + 3
+
+
+def _token_overlap(left: ComparisonFinding, right: ComparisonFinding) -> float:
+    left_tokens = _tokens(left.message, left.evidence, left.root_cause)
+    right_tokens = _tokens(right.message, right.evidence, right.root_cause)
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+
+def finding_match_score(left: ComparisonFinding, right: ComparisonFinding) -> tuple[float, bool, bool | None, bool, float]:
+    path_match = _path_match(left, right)
+    line_match = _line_match(left, right)
+    category_match = left.category == right.category or {left.category, right.category} <= {"security", "security_taint", "data_flow"}
+    overlap = _token_overlap(left, right)
+    score = overlap * 0.40
+    if path_match:
+        score += 0.35
+    if line_match is True:
+        score += 0.15
+    if category_match:
+        score += 0.10
+    return round(min(score, 1.0), 3), path_match, line_match, category_match, round(overlap, 3)
+
+
+def match_findings(
+    sergeant: list[ComparisonFinding],
+    reference: list[ComparisonFinding],
+    *,
+    threshold: float = 0.45,
+) -> tuple[list[FindingPair], list[ComparisonFinding], list[ComparisonFinding]]:
+    """Greedily match equivalent findings while preserving both unique sets."""
+
+    available = set(range(len(reference)))
+    pairs: list[FindingPair] = []
+    unmatched_sergeant: list[ComparisonFinding] = []
+    for finding in sergeant:
+        scored = sorted(
+            ((finding_match_score(finding, reference[index]), index) for index in available),
+            key=lambda item: item[0][0],
+            reverse=True,
+        )
+        if not scored or scored[0][0][0] < threshold:
+            unmatched_sergeant.append(finding)
+            continue
+        (score, path_match, line_match, category_match, overlap), index = scored[0]
+        available.remove(index)
+        pairs.append(FindingPair(
+            sergeant=finding,
+            reference=reference[index],
+            match_score=score,
+            path_match=path_match,
+            line_match=line_match,
+            category_match=category_match,
+            token_overlap=overlap,
+        ))
+    unmatched_reference = [reference[index] for index in sorted(available)]
+    return pairs, unmatched_sergeant, unmatched_reference
+
+
+def _load_json(path: str | Path) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ReviewerComparisonError(f"{path} must contain a JSON object.")
+    return payload
+
+
+def _load_decisions(path: str | Path | None) -> dict[tuple[str, str], DecisionStatus]:
+    if path is None:
+        return {}
+    payload = _load_json(path)
+    rows = payload.get("decisions", [])
+    if not isinstance(rows, list):
+        raise ReviewerComparisonError("adjudication decisions must be a list.")
+    decisions: dict[tuple[str, str], DecisionStatus] = {}
+    allowed = {"confirmed", "suggestion", "false_positive", "duplicate", "uncertain"}
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        reviewer = _text(item.get("reviewer"))
+        finding_id = _text(item.get("finding_id"))
+        status = _text(item.get("status")).lower()
+        if reviewer and finding_id and status in allowed:
+            decisions[(reviewer, finding_id)] = status  # type: ignore[assignment]
+    return decisions
+
+
+def _adjudication_summary(
+    findings: Iterable[ComparisonFinding],
+    decisions: dict[tuple[str, str], DecisionStatus],
+) -> dict[str, Any]:
+    rows = list(findings)
+    statuses = [decisions.get((item.reviewer, item.finding_id)) for item in rows]
+    decided = [status for status in statuses if status is not None]
+    counts = {status: decided.count(status) for status in ("confirmed", "suggestion", "false_positive", "duplicate", "uncertain")}
+    denominator = counts["confirmed"] + counts["false_positive"]
+    return {
+        "finding_count": len(rows),
+        "adjudicated_count": len(decided),
+        "complete": len(decided) == len(rows),
+        "counts": counts,
+        "verified_precision": round(counts["confirmed"] / denominator, 3) if denominator else None,
+    }
+
+
+def compare_reviewer_reports(
+    sergeant_packet: dict[str, Any],
+    reference_comments: Iterable[ExternalReviewComment],
+    *,
+    reference_name: str,
+    match_threshold: float = 0.45,
+    adjudication_file: str | Path | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a side-by-side comparison without inventing ground truth."""
+
+    sergeant = extract_sergeant_findings(sergeant_packet)
+    reference = extract_external_findings(reference_comments, reference_name)
+    shared, sergeant_only, reference_only = match_findings(sergeant, reference, threshold=match_threshold)
+    decisions = _load_decisions(adjudication_file)
+    sergeant_summary = _adjudication_summary(sergeant, decisions)
+    reference_summary = _adjudication_summary(reference, decisions)
+    adjudication_complete = sergeant_summary["complete"] and reference_summary["complete"] and bool(sergeant or reference)
+    overlap_denominator = max(1, min(len(sergeant), len(reference)))
+    return {
+        "schema_version": COMPARISON_SCHEMA,
+        "comparison_kind": "side-by-side-evidence",
+        "reference_name": reference_name,
+        "metadata": metadata or {},
+        "match_threshold": match_threshold,
+        "counts": {
+            "sergeant": len(sergeant),
+            "reference": len(reference),
+            "shared": len(shared),
+            "sergeant_only": len(sergeant_only),
+            "reference_only": len(reference_only),
+        },
+        "overlap_rate": round(len(shared) / overlap_denominator, 3),
+        "shared_findings": [pair.to_dict() for pair in shared],
+        "sergeant_only": [finding.to_dict() for finding in sergeant_only],
+        "reference_only": [finding.to_dict() for finding in reference_only],
+        "adjudication": {
+            "provided": bool(decisions),
+            "complete": adjudication_complete,
+            "sergeant": sergeant_summary,
+            "reference": reference_summary,
+        },
+        "winner": None,
+        "winner_rule": (
+            "No winner is declared from overlap, comment volume, or heuristic matching. "
+            "Confirmed defects, false positives, and missed defects require Judge/human verification."
+        ),
+        "caveats": [
+            "Shared means the reports appear to describe the same issue; it does not prove the issue is valid.",
+            "Unique findings must be verified against the repository before being scored as reviewer advantage.",
+            "Recall cannot be measured until the adjudicated defect set is complete.",
+        ],
+    }
+
+
+def _cell(finding: dict[str, Any]) -> str:
+    location = _text(finding.get("path"))
+    if finding.get("line_start"):
+        location = f"{location}:{finding['line_start']}" if location else f"line {finding['line_start']}"
+    prefix = f"**{location}** — " if location else ""
+    return (prefix + _text(finding.get("message"))).replace("|", "\\|")
+
+
+def render_comparison_markdown(result: dict[str, Any]) -> str:
+    counts = result.get("counts", {})
+    reference_name = _text(result.get("reference_name")) or "Reference reviewer"
+    lines = [
+        "# Sergeant Reviewer Comparison",
+        "",
+        f"| Metric | Sergeant | {reference_name} |",
+        "|---|---:|---:|",
+        f"| Actionable findings | {counts.get('sergeant', 0)} | {counts.get('reference', 0)} |",
+        f"| Shared findings | {counts.get('shared', 0)} | {counts.get('shared', 0)} |",
+        f"| Unique findings | {counts.get('sergeant_only', 0)} | {counts.get('reference_only', 0)} |",
+        "",
+        "## Shared findings",
+        "",
+        f"| Sergeant | {reference_name} | Match |",
+        "|---|---|---:|",
+    ]
+    shared = result.get("shared_findings", [])
+    if shared:
+        for pair in shared:
+            lines.append(
+                f"| {_cell(pair.get('sergeant', {}))} | {_cell(pair.get('reference', {}))} | {float(pair.get('match_score', 0)):.3f} |"
+            )
+    else:
+        lines.append("| _None matched_ | _None matched_ | — |")
+
+    lines.extend(["", "## Unique findings", "", f"| Sergeant only | {reference_name} only |", "|---|---|"])
+    left = list(result.get("sergeant_only", []))
+    right = list(result.get("reference_only", []))
+    for index in range(max(len(left), len(right), 1)):
+        left_cell = _cell(left[index]) if index < len(left) else ""
+        right_cell = _cell(right[index]) if index < len(right) else ""
+        lines.append(f"| {left_cell} | {right_cell} |")
+
+    lines.extend([
+        "",
+        "## Adjudication boundary",
+        "",
+        "No winner is declared until each unique and shared finding is verified against repository evidence.",
+        "Comment volume and textual overlap are not measures of reviewer quality.",
+    ])
+    return "\n".join(lines) + "\n"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="sergeant-compare", description="Compare Sergeant with an external reviewer side by side.")
+    parser.add_argument("--sergeant-packet", required=True)
+    reference = parser.add_mutually_exclusive_group(required=True)
+    reference.add_argument("--reference-review", help="Exported external-review JSON accepted by Sergeant ingestion.")
+    reference.add_argument("--live-repository", help="Repository in owner/name form for a live read-only comparison.")
+    parser.add_argument("--live-pr", type=int)
+    parser.add_argument("--reference-name", default="External reviewer")
+    parser.add_argument("--reference-author", help="GitHub login used to select live reviewer comments.")
+    parser.add_argument("--expected-head-sha")
+    parser.add_argument("--token-env", default="GITHUB_TOKEN")
+    parser.add_argument("--base-url", default="https://api.github.com")
+    parser.add_argument("--allowed-host", action="append", default=[])
+    parser.add_argument("--allow-private", action="store_true")
+    parser.add_argument("--match-threshold", type=float, default=0.45)
+    parser.add_argument("--adjudication")
+    parser.add_argument("--output")
+    parser.add_argument("--markdown-output")
+    parser.add_argument("--pretty", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    sergeant_packet = _load_json(args.sergeant_packet)
+    metadata: dict[str, Any] = {}
+    if args.reference_review:
+        comments = load_external_comments(args.reference_review)
+    else:
+        if not args.live_pr or not args.reference_author:
+            raise ReviewerComparisonError("--live-pr and --reference-author are required with --live-repository.")
+        comments, metadata = load_live_external_comments(
+            args.live_repository,
+            args.live_pr,
+            author=args.reference_author,
+            token=os.getenv(args.token_env),
+            base_url=args.base_url,
+            allowed_hosts=args.allowed_host,
+            allow_private=args.allow_private,
+            expected_head_sha=args.expected_head_sha,
+        )
+    result = compare_reviewer_reports(
+        sergeant_packet,
+        comments,
+        reference_name=args.reference_name,
+        match_threshold=args.match_threshold,
+        adjudication_file=args.adjudication,
+        metadata=metadata,
+    )
+    text = json.dumps(result, indent=2 if args.pretty else None, sort_keys=True) + "\n"
+    markdown = render_comparison_markdown(result)
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text, encoding="utf-8")
+    if args.markdown_output:
+        output = Path(args.markdown_output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(markdown, encoding="utf-8")
+    print(text, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (ReviewerComparisonError, GitHubFetchError) as error:
+        raise SystemExit(f"sergeant-compare: {error}") from error
