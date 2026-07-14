@@ -1,0 +1,34 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "api-contract-without-proof",
+  "title": "Public API route changes without focused tests",
+  "changed_files": ["src/api.py"],
+  "files": [
+    {"path": "pyproject.toml", "content": "[project]\nname='benchmark-case'\nversion='0.0.0'\n"},
+    {"path": "README.md", "content": "# Blind benchmark case\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"},
+    {"path": "src/api.py", "content": "def delete_user(request):\n    return {'deleted': request.params['id']}\n\napp.delete('/users/:id', delete_user)\n"},
+    {"path": "tests/test_existing.py", "content": "def test_existing():\n    assert True\n"}
+  ],
+  "expected_verdict": "REQUEST_CHANGES",
+  "expected_findings": [
+    {
+      "id": "api-contract",
+      "category": "api_contract",
+      "severity": "major",
+      "paths": ["src/api.py"],
+      "line_start": 4,
+      "line_end": 4,
+      "root_cause": "change-impact",
+      "keywords": ["api", "route", "contract", "compatibility"]
+    },
+    {
+      "id": "api-proof-gap",
+      "category": "test_impact",
+      "severity": "major",
+      "paths": [],
+      "root_cause": "proof-gap",
+      "keywords": ["implementation", "changed", "tests", "proof"]
+    }
+  ]
+}
