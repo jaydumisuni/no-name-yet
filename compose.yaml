@@ -1,0 +1,40 @@
+services:
+  sergeant:
+    build:
+      context: .
+    image: sergeant-reviewer:local
+    init: true
+    restart: unless-stopped
+    environment:
+      SERGEANT_SERVICE_TOKEN: ${SERGEANT_SERVICE_TOKEN:?Set SERGEANT_SERVICE_TOKEN to a random value of at least 24 characters}
+      SERGEANT_WEBHOOK_SECRET: ${SERGEANT_WEBHOOK_SECRET:-}
+    command:
+      - --workspace
+      - /workspace
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8765"
+      - --rate-limit
+      - "120"
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./:/workspace:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3)); assert data['status']=='ready'"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

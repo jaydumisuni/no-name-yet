@@ -2,9 +2,9 @@
 
 ## Current status
 
-Sergeant has moved past the original R&D-only state into a working, production-hardened reviewer/proof system.
+Sergeant has moved past the original R&D-only state into a working, production-hardened reviewer/proof system with a first standalone product surface.
 
-Completed foundation and submission sprint:
+Completed foundation and product work:
 
 - Live GitHub read-only fetch
 - CLI integration
@@ -20,6 +20,11 @@ Completed foundation and submission sprint:
 - Cpl council command and verified experience
 - Production safety boundary
 - Full live GitHub API ingestion proof against a real pull request
+- Dependency-free standalone HTTP service
+- Existing Command Center connected to live self-hosted APIs
+- HMAC-verified GitHub webhook intake
+- Installed-wheel Command Center packaging
+- Hardened non-root container and Compose deployment
 - Release proof through PRs where CI and Main Review are green
 
 Current defensible claim:
@@ -28,6 +33,7 @@ Current defensible claim:
 Secret detection is proven with a planted temporary-file positive case.
 GitHub-shaped payload ingestion is verified with fixtures.
 Full live GitHub API ingestion is proven by a real read-only workflow that captures request evidence, repository identity, token-scope assessment, counts, and body hashes while omitting comment bodies.
+Sergeant can run as an authenticated self-hosted service from source, an installed wheel, or a hardened read-only container while preserving the reviewer/no-write authority boundary.
 ```
 
 ## Phase 0 — Research foundation
@@ -195,24 +201,52 @@ Detailed contract: [`36-production-hardening.md`](36-production-hardening.md).
 
 ## Phase 8 — Standalone product path
 
-Status: next major product phase.
+Status: in progress; Phase 8A self-hosted service is implemented and entering proof/release review.
 
-Long-term possibilities:
+### Phase 8A — Self-hosted service
 
-- GitHub App installation and review delivery
-- local CLI distribution
+Implemented:
+
+- dependency-free HTTP service
+- loopback-safe default binding
+- bearer authentication for exposed binding
+- bounded JSON API and rate limiting
+- one configured repository workspace
+- existing Command Center served from the installed package
+- real review, mission, settings, state and report APIs
+- HMAC-verified GitHub webhook intake
+- webhook delivery replay suppression
+- installed-wheel resource proof
+- non-root/read-only/capability-dropped Docker deployment
+- Docker Compose profile
+- source, wheel and container proof workflow
+
+Detailed contract: [`37-standalone-service.md`](37-standalone-service.md).
+
+### Phase 8B — GitHub App delivery
+
+Still required:
+
+- GitHub App installation authentication
+- installation and repository routing
+- isolated read-only collector token service
+- durable webhook delivery queue
+- isolated comment/check poster with least write permission
+- signed audit exports
+- production reverse-proxy deployment
+
+The collector, analyzer, reasoner and poster must remain separate trust zones.
+
+### Later Phase 8 product work
+
 - cloud dashboard
-- self-hosted mode
 - organization rules
 - enterprise/team review memory
+- multi-repository service orchestration
 - signed proof artifacts and audit export
 
 ## Current next step
 
-Sergeant is ready as a hardened supporting trust/proof layer.
+Freeze and prove Phase 8A through normal CI, Main Review, standalone runtime proof, installed-wheel proof, hardened container proof and multiplatform packaging.
 
-The next major phase is product deployment rather than another internal proof rewrite:
-
-```text
-Package the verified reviewer boundary into a standalone GitHub App/self-hosted product while preserving read-only analysis and explicit authority separation.
-```
+After Phase 8A is merged, continue with GitHub App installation and delivery as a separate trust-zone implementation rather than adding write authority to the reviewer runtime.

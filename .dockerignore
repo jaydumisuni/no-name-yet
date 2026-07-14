@@ -1,0 +1,17 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+build
+dist
+node_modules
+adapters
+battle-tests
+docs
+tests
+*.zip
+*.vsix
