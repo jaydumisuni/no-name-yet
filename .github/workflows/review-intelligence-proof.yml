@@ -50,10 +50,18 @@ jobs:
             tests/test_review_benchmark.py \
             tests/test_review_intelligence.py \
             tests/test_review_intelligence_proof.py \
+            tests/test_learning_proof.py \
             tests/test_capability_policy.py \
             tests/test_battle_compare.py \
             tests/test_pr_reviewer.py \
             -q
+
+      - name: Prove verified learning and recurrence handling
+        run: |
+          mkdir -p build
+          python -m main_review.learning_proof \
+            --output build/verified-learning-proof.json \
+            --pretty
 
       - name: Run blind benchmark
         shell: bash
@@ -99,14 +107,12 @@ jobs:
           import os
           from pathlib import Path
 
-          artifacts = list(Path("build").glob("*review-benchmark*.json"))
-          assert artifacts, "No review benchmark artifacts were generated"
-          secrets = [
-              os.getenv("SERGEANT_CPL_API_KEY", ""),
-          ]
+          artifacts = list(Path("build").glob("*.json"))
+          assert artifacts, "No reviewer-intelligence artifacts were generated"
+          values = [os.getenv("SERGEANT_CPL_API_KEY", "")]
           for path in artifacts:
               text = path.read_text(encoding="utf-8", errors="replace")
-              for value in secrets:
+              for value in values:
                   if value:
                       assert value not in text, f"Configured secret leaked into {path}"
           PY
@@ -119,5 +125,6 @@ jobs:
           path: |
             build/review-benchmark-*.json
             build/installed-wheel-review-benchmark.json
+            build/verified-learning-proof.json
             dist/sergeant_reviewer-*.whl
           if-no-files-found: error
