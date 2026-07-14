@@ -22,8 +22,8 @@ def settings(**overrides: object) -> CloudflareGatewaySettings:
         "account_id": "0123456789abcdef0123456789abcdef",
         "api_token": "secret-token",
         "models": (
-            "@cf/openai/gpt-oss-120b",
             "@cf/zai-org/glm-4.7-flash",
+            "@cf/openai/gpt-oss-120b",
         ),
         "host": "127.0.0.1",
         "port": 0,
@@ -111,7 +111,7 @@ def test_cloudflare_route_exposes_full_model_roster() -> None:
 
     assert route.provider == "cloudflare-workers-ai"
     assert route.protocol == "chat_completions"
-    assert route.model == "@cf/openai/gpt-oss-120b"
+    assert route.model == "@cf/zai-org/glm-4.7-flash"
     assert route.discovered_models == settings().models
     assert route.base_url.endswith("/ai/v1")
 
@@ -145,8 +145,8 @@ def test_council_proof_requires_real_model_independence(
             "status": "completed",
             "verdict": "PASS",
             "passes": [
-                {"model": "@cf/openai/gpt-oss-120b"},
                 {"model": "@cf/zai-org/glm-4.7-flash"},
+                {"model": "@cf/openai/gpt-oss-120b"},
             ],
             "errors": [],
             "council": {
@@ -175,7 +175,7 @@ def test_council_proof_requires_real_model_independence(
 def test_council_proof_rejects_single_model_roster(tmp_path: Path) -> None:
     with pytest.raises(CloudflareGatewayError, match="at least two"):
         cloudflare_cli.run_council_proof(
-            settings(models=("@cf/openai/gpt-oss-120b",)),
+            settings(models=("@cf/zai-org/glm-4.7-flash",)),
             root=tmp_path,
             changed_files=["sample.py"],
         )
