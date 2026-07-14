@@ -41,23 +41,18 @@ def test_submission_docs_keep_sergeant_as_reviewer_not_patch_writer() -> None:
     assert "does not execute" in combined or "executes pull-request-controlled code" in combined
 
 
-def test_roadmap_marks_phase_7_complete_and_phase_8a_released() -> None:
-    roadmap = read_doc("docs/08-roadmap.md")
+def test_public_docs_exclude_private_roadmap_and_document_only_implemented_service() -> None:
     standalone = read_doc("docs/37-standalone-service.md")
+    lowered = standalone.lower()
 
-    assert "Current status" in roadmap
-    assert "Live GitHub read-only fetch" in roadmap
-    assert "Full live GitHub API ingestion is proven" in roadmap
-    assert "## Phase 7 — Production hardening" in roadmap
-    assert "Status: complete for the current public reviewer boundary." in roadmap
-    assert "## Phase 8 — Standalone product path" in roadmap
-    assert "Phase 8A self-hosted service is implemented, proven, and merged." in roadmap
-    assert "### Phase 8A — Self-hosted service" in roadmap
-    assert "Status: complete." in roadmap
-    assert "### Phase 8B — GitHub App delivery" in roadmap
-    assert "Status: next active phase." in roadmap
-    assert "Begin Phase 8B with GitHub App installation authentication" in roadmap
-    assert "Do not add GitHub write authority to the standalone reviewer runtime." in roadmap
+    assert not (ROOT / "docs/08-roadmap.md").exists()
+    assert standalone.startswith("# Standalone Self-Hosted Service")
+    assert "Implemented and proven as a public Sergeant deployment surface." in standalone
     assert "dependency-free standalone service" in standalone
     assert "repository writes" in standalone
-    assert "GitHub App installation authentication" in standalone
+    assert "does not automatically fetch code" in standalone
+    assert "not implemented by this service" in standalone
+    assert "private memory-system roadmaps do not belong in the open-source repository" in lowered
+    assert "phase 8a" not in lowered
+    assert "phase 8b" not in lowered
+    assert "next active phase" not in lowered
