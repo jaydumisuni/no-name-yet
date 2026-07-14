@@ -9,7 +9,7 @@ presenting a small OpenAI-compatible surface to Sergeant:
 
 It is intentionally not a general proxy. Model IDs must come from the configured
 roster, the upstream host is fixed to Cloudflare, request sizes are bounded, and
-network binding is loopback-only unless the operator explicitly opts in.
+network binding is always loopback-only in this release.
 """
 from __future__ import annotations
 
@@ -40,6 +40,10 @@ class CloudflareGatewayError(RuntimeError):
     """Raised when Cloudflare gateway configuration or transport fails."""
 
 
+class CloudflareGatewayRequestError(CloudflareGatewayError):
+    """Raised when a local client submits an invalid gateway request."""
+
+
 def _csv(value: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(item.strip() for item in value.split(",") if item.strip()))
 
@@ -68,7 +72,8 @@ def is_loopback_host(host: str) -> bool:
         return ip_address(normalized).is_loopback
     except ValueError:
         try:
-            return all(ip_address(item[4][0]).is_loopback for item in socket.getaddrinfo(host, None))
+            addresses = socket.getaddrinfo(host, None)
+            return bool(addresses) and all(ip_address(item[4][0]).is_loopback for item in addresses)
         except (OSError, ValueError):
             return False
 
@@ -82,7 +87,6 @@ class CloudflareGatewaySettings:
     port: int = DEFAULT_PORT
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES
-    allow_network: bool = False
 
     @classmethod
     def from_environment(
@@ -90,7 +94,6 @@ class CloudflareGatewaySettings:
         *,
         host: str | None = None,
         port: int | None = None,
-        allow_network: bool = False,
     ) -> "CloudflareGatewaySettings":
         account_id = os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", os.getenv("CLOUDFLARE_ACCOUNT_ID", "")).strip()
         api_token = os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", os.getenv("CLOUDFLARE_API_TOKEN", "")).strip()
@@ -108,7 +111,6 @@ class CloudflareGatewaySettings:
                 16_384,
                 8_000_000,
             ),
-            allow_network=allow_network,
         )
 
     @property
@@ -126,8 +128,8 @@ class CloudflareGatewaySettings:
             raise CloudflareGatewayError("At least one Cloudflare model must be configured.")
         if any(not model.startswith("@cf/") for model in self.models):
             raise CloudflareGatewayError("Cloudflare model IDs must begin with '@cf/'.")
-        if not self.allow_network and not is_loopback_host(self.host):
-            raise CloudflareGatewayError("Cloudflare gateway must bind to loopback unless --allow-network is explicit.")
+        if not is_loopback_host(self.host):
+            raise CloudflareGatewayError("Cloudflare gateway is loopback-only in this release.")
 
     def public_dict(self) -> dict[str, Any]:
         return {
@@ -139,7 +141,7 @@ class CloudflareGatewaySettings:
             "host": self.host,
             "port": self.port,
             "base_url": f"http://{self.host}:{self.port}/v1",
-            "loopback_only": not self.allow_network,
+            "loopback_only": True,
             "timeout_seconds": self.timeout_seconds,
             "max_request_bytes": self.max_request_bytes,
         }
@@ -149,13 +151,18 @@ def _json_bytes(payload: object) -> bytes:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
-def _cloudflare_request(settings: CloudflareGatewaySettings, payload: dict[str, Any]) -> tuple[int, bytes]:
+def _validate_chat_payload(settings: CloudflareGatewaySettings, payload: dict[str, Any]) -> None:
     model = str(payload.get("model") or "").strip()
     if model not in settings.models:
-        raise CloudflareGatewayError(f"Model is not in the configured Cloudflare roster: {model!r}")
+        raise CloudflareGatewayRequestError(f"Model is not in the configured Cloudflare roster: {model!r}")
     if payload.get("stream") is True:
-        raise CloudflareGatewayError("Streaming is not enabled in the first Cloudflare gateway release.")
+        raise CloudflareGatewayRequestError("Streaming is not enabled in the first Cloudflare gateway release.")
+    if not isinstance(payload.get("messages"), list) or not payload["messages"]:
+        raise CloudflareGatewayRequestError("A non-empty OpenAI-compatible messages array is required.")
 
+
+def _cloudflare_request(settings: CloudflareGatewaySettings, payload: dict[str, Any]) -> tuple[int, bytes]:
+    _validate_chat_payload(settings, payload)
     request = urllib.request.Request(
         settings.upstream_chat_url,
         data=_json_bytes(payload),
@@ -234,6 +241,9 @@ def make_handler(settings: CloudflareGatewaySettings) -> type[BaseHTTPRequestHan
                 return
             try:
                 status, body = _cloudflare_request(settings, payload)
+            except CloudflareGatewayRequestError as error:
+                self._send(400, {"error": {"message": str(error)}})
+                return
             except CloudflareGatewayError as error:
                 self._send(502, {"error": {"message": str(error)}})
                 return
