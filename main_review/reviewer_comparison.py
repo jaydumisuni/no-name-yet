@@ -1,8 +1,8 @@
 """Evidence-first side-by-side comparison of Sergeant and an external reviewer.
 
-The comparator does not declare a winner from comment volume or unsupported
-heuristics. It normalizes both reports, matches equivalent findings, preserves
-unique findings, and optionally attaches explicit human/Judge adjudication.
+The comparator never declares a winner from comment volume or heuristic
+matching. It preserves both reports, matches likely-equivalent findings, and
+requires explicit repository-backed adjudication before quality claims.
 """
 from __future__ import annotations
 
@@ -26,9 +26,25 @@ _ALLOWED_SEVERITIES = {"blocker", "major", "minor"}
 _TOKEN_RE = re.compile(r"[a-z0-9_]+", re.I)
 _HEADING_RE = re.compile(r"^\s*(?:#+\s*)?(?:\[[^]]+\]\s*)?(.*)$")
 _BOLD_RE = re.compile(r"^\*\*(.+?)\*\*\s*$")
-_CODERABBIT_META_RE = re.compile(
-    r"^_?(?:[^|]*functional correctness|[^|]*security|[^|]*testing|[^|]*performance|[^|]*documentation)?_?\s*\|\s*_?[^|]*(?:minor|major|critical|nitpick)[^|]*_?",
-    re.I,
+_METADATA_CATEGORY_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("security", ("security",)),
+    ("correctness", ("functional correctness", "correctness")),
+    ("concurrency", ("concurrency",)),
+    ("performance", ("performance",)),
+    ("api_contract", ("api contract",)),
+    ("architecture", ("architecture",)),
+    ("testing", ("testing", "tests")),
+    ("documentation", ("documentation",)),
+)
+_CATEGORY_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("security", ("security", "auth", "authorization", "credential", "secret", "injection", "traversal")),
+    ("correctness", ("incorrect", "bug", "broken", "wrong", "exception", "failure")),
+    ("concurrency", ("race", "concurrent", "async", "thread", "lock")),
+    ("performance", ("performance", "slow", "latency", "complexity", "memory")),
+    ("api_contract", ("api", "contract", "schema", "compatibility", "route")),
+    ("architecture", ("architecture", "boundary", "coupling", "dependency", "layer")),
+    ("testing", ("test", "coverage", "regression proof")),
+    ("documentation", ("documentation", "readme", "docstring")),
 )
 
 
@@ -83,8 +99,19 @@ def _text(value: object) -> str:
 
 
 def _stable_id(prefix: str, *values: object) -> str:
-    digest = hashlib.sha256("\x1f".join(_text(value) for value in values).encode("utf-8")).hexdigest()[:16]
-    return f"{prefix}-{digest}"
+    material = "\x1f".join(_text(value) for value in values)
+    return f"{prefix}-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _marker_pattern(marker: str) -> re.Pattern[str]:
+    escaped = re.escape(marker)
+    prefix = r"\b" if marker and marker[0].isalnum() else ""
+    suffix = r"\b" if marker and marker[-1].isalnum() else ""
+    return re.compile(prefix + escaped + suffix, re.I)
+
+
+def _contains_marker(text: str, markers: Iterable[str]) -> bool:
+    return any(_marker_pattern(marker).search(text) for marker in markers)
 
 
 def _tokens(*values: object) -> set[str]:
@@ -100,63 +127,60 @@ def _tokens(*values: object) -> set[str]:
     }
 
 
-def _marker_pattern(marker: str) -> re.Pattern[str]:
-    escaped = re.escape(marker)
-    prefix = r"\b" if marker and marker[0].isalnum() else ""
-    suffix = r"\b" if marker and marker[-1].isalnum() else ""
-    return re.compile(prefix + escaped + suffix, re.I)
+def _coderabbit_header(body: str) -> tuple[FindingSeverity | None, str | None, bool]:
+    """Read a CodeRabbit-style metadata banner using bounded markers.
 
+    The boolean indicates whether a metadata banner was actually recognized;
+    this prevents ordinary prose in the first lines from becoming metadata.
+    """
 
-def _contains_marker(text: str, markers: Iterable[str]) -> bool:
-    return any(_marker_pattern(marker).search(text) for marker in markers)
+    lines = [line.strip() for line in body.splitlines()[:4] if line.strip()]
+    header = "\n".join(lines)
+    looks_like_metadata = bool(
+        any("|" in line for line in lines)
+        and (
+            _contains_marker(header, ("minor", "major", "critical", "nitpick"))
+            or any(symbol in header for symbol in ("🔵", "🟡", "🟠", "🔴"))
+        )
+    )
+    if not looks_like_metadata:
+        return None, None, False
 
-
-def _coderabbit_header(body: str) -> tuple[FindingSeverity | None, str | None]:
-    """Read CodeRabbit-style metadata without allowing examples in the body to override it."""
-
-    header = "\n".join(body.splitlines()[:4]).lower()
-    severity: FindingSeverity | None = None
-    if "nitpick" in header or "🔵" in header:
-        return None, None
-    if "critical" in header or "blocker" in header or "🔴" in header:
+    if _contains_marker(header, ("nitpick",)) or "🔵" in header:
+        severity: FindingSeverity | None = None
+    elif _contains_marker(header, ("critical", "blocker")) or "🔴" in header:
         severity = "blocker"
-    elif "major" in header or "🟠" in header:
+    elif _contains_marker(header, ("major",)) or "🟠" in header:
         severity = "major"
-    elif "minor" in header or "🟡" in header:
+    else:
         severity = "minor"
 
-    category: str | None = None
-    categories = (
-        ("security", ("security",)),
-        ("correctness", ("functional correctness", "correctness")),
-        ("concurrency", ("concurrency",)),
-        ("performance", ("performance",)),
-        ("api_contract", ("api contract",)),
-        ("architecture", ("architecture",)),
-        ("testing", ("testing", "tests")),
-        ("documentation", ("documentation",)),
+    category = next(
+        (name for name, markers in _METADATA_CATEGORY_MARKERS if _contains_marker(header, markers)),
+        None,
     )
-    for name, markers in categories:
-        if _contains_marker(header, markers):
-            category = name
-            break
-    return severity, category
+    return severity, category, True
+
+
+def _metadata_line(line: str) -> bool:
+    severity, category, recognized = _coderabbit_header(line)
+    return recognized and (severity is not None or category is not None or _contains_marker(line, ("nitpick",)))
 
 
 def _first_message_line(body: str) -> str:
-    """Return the actual finding title rather than a reviewer metadata banner."""
+    """Return the actual issue title rather than reviewer metadata or HTML."""
 
     fallback: str | None = None
     for raw in body.splitlines():
         line = raw.strip()
-        if not line or line.startswith(("<!--", "<details", "</details", "```")):
+        if not line or line.startswith(("<!--", "<details", "</details", "```", ">")):
             continue
-        if _CODERABBIT_META_RE.search(line):
+        if _metadata_line(line):
             continue
         bold = _BOLD_RE.match(line)
         if bold:
             return bold.group(1).strip()[:400]
-        if line.startswith((">", "<summary>", "<!--")):
+        if line.startswith("<summary>"):
             continue
         match = _HEADING_RE.match(line)
         value = _text(match.group(1) if match else line).strip("_*")
@@ -172,9 +196,8 @@ def _first_message_line(body: str) -> str:
 
 
 def _infer_severity(body: str) -> FindingSeverity | None:
-    explicit, _ = _coderabbit_header(body)
-    header = "\n".join(body.splitlines()[:4])
-    if explicit is not None or _contains_marker(header, ("nitpick", "nit:")):
+    explicit, _, recognized = _coderabbit_header(body)
+    if recognized:
         return explicit
 
     lowered = body.lower()
@@ -188,22 +211,14 @@ def _infer_severity(body: str) -> FindingSeverity | None:
 
 
 def _infer_category(body: str, tags: Iterable[str] = ()) -> str:
-    _, explicit = _coderabbit_header(body)
-    if explicit:
+    _, explicit, recognized = _coderabbit_header(body)
+    if recognized and explicit:
         return explicit
-
     text = " ".join([body, *tags]).lower()
-    categories = (
-        ("security", ("security", "auth", "authorization", "credential", "secret", "injection", "traversal")),
-        ("correctness", ("incorrect", "bug", "broken", "wrong", "exception", "failure")),
-        ("concurrency", ("race", "concurrent", "async", "thread", "lock")),
-        ("performance", ("performance", "slow", "latency", "complexity", "memory")),
-        ("api_contract", ("api", "contract", "schema", "compatibility", "route")),
-        ("architecture", ("architecture", "boundary", "coupling", "dependency", "layer")),
-        ("testing", ("test", "coverage", "regression proof")),
-        ("documentation", ("documentation", "readme", "docstring")),
+    return next(
+        (name for name, markers in _CATEGORY_MARKERS if _contains_marker(text, markers)),
+        "other",
     )
-    return next((name for name, markers in categories if _contains_marker(text, markers)), "other")
 
 
 def _normalized_author(value: object) -> str:
@@ -243,7 +258,10 @@ def _sergeant_sources(packet: dict[str, Any]) -> list[tuple[str, dict[str, Any]]
     return sources
 
 
-def extract_sergeant_findings(packet: dict[str, Any], reviewer_name: str = "Sergeant") -> list[ComparisonFinding]:
+def extract_sergeant_findings(
+    packet: dict[str, Any],
+    reviewer_name: str = "Sergeant",
+) -> list[ComparisonFinding]:
     """Extract actionable findings from every Sergeant verdict-bearing layer."""
 
     findings: list[ComparisonFinding] = []
@@ -255,6 +273,7 @@ def extract_sergeant_findings(packet: dict[str, Any], reviewer_name: str = "Serg
         challenge = _text(row.get("challenge_result"))
         if severity in {"blocker", "major"} and challenge and not challenge.startswith("survived:"):
             continue
+
         category = _text(row.get("capability") or row.get("category")) or "other"
         message = _text(row.get("message")) or "Sergeant finding"
         evidence = _text(row.get("evidence"))
@@ -265,6 +284,7 @@ def extract_sergeant_findings(packet: dict[str, Any], reviewer_name: str = "Serg
         if key in seen:
             continue
         seen.add(key)
+
         finding_id = _text(row.get("finding_id")) or _stable_id(
             "sergeant", source, category, path, line_start, message
         )
@@ -289,7 +309,7 @@ def extract_external_findings(
     comments: Iterable[ExternalReviewComment],
     reviewer_name: str,
 ) -> list[ComparisonFinding]:
-    """Normalize actionable external comments without treating summaries as defects."""
+    """Normalize actionable external comments without counting summaries/nitpicks."""
 
     findings: list[ComparisonFinding] = []
     seen: set[tuple[object, ...]] = set()
@@ -301,9 +321,11 @@ def extract_external_findings(
         if severity is None:
             continue
         if not comment.path and not _contains_marker(
-            body.lower(), ("potential issue", "bug", "critical", "blocker", "security vulnerability")
+            body.lower(),
+            ("potential issue", "bug", "critical", "blocker", "security vulnerability"),
         ):
             continue
+
         message = _first_message_line(body)
         category = _infer_category(body, comment.tags)
         key = (message.lower(), comment.path, comment.line, category)
@@ -339,7 +361,7 @@ def load_live_external_comments(
     allow_private: bool = False,
     expected_head_sha: str | None = None,
 ) -> tuple[list[ExternalReviewComment], dict[str, Any]]:
-    """Fetch one external reviewer's comments from a frozen PR head."""
+    """Fetch one reviewer's comments while enforcing a frozen pull-request head."""
 
     result = fetch_pr_comments_live(
         repository,
@@ -378,6 +400,7 @@ def load_live_external_comments(
             author=login or author,
             url=_text(item.get("html_url")) or None,
         ))
+
     metadata = {
         "repository": repository,
         "pr_number": pr_number,
@@ -392,7 +415,11 @@ def load_live_external_comments(
 
 
 def _path_match(left: ComparisonFinding, right: ComparisonFinding) -> bool:
-    return bool(left.path and right.path and left.path.replace("\\", "/") == right.path.replace("\\", "/"))
+    return bool(
+        left.path
+        and right.path
+        and left.path.replace("\\", "/") == right.path.replace("\\", "/")
+    )
 
 
 def _line_match(left: ComparisonFinding, right: ComparisonFinding) -> bool | None:
@@ -411,7 +438,10 @@ def _token_overlap(left: ComparisonFinding, right: ComparisonFinding) -> float:
     return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
 
 
-def finding_match_score(left: ComparisonFinding, right: ComparisonFinding) -> tuple[float, bool, bool | None, bool, float]:
+def finding_match_score(
+    left: ComparisonFinding,
+    right: ComparisonFinding,
+) -> tuple[float, bool, bool | None, bool, float]:
     path_match = _path_match(left, right)
     line_match = _line_match(left, right)
     category_match = (
@@ -435,7 +465,7 @@ def match_findings(
     *,
     threshold: float = 0.45,
 ) -> tuple[list[FindingPair], list[ComparisonFinding], list[ComparisonFinding]]:
-    """Greedily match equivalent findings while preserving both unique sets."""
+    """Greedily match likely-equivalent findings and preserve both unique sets."""
 
     available = set(range(len(reference)))
     pairs: list[FindingPair] = []
@@ -460,8 +490,7 @@ def match_findings(
             category_match=category_match,
             token_overlap=overlap,
         ))
-    unmatched_reference = [reference[index] for index in sorted(available)]
-    return pairs, unmatched_sergeant, unmatched_reference
+    return pairs, unmatched_sergeant, [reference[index] for index in sorted(available)]
 
 
 def _load_json(path: str | Path) -> dict[str, Any]:
@@ -478,8 +507,9 @@ def _load_decisions(path: str | Path | None) -> dict[tuple[str, str], DecisionSt
     rows = payload.get("decisions", [])
     if not isinstance(rows, list):
         raise ReviewerComparisonError("adjudication decisions must be a list.")
-    decisions: dict[tuple[str, str], DecisionStatus] = {}
+
     allowed = {"confirmed", "suggestion", "false_positive", "duplicate", "uncertain"}
+    decisions: dict[tuple[str, str], DecisionStatus] = {}
     for item in rows:
         if not isinstance(item, dict):
             continue
@@ -521,11 +551,15 @@ def compare_reviewer_reports(
     adjudication_file: str | Path | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a side-by-side comparison without inventing ground truth."""
+    """Build a side-by-side report without inventing ground truth or a winner."""
 
     sergeant = extract_sergeant_findings(sergeant_packet)
     reference = extract_external_findings(reference_comments, reference_name)
-    shared, sergeant_only, reference_only = match_findings(sergeant, reference, threshold=match_threshold)
+    shared, sergeant_only, reference_only = match_findings(
+        sergeant,
+        reference,
+        threshold=match_threshold,
+    )
     decisions = _load_decisions(adjudication_file)
     sergeant_summary = _adjudication_summary(sergeant, decisions)
     reference_summary = _adjudication_summary(reference, decisions)
@@ -564,9 +598,9 @@ def compare_reviewer_reports(
             "Confirmed defects, false positives, and missed defects require Judge/human verification."
         ),
         "caveats": [
-            "Shared means the reports appear to describe the same issue; it does not prove the issue is valid.",
-            "Unique findings must be verified against the repository before being scored as reviewer advantage.",
-            "Recall cannot be measured until the adjudicated defect set is complete.",
+            "Shared means the reports appear to describe the same issue; it does not prove validity.",
+            "Unique findings require repository verification before being scored as reviewer advantage.",
+            "Recall is undefined until the complete verified defect set is known.",
         ],
     }
 
@@ -627,7 +661,7 @@ def render_comparison_markdown(result: dict[str, Any]) -> str:
         "",
         "## Adjudication boundary",
         "",
-        "No winner is declared until each unique and shared finding is verified against repository evidence.",
+        "No winner is declared until each shared and unique finding is verified against repository evidence.",
         "Comment volume and textual overlap are not measures of reviewer quality.",
     ])
     return "\n".join(lines) + "\n"
@@ -640,11 +674,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--sergeant-packet", required=True)
     reference = parser.add_mutually_exclusive_group(required=True)
-    reference.add_argument("--reference-review", help="Exported external-review JSON accepted by Sergeant ingestion.")
-    reference.add_argument("--live-repository", help="Repository in owner/name form for a live read-only comparison.")
+    reference.add_argument("--reference-review")
+    reference.add_argument("--live-repository")
     parser.add_argument("--live-pr", type=int)
     parser.add_argument("--reference-name", default="External reviewer")
-    parser.add_argument("--reference-author", help="GitHub login used to select live reviewer comments.")
+    parser.add_argument("--reference-author")
     parser.add_argument("--expected-head-sha")
     parser.add_argument("--token-env", default="GITHUB_TOKEN")
     parser.add_argument("--base-url", default="https://api.github.com")
@@ -666,7 +700,9 @@ def _run(argv: list[str] | None = None) -> int:
         comments = load_external_comments(args.reference_review)
     else:
         if not args.live_pr or not args.reference_author:
-            raise ReviewerComparisonError("--live-pr and --reference-author are required with --live-repository.")
+            raise ReviewerComparisonError(
+                "--live-pr and --reference-author are required with --live-repository."
+            )
         comments, metadata = load_live_external_comments(
             args.live_repository,
             args.live_pr,
@@ -677,6 +713,7 @@ def _run(argv: list[str] | None = None) -> int:
             allow_private=args.allow_private,
             expected_head_sha=args.expected_head_sha,
         )
+
     result = compare_reviewer_reports(
         sergeant_packet,
         comments,
