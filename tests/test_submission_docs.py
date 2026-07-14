@@ -53,6 +53,6 @@ def test_roadmap_marks_phase_7_complete_and_phase_8a_implemented() -> None:
     assert "## Phase 8 — Standalone product path" in roadmap
     assert "Phase 8A self-hosted service is implemented" in roadmap
     assert "### Phase 8B — GitHub App delivery" in roadmap
-    assert "dependency-free HTTP service" in standalone
+    assert "dependency-free standalone service" in standalone
     assert "repository writes" in standalone
     assert "GitHub App installation authentication" in standalone
