@@ -1,0 +1,36 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "privileged-route-without-authorization",
+  "title": "Administrative route has no visible authorization guard",
+  "changed_files": ["src/admin_api.py", "tests/test_admin_api.py"],
+  "files": [
+    {"path": "pyproject.toml", "content": "[project]\nname='benchmark-case'\nversion='0.0.0'\n"},
+    {"path": "README.md", "content": "# Blind benchmark case\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"},
+    {"path": "src/admin_api.py", "content": "def delete_user(request):\n    return {'deleted': request.params['id']}\n\napp.delete('/admin/users/:id', delete_user)\n"},
+    {"path": "tests/test_admin_api.py", "content": "from src.admin_api import delete_user\n\ndef test_route_symbol_exists():\n    assert delete_user\n"}
+  ],
+  "expected_verdict": "REQUEST_CHANGES",
+  "expected_findings": [
+    {
+      "id": "authorization-gap",
+      "category": "security_taint",
+      "severity": "major",
+      "paths": ["src/admin_api.py"],
+      "line_start": 4,
+      "line_end": 4,
+      "root_cause": "authorization-gap",
+      "keywords": ["privileged", "route", "authorization", "guard"]
+    },
+    {
+      "id": "admin-api-contract",
+      "category": "api_contract",
+      "severity": "minor",
+      "paths": ["src/admin_api.py"],
+      "line_start": 4,
+      "line_end": 4,
+      "root_cause": "change-impact",
+      "keywords": ["api", "route", "contract", "coverage"]
+    }
+  ]
+}
