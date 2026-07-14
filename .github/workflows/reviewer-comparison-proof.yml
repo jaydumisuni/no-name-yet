@@ -1,0 +1,55 @@
+name: Reviewer Comparison Proof
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  reviewer-comparison-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install source package
+        run: |
+          python -m pip install --upgrade pip pytest build
+          python -m pip install -e .
+
+      - name: Run comparison tests
+        run: python -m pytest tests/test_reviewer_comparison.py -q
+
+      - name: Prove source command
+        run: sergeant-compare --help
+
+      - name: Build wheel
+        run: python -m build --wheel
+
+      - name: Prove installed wheel command outside source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv build/reviewer-comparison-venv
+          build/reviewer-comparison-venv/bin/python -m pip install --upgrade pip
+          build/reviewer-comparison-venv/bin/python -m pip install dist/sergeant_reviewer-*.whl
+          cd /tmp
+          "$GITHUB_WORKSPACE/build/reviewer-comparison-venv/bin/sergeant-compare" --help
+
+      - name: Upload comparison proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: reviewer-comparison-proof
+          path: dist/sergeant_reviewer-*.whl
+          if-no-files-found: error
