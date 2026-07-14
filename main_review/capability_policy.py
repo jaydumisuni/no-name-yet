@@ -4,7 +4,6 @@ Capability scanners intentionally over-collect signals. This policy layer
 separates blast radius and lexical co-presence from demonstrated defects before
 those findings enter review intelligence and consensus.
 """
-
 from __future__ import annotations
 
 import re
@@ -34,6 +33,31 @@ def _safe_text(root: Path | None, relative: object) -> str:
         return ""
 
 
+def _is_test_path(relative: str) -> bool:
+    path = Path(relative)
+    lowered = relative.lower()
+    return (
+        lowered.startswith(("tests/", "test/"))
+        or path.name.lower().startswith("test_")
+        or path.name.lower().endswith(("_test.py", ".test.js", ".test.ts", ".spec.js", ".spec.ts"))
+    )
+
+
+def _changed_test_covering_target(root: Path | None, changed_files: list[object], target: object) -> str:
+    if root is None or not isinstance(target, str) or not target:
+        return ""
+    target_path = Path(target)
+    target_stem = target_path.stem.lower()
+    module_name = target.removesuffix(target_path.suffix).replace("/", ".").replace("\\", ".").lower()
+    for item in changed_files:
+        if not isinstance(item, str) or not _is_test_path(item):
+            continue
+        text = _safe_text(root, item).lower()
+        if text and (module_name in text or target_stem in text):
+            return item
+    return ""
+
+
 def normalize_capability_review(
     packet: dict[str, Any],
     root: str | Path | None = None,
@@ -43,6 +67,8 @@ def normalize_capability_review(
     normalized = deepcopy(packet)
     raw_findings = normalized.get("findings", [])
     findings = raw_findings if isinstance(raw_findings, list) else []
+    changed_files = normalized.get("changed_files", [])
+    changed_files = changed_files if isinstance(changed_files, list) else []
     adjustments: list[dict[str, object]] = []
     root_path = Path(root) if root is not None else None
 
@@ -65,6 +91,25 @@ def normalize_capability_review(
             finding["severity"] = "minor"
             finding["impact_signal"] = True
             continue
+
+        if capability == "regression" and severity in {"blocker", "major"}:
+            coverage_path = _changed_test_covering_target(root_path, changed_files, finding.get("path"))
+            if coverage_path:
+                adjustments.append(
+                    {
+                        "capability": capability,
+                        "path": finding.get("path"),
+                        "from": severity,
+                        "to": "minor",
+                        "coverage_path": coverage_path,
+                        "reason": "Blast radius remains review evidence, but the same change set includes focused changed-test coverage for the target module.",
+                    }
+                )
+                finding["severity"] = "minor"
+                finding["impact_signal"] = True
+                finding["test_coverage_path"] = coverage_path
+                finding["evidence"] = f"{finding.get('evidence', '')} Focused changed-test coverage: {coverage_path}.".strip()
+                continue
 
         if capability == "security_taint" and severity in {"blocker", "major"}:
             text = _safe_text(root_path, finding.get("path"))

@@ -6,19 +6,21 @@ It can be used inside THETECHGUY/Hunter, but private project rules, private memo
 
 ## Public-safe capability
 
-`main_review/github_live_fetch.py` adds read-only live GitHub PR comment fetching.
+`main_review/github_live_fetch.py` provides production-hardened, read-only GitHub pull-request evidence ingestion.
 
 It is intentionally separate from `github_collector.py`:
 
 - `github_collector.py` stays a pure parser.
-- `github_live_fetch.py` is the only built-in module that performs GitHub network fetches.
+- `github_live_fetch.py` is the only built-in module that performs GitHub PR comment network fetches.
+- `github_diff_fetch.py` reuses the same validated host, identity, and pagination boundary for PR file patches.
 
 ## Security boundary
 
 Allowed:
 
-- read-only public API fetch
-- optional read-only token
+- GET-only public API fetch
+- optional read-only token from an environment variable
+- explicitly allowlisted GitHub Enterprise API host
 - static review
 - external evidence ingestion
 - verified learning from human outcomes
@@ -27,25 +29,45 @@ Refused:
 
 - running pull-request supplied project code during review
 - running shell commands from PR content
-- using write tokens during analysis
+- using advertised write-capable classic token scopes
+- arbitrary API hosts, ports, paths, redirects, or pagination targets
+- private repository evidence unless explicitly enabled locally
 - silently converting fetch failures into empty comments
 - writing patches as part of review
+- exposing comment bodies in shareable proof artifacts
 
 ## CLI
 
 ```bash
-main-review live-github-comments jaydumisuni/Sergeant 1 --pretty
+export GITHUB_TOKEN=<read-only-token>
+main-review live-github-comments jaydumisuni/Sergeant 77 \
+  --token-env GITHUB_TOKEN \
+  --proof-only \
+  --proof-output build/live-github-proof.json \
+  --pretty
+
 main-review boundary run_untrusted_code --pretty
 main-review visibility-policy --pretty
 ```
 
-## Honest testing claim
+Tokens are read from environment variables rather than command-line values.
 
-Secret detection is proven by a planted temp-file positive case.
+## Proven testing claim
 
-GitHub PR ingestion now has two layers:
+Secret detection is proven by a planted temporary-file positive case.
 
-1. network-free payload parsing through `github_collector.py`
-2. optional read-only live API fetching through `github_live_fetch.py`
+GitHub PR ingestion has three proof layers:
 
-CI tests mock the live network layer because real GitHub calls are rate-limit and network dependent.
+1. network-free payload parsing through `github_collector.py`;
+2. adversarial mocked transport tests for host, identity, pagination, token-scope, redaction, redirect, and private-boundary behavior;
+3. a real read-only GitHub Actions workflow that fetches the triggering pull request's metadata, issue comments, and review comments.
+
+The workflow is:
+
+```text
+.github/workflows/live-github-ingestion-proof.yml
+```
+
+It uploads a sanitized artifact containing request evidence, pull-request identity, counts, SHA-256 body hashes, token-scope assessment, and proof claims. It does not upload comment bodies or credentials.
+
+Full details: [`36-production-hardening.md`](36-production-hardening.md).

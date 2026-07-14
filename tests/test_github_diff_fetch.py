@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from main_review.github_diff_fetch import fetch_pr_diff_live
@@ -11,26 +13,34 @@ def test_fetch_pr_diff_live_rejects_bad_repository():
         fetch_pr_diff_live("badrepo", 12)
 
 
-def test_fetch_pr_diff_live_parses_metadata_and_files(monkeypatch):
+def test_fetch_pr_diff_live_parses_verified_metadata_and_paginated_files(monkeypatch):
     calls: list[str] = []
 
-    def fake_get_json(url: str, token: str | None):
+    def fake_request_json(url: str, token: str | None, **kwargs):
         calls.append(url)
-        if url.endswith("/pulls/12"):
-            return {"base": {"sha": "base123"}, "head": {"sha": "head456"}}
-        if url.endswith("/pulls/12/files?per_page=100"):
-            return [
-                {
-                    "filename": "src/app.py",
-                    "status": "modified",
-                    "patch": "@@ -1 +1 @@\n-old\n+new",
-                    "additions": 1,
-                    "deletions": 1,
-                }
-            ]
-        raise AssertionError(url)
+        return SimpleNamespace(
+            payload={
+                "number": 12,
+                "state": "open",
+                "base": {"ref": "main", "sha": "base123", "repo": {"full_name": "owner/repo", "private": False}},
+                "head": {"ref": "feature", "sha": "head456", "repo": {"full_name": "fork/repo", "private": False}},
+            },
+            headers={},
+            status=200,
+        )
 
-    monkeypatch.setattr("main_review.github_diff_fetch._get_json", fake_get_json)
+    def fake_fetch_pages(first_url: str, token: str | None, **kwargs):
+        calls.append(first_url)
+        return ([{
+            "filename": "src/app.py",
+            "status": "modified",
+            "patch": "@@ -1 +1 @@\n-old\n+new",
+            "additions": 1,
+            "deletions": 1,
+        }], [{"method": "GET", "url": first_url, "status": 200, "page": 1, "item_count": 1}], [{}])
+
+    monkeypatch.setattr("main_review.github_diff_fetch._request_json", fake_request_json)
+    monkeypatch.setattr("main_review.github_diff_fetch._fetch_pages", fake_fetch_pages)
 
     result = fetch_pr_diff_live("owner/repo", 12, token="token")
 
@@ -41,3 +51,4 @@ def test_fetch_pr_diff_live_parses_metadata_and_files(monkeypatch):
     assert result.files[0].filename == "src/app.py"
     assert result.files[0].patch.startswith("@@")
     assert len(calls) == 2
+    assert all(item["method"] == "GET" for item in result.request_evidence)

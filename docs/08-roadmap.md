@@ -2,29 +2,32 @@
 
 ## Current status
 
-Sergeant has moved past the original R&D-only state into a working reviewer/proof system.
+Sergeant has moved past the original R&D-only state into a working, production-hardened reviewer/proof system.
 
-Completed submission sprint:
+Completed foundation and submission sprint:
 
 - Live GitHub read-only fetch
 - CLI integration
 - App Bridge integration
 - IDE Bench contract for VS Code, JetBrains, and AI handoff
-- Mocked tests
+- Mocked and adversarial tests
 - CI proof
 - Clean-clone proof
 - Battle-test framework
 - Requests benchmark
 - Flask architecture benchmark
 - Battle-test validator
-- Release proof through PR where CI and Main Review are green
+- Cpl council command and verified experience
+- Production safety boundary
+- Full live GitHub API ingestion proof against a real pull request
+- Release proof through PRs where CI and Main Review are green
 
-Important claim correction:
+Current defensible claim:
 
 ```text
-Secret detection is genuinely proven with a planted temp-file positive case.
-GitHub PR comment payload ingestion is verified with GitHub-shaped fixtures.
-Full live GitHub API ingestion remains the next proof step before making the strongest live-ingestion claim.
+Secret detection is proven with a planted temporary-file positive case.
+GitHub-shaped payload ingestion is verified with fixtures.
+Full live GitHub API ingestion is proven by a real read-only workflow that captures request evidence, repository identity, token-scope assessment, counts, and body hashes while omitting comment bodies.
 ```
 
 ## Phase 0 — Research foundation
@@ -52,7 +55,7 @@ Outputs:
 
 ## Phase 1 — Minimal local reviewer
 
-Status: complete for current submission scope.
+Status: complete.
 
 Goal: run locally against a repository or diff and produce a verdict.
 
@@ -77,29 +80,30 @@ No automatic editing.
 
 ## Phase 2 — GitHub PR reviewer
 
-Status: partial / proof-gated.
+Status: read-only ingestion complete; write-side GitHub App delivery remains a future product path.
 
-Goal: run on GitHub pull requests safely.
+Implemented capabilities:
 
-Capabilities:
-
-- read-only PR collector
-- live GitHub read-only fetch support
+- read-only PR metadata and comment collector
+- verified live GitHub API fetch
 - PR comment payload ingestion
+- repository and PR identity checks
 - no analysis write token
 - no untrusted code execution
-- base-branch policy only
+- base-repository policy
+- bounded same-host pagination
+- sanitized proof artifact
 
 Proof boundary:
 
 ```text
 GitHub-shaped payload ingestion is verified.
-Full live API ingestion requires captured token/network evidence before being claimed as fully proven.
+A real GitHub Actions run has captured live metadata, issue-comment, and review-comment requests with read-only permissions and body-free proof output.
 ```
 
 ## Phase 3 — Evidence providers
 
-Status: started through evidence consensus and battle-test validator.
+Status: implemented baseline through evidence consensus and battle-test validator.
 
 Evidence direction:
 
@@ -117,11 +121,11 @@ Future optional providers:
 - dependency scanner
 - test result importer
 
-All providers must be sandbox-aware.
+All providers must remain sandbox-aware.
 
 ## Phase 4 — Project memory / verified learning
 
-Status: implemented for current verified-learning path.
+Status: implemented for canonical lessons plus Cpl/officer/model/weapon experience.
 
 Review memory direction:
 
@@ -131,6 +135,7 @@ Review memory direction:
 - architecture lessons
 - known safe/unsafe paths
 - accepted corrections
+- model and weapon service records
 
 This is where Sergeant becomes stronger than generic reviewers.
 
@@ -168,36 +173,46 @@ Reason:
 
 ## Phase 7 — Production hardening
 
-Status: next major phase.
+Status: complete for the current public reviewer boundary.
 
-Add:
+Implemented and proven:
 
-- sandbox enforcement
-- permission tests
+- fail-closed action allowlist
+- repository path and symlink sandbox enforcement
+- bounded changed-file and time-budget input
+- public/elevated permission profiles
+- write, shell, and untrusted-code refusal
 - token-scope tests
-- policy-change tests
-- PR spoofing tests
-- malicious config tests
-- public/private leak tests
+- policy-change and malformed-config tests
+- PR repository/number spoofing tests
+- private-repository default refusal
+- SSRF, port, redirect, and pagination protection
+- public/private and credential leak controls
+- temporary patch-workspace containment
 - full live GitHub API ingestion proof
+
+Detailed contract: [`36-production-hardening.md`](36-production-hardening.md).
 
 ## Phase 8 — Standalone product path
 
-Long-term possibility:
+Status: next major product phase.
 
-- GitHub App
-- local CLI
+Long-term possibilities:
+
+- GitHub App installation and review delivery
+- local CLI distribution
 - cloud dashboard
 - self-hosted mode
 - organization rules
 - enterprise/team review memory
+- signed proof artifacts and audit export
 
 ## Current next step
 
-For hackathon use, Sergeant is ready as a supporting trust/proof layer.
+Sergeant is ready as a hardened supporting trust/proof layer.
 
-Next proof step if needed:
+The next major phase is product deployment rather than another internal proof rewrite:
 
 ```text
-Capture a full live GitHub API ingestion run against a real PR response and save the evidence before claiming full live PR ingestion.
+Package the verified reviewer boundary into a standalone GitHub App/self-hosted product while preserving read-only analysis and explicit authority separation.
 ```

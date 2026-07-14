@@ -1,15 +1,20 @@
-"""Fetch real pull request diff metadata and file patches from GitHub.
+"""Fetch validated pull-request diff metadata and patches from GitHub.
 
-This module is a read-only companion to ``github_live_fetch``. It performs
-GET-only API calls and raises on failure instead of fabricating an empty diff.
+The fetch is GET-only, host-allowlisted, pagination-bounded, repository-identity
+checked, and never executes the returned patch text.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 
-from main_review.github_live_fetch import GitHubFetchError, _get_json
+from main_review.github_live_fetch import (
+    GitHubFetchError,
+    _fetch_pages,
+    _request_json,
+    _verify_pr_identity,
+)
+from main_review.production_hardening import HardeningError, configured_github_hosts, validate_github_base_url, validate_repository_slug
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,7 @@ class PullRequestDiff:
     base_sha: str
     head_sha: str
     files: list[PullRequestFile]
+    request_evidence: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +51,7 @@ class PullRequestDiff:
             "base_sha": self.base_sha,
             "head_sha": self.head_sha,
             "files": [file.to_dict() for file in self.files],
+            "request_evidence": self.request_evidence,
         }
 
 
@@ -54,42 +61,58 @@ def fetch_pr_diff_live(
     *,
     token: str | None = None,
     base_url: str = "https://api.github.com",
+    allowed_hosts: Iterable[str] = (),
+    allow_insecure_loopback: bool = False,
+    allow_private: bool = False,
+    max_pages: int = 20,
 ) -> PullRequestDiff:
-    """Fetch PR metadata and per-file patches through the GitHub API.
+    """Fetch verified PR metadata and all paginated file patches."""
 
-    Raises ``GitHubFetchError`` on invalid input or unexpected API payloads.
-    The function is intentionally read-only and never executes fetched content.
-    """
-    if "/" not in repository:
-        raise GitHubFetchError(f'repository must be "owner/name", got: {repository!r}')
+    try:
+        repository = validate_repository_slug(repository)
+        base_url = validate_github_base_url(
+            base_url,
+            allowed_hosts=allowed_hosts,
+            allow_insecure_loopback=allow_insecure_loopback,
+        )
+    except HardeningError as error:
+        raise GitHubFetchError(str(error)) from error
+    if pr_number <= 0:
+        raise GitHubFetchError(f"pr_number must be positive, got: {pr_number!r}")
 
+    trusted_hosts = configured_github_hosts(allowed_hosts)
     pr_url = f"{base_url}/repos/{repository}/pulls/{pr_number}"
-    pr_data = _get_json(pr_url, token)
-    if not isinstance(pr_data, dict):
-        raise GitHubFetchError(f"Unexpected PR payload shape from {pr_url}")
-
-    base = pr_data.get("base")
-    head = pr_data.get("head")
-    if not isinstance(base, dict) or not isinstance(head, dict):
-        raise GitHubFetchError(f"PR payload from {pr_url} missing base/head objects")
-
-    base_sha = base.get("sha")
-    head_sha = head.get("sha")
+    pr_response = _request_json(
+        pr_url,
+        token,
+        allowed_hosts=trusted_hosts,
+        allow_insecure_loopback=allow_insecure_loopback,
+    )
+    identity = _verify_pr_identity(pr_response.payload, repository, pr_number, allow_private=allow_private)
+    base_ref = identity.get("base", {})
+    head_ref = identity.get("head", {})
+    base_sha = base_ref.get("sha") if isinstance(base_ref, dict) else None
+    head_sha = head_ref.get("sha") if isinstance(head_ref, dict) else None
     if not isinstance(base_sha, str) or not base_sha:
         raise GitHubFetchError(f"PR payload from {pr_url} missing base sha")
     if not isinstance(head_sha, str) or not head_sha:
         raise GitHubFetchError(f"PR payload from {pr_url} missing head sha")
 
     files_url = f"{base_url}/repos/{repository}/pulls/{pr_number}/files?per_page=100"
-    files_data = _get_json(files_url, token)
-    if not isinstance(files_data, list):
-        raise GitHubFetchError(f"Unexpected files payload shape from {files_url}")
+    files_data, page_evidence, _ = _fetch_pages(
+        files_url,
+        token,
+        base_url=base_url,
+        repository=repository,
+        pr_number=pr_number,
+        allowed_hosts=trusted_hosts,
+        allow_insecure_loopback=allow_insecure_loopback,
+        max_pages=max_pages,
+    )
 
     files: list[PullRequestFile] = []
     for item in files_data:
-        if not isinstance(item, dict) or "filename" not in item:
-            continue
-        filename = item["filename"]
+        filename = item.get("filename")
         if not isinstance(filename, str) or not filename:
             continue
         files.append(
@@ -108,4 +131,5 @@ def fetch_pr_diff_live(
         base_sha=base_sha,
         head_sha=head_sha,
         files=files,
+        request_evidence=[{"method": "GET", "url": pr_url, "status": pr_response.status, "page": 1, "item_count": 1}, *page_evidence],
     )

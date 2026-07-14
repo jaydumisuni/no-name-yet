@@ -1,12 +1,19 @@
-"""Stable request/response contract for Sergeant integrations.
+"""Stable, production-hardened request/response contract for Sergeant.
 
-This module is intentionally dependency-light so the CLI, app bridge, IDE adapters,
-and tests all speak one shape without importing UI-specific code.
+The CLI, App Bridge, IDE adapters, and AI handoff all cross this boundary. Input
+is normalized, path-contained, permission-checked, and bounded before review.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
+from .production_hardening import (
+    enforce_mission_permissions,
+    normalize_changed_files,
+    normalize_input_file,
+    normalize_time_budget,
+)
 
 CONTRACT_VERSION = "sergeant.review.v1"
 REVIEW_MODES = {"repository", "pull_request", "changed_files"}
@@ -37,7 +44,10 @@ def clean_external_providers(value: object) -> list[dict[str, Any]]:
     if value is None:
         return []
     if isinstance(value, list):
-        return [item for item in value if isinstance(item, dict)]
+        providers = [item for item in value if isinstance(item, dict)]
+        if len(providers) > 50:
+            raise ValueError("external_providers exceeds the safety limit of 50 providers")
+        return providers
     raise TypeError("external_providers must be a list of dictionaries or null")
 
 
@@ -45,32 +55,55 @@ def clean_human_decisions(value: object) -> list[dict[str, Any]]:
     if value is None:
         return []
     if isinstance(value, list):
-        return [item for item in value if isinstance(item, dict)]
+        decisions = [item for item in value if isinstance(item, dict)]
+        if len(decisions) > 500:
+            raise ValueError("human_decisions exceeds the safety limit of 500 decisions")
+        return decisions
     raise TypeError("human_decisions must be a list of dictionaries or null")
 
 
+def _optional_dict(request: dict[str, Any], key: str) -> dict[str, Any] | None:
+    value = request.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise TypeError(f"{key} must be a dictionary or null")
+    return value
+
+
 def normalize_review_request(request: dict[str, Any]) -> dict[str, Any]:
-    """Normalize every caller into Sergeant's one app/API request shape."""
+    """Normalize every caller into Sergeant's one fail-closed request shape."""
+
     if not isinstance(request, dict):
         raise TypeError("request must be a dictionary")
     mode = str(request.get("mode") or "repository")
     if mode not in REVIEW_MODES:
         raise ValueError(f"mode must be one of {sorted(REVIEW_MODES)}")
-    root = str(request.get("root") or ".")
+    root_path = Path(str(request.get("root") or ".")).resolve()
+    profile = str(request.get("policy_profile") or "default").strip().lower()
+    changed_files = normalize_changed_files(root_path, clean_changed_files(request.get("changed_files")))
+    permissions = enforce_mission_permissions(profile, _optional_dict(request, "execution_permissions"))
+    time_budget = normalize_time_budget(_optional_dict(request, "time_budget"))
+    external_review_file = request.get("external_review_file")
+    safe_external_review_file = normalize_input_file(root_path, external_review_file) if external_review_file else None
+
     normalized = {
         "schema_version": CONTRACT_VERSION,
-        "root": root,
+        "root": str(root_path),
         "mode": mode,
-        "changed_files": clean_changed_files(request.get("changed_files")),
-        "external_review_file": request.get("external_review_file"),
+        "changed_files": changed_files,
+        "external_review_file": safe_external_review_file,
         "external_providers": clean_external_providers(request.get("external_providers")),
         "human_decisions": clean_human_decisions(request.get("human_decisions")),
         "write_learning": bool(request.get("write_learning")),
         "sergeant_benchmark": request.get("sergeant_benchmark"),
         "reference_benchmark": request.get("reference_benchmark"),
-        "source": request.get("source") or "app-bridge",
+        "source": str(request.get("source") or "app-bridge")[:200],
+        "policy_profile": profile,
+        "time_budget": time_budget,
+        "execution_permissions": permissions,
     }
-    for field in OPTIONAL_V2_REQUEST_FIELDS:
+    for field in OPTIONAL_V2_REQUEST_FIELDS - {"policy_profile", "time_budget", "execution_permissions"}:
         if field in request:
             normalized[field] = request.get(field)
     return normalized
@@ -113,6 +146,7 @@ def build_review_response(
     markdown: str,
 ) -> dict[str, Any]:
     """Build the one response format used by CLI, app, IDE, and AI handoff."""
+
     verdict = packet.get("verdict", {})
     action = str(verdict.get("verdict") or "COMMENT")
     intelligence = packet.get("review_intelligence", {})
@@ -126,6 +160,8 @@ def build_review_response(
             "mode": request.get("mode", "repository"),
             "changed_files": list(request.get("changed_files", [])),
             "source": request.get("source", "app-bridge"),
+            "policy_profile": request.get("policy_profile", "default"),
+            "execution_permissions": request.get("execution_permissions", {}),
         },
         "mode": request.get("mode", "repository"),
         "status": review_status(action),
@@ -156,7 +192,8 @@ def build_review_response(
 
 
 def github_comments_to_external_provider(live_payload: dict[str, Any]) -> dict[str, Any]:
-    """Convert live GitHub comments into an external evidence provider packet."""
+    """Convert validated live GitHub comments into an evidence-provider packet."""
+
     comments = live_payload.get("all_comments", [])
     findings = []
     if isinstance(comments, list):
@@ -184,6 +221,8 @@ def github_comments_to_external_provider(live_payload: dict[str, Any]) -> dict[s
             "repository": live_payload.get("repository"),
             "pr_number": live_payload.get("pr_number"),
             "source": live_payload.get("source", "live-github-api"),
+            "pull_request": live_payload.get("pull_request", {}),
+            "token_scope_assessment": live_payload.get("token_scope_assessment", {}),
         },
     }
 

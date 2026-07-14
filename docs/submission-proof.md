@@ -6,9 +6,10 @@ This file is the submission proof checklist for Sergeant.
 
 ```text
 Status: submission-support ready
-Code proof: complete for current sprint
+Code proof: complete for current scope
 Release proof: complete through PR checks
-Remaining proof: live GitHub API ingestion evidence, if claiming real live PR ingestion
+Production hardening: complete
+Live GitHub API ingestion evidence: captured and artifact-backed
 ```
 
 ## Sprint checklist
@@ -17,13 +18,16 @@ Remaining proof: live GitHub API ingestion evidence, if claiming real live PR in
 - [x] CLI integration
 - [x] App Bridge integration
 - [x] IDE Bench contract for VS Code, JetBrains, and AI handoff
-- [x] Mocked tests
+- [x] Mocked and adversarial tests
 - [x] CI proof
 - [x] Clean-clone proof
 - [x] Battle-test framework
 - [x] First benchmark: Requests
 - [x] Second benchmark: Flask architecture
 - [x] Battle-test validator
+- [x] Cpl council and verified experience
+- [x] Production boundary and sandbox
+- [x] Full live GitHub API ingestion proof
 - [x] Release proof via pull request where CI and Main Review are green
 
 ## Proof categories
@@ -42,28 +46,45 @@ Pass criteria:
 Pass criteria:
 
 - GitHub data is fetched without write permissions
-- token scope stays read-only for analysis
+- token is supplied through an environment variable
+- workflow permissions remain `contents: read`, `issues: read`, and `pull-requests: read`
 - untrusted PR code is not executed
+- requested PR number and base repository identity are verified
+- same-host/same-repository pagination is bounded
+- API redirects are refused
 - PR comment payload parsing is verified
+- shareable proof omits comment bodies and credentials
 
-Current caveat:
+Current state:
 
 ```text
-A GitHub-shaped fixture verifies PR comment ingestion shape. Full live PR API ingestion should be captured separately before claiming it as fully verified live.
+A real GitHub Actions workflow fetches metadata, issue comments, and review comments for the pull request that triggered it. The workflow validates GET-only request evidence, repository identity, pagination, visibility, and proof shape, then uploads a sanitized JSON artifact containing counts and body hashes rather than comment bodies.
+```
+
+Workflow:
+
+```text
+.github/workflows/live-github-ingestion-proof.yml
+```
+
+Artifact:
+
+```text
+live-github-ingestion-proof/live-github-proof.json
 ```
 
 ### 3. Secret detection proof
 
 Pass criteria:
 
-- a planted temp-file positive case is detected
+- a planted temporary-file positive case is detected
 - the finding is blocker/severe enough to stop a risky merge
-- the test does not commit a real secret
+- the test does not commit a real or token-shaped secret literal
 
 Current state:
 
 ```text
-Secret detection is genuinely proven with a real temporary test file containing a synthetic secret-shaped value.
+Secret detection is genuinely proven with a temporary test file containing a runtime-constructed synthetic secret-shaped value.
 ```
 
 ### 4. App Bridge proof
@@ -71,7 +92,8 @@ Secret detection is genuinely proven with a real temporary test file containing 
 Pass criteria:
 
 - external systems can hand a review request to Sergeant
-- request contract is stable
+- request contract is stable and path-contained
+- public permissions cannot grant write, shell, or untrusted-code execution
 - output remains a review verdict, not a patch execution request
 
 ### 5. IDE Bench proof
@@ -91,22 +113,35 @@ Pass criteria:
 - validator confirms expected risk/verdict behavior
 - Requests-style benchmark is covered
 - Flask architecture benchmark is covered
+- GitHub PR patch filenames are contained in a temporary sandbox
+
+### 7. Production-hardening proof
+
+Pass criteria:
+
+- unknown actions fail closed
+- path traversal, absolute paths, NUL input, and symlink escape are refused
+- malformed policies and permissions are refused
+- unknown or write-capable token scopes are refused when advertised
+- arbitrary hosts, ports, paths, redirects, and pagination targets are refused
+- private-repository evidence is blocked by default
+- no comment bodies or credentials are present in the uploaded proof artifact
 
 ## Claim wording rules
 
 Use this wording:
 
 ```text
-Sergeant supports live GitHub read-only fetch, CLI review, app bridge review handoff, IDE Bench contracts, battle-test benchmarks, CI proof, clean-clone proof, and release proof. Secret detection is proven with a planted temp-file positive case. PR comment ingestion is proven against GitHub-shaped payload fixtures, with full live GitHub API ingestion reserved for the next evidence capture.
+Sergeant supports production-hardened live GitHub read-only fetch, CLI review, App Bridge review handoff, IDE Bench contracts, battle-test benchmarks, Cpl council reasoning, CI proof, clean-clone proof, and release proof. Secret detection is proven with a planted temporary-file positive case. PR comment ingestion is proven against GitHub-shaped fixtures and through a real read-only GitHub API workflow with sanitized request evidence.
 ```
 
-Do not use this wording yet:
+Do not claim:
 
 ```text
-Sergeant fully verified live PR ingestion against real PR #16.
+Sergeant writes GitHub review comments, applies patches, or safely executes pull-request-controlled code.
 ```
 
-unless live API evidence is captured.
+Those actions remain outside the reviewer boundary.
 
 ## Final submission role
 

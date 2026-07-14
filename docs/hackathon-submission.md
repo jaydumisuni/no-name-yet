@@ -23,7 +23,7 @@ Most coding assistants focus on writing code. Sergeant focuses on reviewing it.
 
 ## Solution
 
-Sergeant analyzes a repository, diff, pull request payload, app bridge event, or IDE handoff contract and produces a clear review verdict:
+Sergeant analyzes a repository, diff, validated pull-request evidence, App Bridge event, or IDE handoff contract and produces a clear review verdict:
 
 ```text
 PASS
@@ -39,22 +39,26 @@ Sergeant deliberately avoids being a blind patch writer. It is built around a sa
 Understand danger, but do not execute danger.
 ```
 
-## Completed sprint proof
+## Completed proof
 
-The current sprint completed the submission-critical reviewer stack:
+The current build includes:
 
-- [x] Live GitHub read-only fetch
+- [x] Production-hardened GitHub read-only fetch
 - [x] CLI integration
 - [x] App Bridge integration
 - [x] IDE Bench contract for VS Code, JetBrains, and AI handoff
-- [x] Mocked tests
+- [x] Mocked and adversarial tests
 - [x] CI proof
 - [x] Clean-clone proof
 - [x] Battle-test framework
-- [x] First benchmark: Requests-style repository review
-- [x] Second benchmark: Flask architecture review
+- [x] Requests-style benchmark
+- [x] Flask architecture benchmark
 - [x] Battle-test validator
-- [x] Release proof through pull request checks where CI and Main Review are green
+- [x] Cpl multi-model council and verified experience
+- [x] Production sandbox and permission boundary
+- [x] Real GitHub API ingestion proof
+- [x] Sanitized proof artifact
+- [x] Release proof through pull-request checks where CI and Main Review are green
 
 ## Capability tiers
 
@@ -65,37 +69,30 @@ The current sprint completed the submission-critical reviewer stack:
 | Tier 3 | Evidence Consensus | Combine multiple evidence sources before making a decision. |
 | Tier 4 | Verified Learning Loop | Learn from accepted corrections and owner-approved review lessons. |
 | Tier 5 | Graduation Benchmark | Use benchmarks to decide when Sergeant is ready for harder review work. |
-| Tier 6 | Squad Intelligence | Coordinate specialized review roles without losing one final verdict. |
+| Tier 6 | Squad Intelligence | Coordinate permanent officers and Cpl support without losing one final verdict. |
+| Phase 7 | Production Hardening | Enforce sandbox, permission, token, identity, pagination, and leak boundaries. |
 
 ## What is genuinely proven
 
 - Sergeant can review repositories and diffs.
 - Sergeant can run through the CLI.
-- Sergeant can receive app bridge review events.
+- Sergeant can receive App Bridge review events.
 - Sergeant has a documented IDE Bench contract for IDE and AI handoff workflows.
-- Sergeant has mocked tests and CI proof.
-- Sergeant has clean-clone proof.
+- Sergeant has mocked, adversarial, CI, and clean-clone proof.
 - Sergeant has battle-test benchmark structure and validator logic.
-- Secret detection is proven using a real planted temporary-file positive case.
-- GitHub PR comment payload ingestion is verified using a GitHub-shaped fixture.
+- Secret detection is proven using a planted temporary-file positive case.
+- GitHub PR comment payload ingestion is verified using GitHub-shaped fixtures.
+- Full live GitHub API ingestion is verified against the real pull request that triggers the proof workflow.
+- The live proof uses GET-only requests and read-only workflow permissions.
+- The uploaded proof contains request evidence, counts, hashes, and identity metadata but no comment bodies or credentials.
 
-## Claim correction
-
-Do not overstate live GitHub ingestion.
-
-Accurate wording:
-
-```text
-Sergeant supports live GitHub read-only fetch and can ingest GitHub-shaped PR comment payloads. Secret detection is proven with a real planted temp-file positive case. Full live GitHub API ingestion remains a separate proof step when token/network access is available.
-```
-
-Avoid saying:
+## Accurate live-ingestion wording
 
 ```text
-Live PR ingestion is fully verified against real PR #16.
+Sergeant performs production-hardened live GitHub read-only ingestion. It validates the requested repository and PR, refuses unsafe hosts, redirects, pagination, private evidence, and write-capable classic scopes, and produces a body-free proof artifact. Secret detection is proven with a planted temporary-file positive case.
 ```
 
-unless a real GitHub API call is captured and documented as proof.
+Do not say that Sergeant writes GitHub reviews, applies patches, or executes pull-request-controlled code. Those actions remain outside its authority.
 
 ## Why it matters for the hackathon
 
@@ -106,17 +103,18 @@ It shows that the project can:
 - move fast without pretending unproven claims are proven
 - review AI-generated code before trusting it
 - distinguish implemented, tested, inferred, and pending work
-- enforce public/private and secret-safety boundaries
+- enforce public/private, credential, token, and sandbox boundaries
 - support a finish-then-prove engineering workflow
+- use one AI-assisted system to review evidence produced by another
 
 ## Demo story
 
 ```text
 Repository or pull request
         ↓
-Sergeant collects evidence
+Sergeant validates the boundary and collects evidence
         ↓
-Sergeant checks claims, code, tests, security, and architecture
+Cpl and permanent officers check code, tests, security, architecture, and prior experience
         ↓
 Sergeant decides PASS / NEEDS WORK / BLOCK
         ↓

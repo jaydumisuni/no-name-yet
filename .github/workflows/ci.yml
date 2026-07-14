@@ -73,9 +73,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           mkdir -p live-battle-output
-          main-review battle-compare battle-tests/psf-requests-7502.json --token "$GITHUB_TOKEN" --pretty > live-battle-output/psf-requests-7502.json
-          main-review battle-compare battle-tests/pallets-flask-5812.json --token "$GITHUB_TOKEN" --pretty > live-battle-output/pallets-flask-5812.json
-          main-review battle-compare battle-tests/django-19610.json --token "$GITHUB_TOKEN" --pretty > live-battle-output/django-19610.json
+          main-review battle-compare battle-tests/psf-requests-7502.json --token-env GITHUB_TOKEN --pretty > live-battle-output/psf-requests-7502.json
+          main-review battle-compare battle-tests/pallets-flask-5812.json --token-env GITHUB_TOKEN --pretty > live-battle-output/pallets-flask-5812.json
+          main-review battle-compare battle-tests/django-19610.json --token-env GITHUB_TOKEN --pretty > live-battle-output/django-19610.json
           cat live-battle-output/psf-requests-7502.json
           cat live-battle-output/pallets-flask-5812.json
           cat live-battle-output/django-19610.json

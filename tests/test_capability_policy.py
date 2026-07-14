@@ -36,6 +36,59 @@ def test_dependency_impact_alone_does_not_block_review() -> None:
     assert len(normalized["policy_adjustments"]) == 2
 
 
+def test_high_blast_radius_downgrades_only_with_focused_changed_test(tmp_path: Path) -> None:
+    (tmp_path / "main_review").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "main_review" / "production_hardening.py").write_text("def policy(): return True\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_production_hardening.py").write_text(
+        "from main_review.production_hardening import policy\n\ndef test_policy(): assert policy()\n",
+        encoding="utf-8",
+    )
+    packet = {
+        "verdict": "NEEDS WORK",
+        "changed_files": ["main_review/production_hardening.py", "tests/test_production_hardening.py"],
+        "findings": [{
+            "capability": "regression",
+            "severity": "major",
+            "path": "main_review/production_hardening.py",
+            "message": "High blast-radius change may regress dependent behavior.",
+            "evidence": "At least 5 files depend on this file.",
+        }],
+    }
+
+    normalized = normalize_capability_review(packet, tmp_path)
+
+    assert normalized["verdict"] == "PASS"
+    assert normalized["findings"][0]["severity"] == "minor"
+    assert normalized["findings"][0]["impact_signal"] is True
+    assert normalized["findings"][0]["test_coverage_path"] == "tests/test_production_hardening.py"
+    assert normalized["policy_adjustments"][0]["coverage_path"] == "tests/test_production_hardening.py"
+
+
+def test_high_blast_radius_remains_major_without_targeted_changed_test(tmp_path: Path) -> None:
+    (tmp_path / "main_review").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "main_review" / "production_hardening.py").write_text("def policy(): return True\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_unrelated.py").write_text("def test_other(): assert True\n", encoding="utf-8")
+    packet = {
+        "verdict": "NEEDS WORK",
+        "changed_files": ["main_review/production_hardening.py", "tests/test_unrelated.py"],
+        "findings": [{
+            "capability": "regression",
+            "severity": "major",
+            "path": "main_review/production_hardening.py",
+            "message": "High blast-radius change may regress dependent behavior.",
+            "evidence": "At least 5 files depend on this file.",
+        }],
+    }
+
+    normalized = normalize_capability_review(packet, tmp_path)
+
+    assert normalized["verdict"] == "NEEDS WORK"
+    assert normalized["findings"] == packet["findings"]
+    assert normalized["policy_adjustments"] == []
+
+
 def test_lexical_taint_without_sensitive_sink_is_non_blocking(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "extension.js").write_text(

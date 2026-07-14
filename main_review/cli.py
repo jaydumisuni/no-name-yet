@@ -1,9 +1,10 @@
 """Command line entrypoint for Sergeant."""
-
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 from pathlib import Path
 
 from .app_bridge import handle_app_review_request
@@ -17,6 +18,7 @@ from .evidence import collect_evidence
 from .final_proof import assert_final_proof, run_final_proof
 from .github_collector import collect_github_comments_file
 from .github_live_fetch import fetch_pr_comments_live
+from .hardened_mission import run_v2_mission
 from .ide_bench import build_ide_bench_contract
 from .llm_provider import LLMSettings, discover_route
 from .memory import ReviewMemoryStore, default_memory_path, new_memory_record
@@ -29,12 +31,26 @@ from .review_ingestion import ingest_external_review_file
 from .scanner import scan_repository
 from .verdict import review_repository
 from .verification import verify_repository_standard
-from .v2_mission import MISSION_TYPES, run_v2_mission
+from .v2_mission import MISSION_TYPES
+
+_ENV_NAME_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 
 def _add_status_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--require", action="store_true", help="Return a failure code when no Cpl model route is available.")
     parser.add_argument("--pretty", action="store_true")
+
+
+def _add_live_security_arguments(parser: argparse.ArgumentParser, *, proof: bool = False) -> None:
+    parser.add_argument("--token-env", default="GITHUB_TOKEN", help="Environment variable containing an optional read-only GitHub token.")
+    parser.add_argument("--base-url", default="https://api.github.com")
+    parser.add_argument("--allowed-host", action="append", default=[], help="Explicitly trusted GitHub Enterprise API host. Repeat as needed.")
+    parser.add_argument("--allow-insecure-loopback", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--allow-private", action="store_true", help="Permit private-repository evidence in this local invocation.")
+    parser.add_argument("--max-pages", type=int, default=20)
+    if proof:
+        parser.add_argument("--proof-only", action="store_true", help="Print a body-free live-ingestion proof artifact.")
+        parser.add_argument("--proof-output", help="Also write the body-free proof artifact to this path.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,10 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument("path", nargs="?", default=".")
     review_parser.add_argument("--pretty", action="store_true")
 
-    pr_review_parser = subparsers.add_parser(
-        "pr-review",
-        help="Run the full independent Sergeant reviewer, including Cpl specialist reasoning when available.",
-    )
+    pr_review_parser = subparsers.add_parser("pr-review", help="Run the full independent Sergeant reviewer, including Cpl reasoning when available.")
     pr_review_parser.add_argument("path", nargs="?", default=".")
     pr_review_source = pr_review_parser.add_mutually_exclusive_group()
     pr_review_source.add_argument("--files")
@@ -64,19 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
     pr_review_parser.add_argument("--external-review-file")
     pr_review_parser.add_argument("--pretty", action="store_true")
 
-    cpl_status_parser = subparsers.add_parser(
-        "cpl-status",
-        help="Show Cpl policy, reasoning depth, specialist budget, and resolved model route.",
-    )
+    cpl_status_parser = subparsers.add_parser("cpl-status", help="Show Cpl policy, reasoning depth, specialist budget, and resolved model route.")
     _add_status_arguments(cpl_status_parser)
-
-    llm_status_parser = subparsers.add_parser(
-        "llm-status",
-        help="Compatibility alias for cpl-status.",
-    )
+    llm_status_parser = subparsers.add_parser("llm-status", help="Compatibility alias for cpl-status.")
     _add_status_arguments(llm_status_parser)
 
-    v2_parser = subparsers.add_parser("v2-mission", help="Build the Sergeant V2 mission, briefing, loadout, confidence, and audit packet.")
+    v2_parser = subparsers.add_parser("v2-mission", help="Build a production-hardened Sergeant V2 mission packet.")
     v2_parser.add_argument("path", nargs="?", default=".")
     v2_parser.add_argument("--mission-type", default="repository_review", choices=sorted(MISSION_TYPES))
     v2_parser.add_argument("--mode", default="repository", choices=["repository", "pull_request", "changed_files"])
@@ -84,6 +90,8 @@ def build_parser() -> argparse.ArgumentParser:
     v2_source.add_argument("--files")
     v2_source.add_argument("--file-list")
     v2_parser.add_argument("--source", default="cli:v2-mission")
+    v2_parser.add_argument("--policy-profile", default="default")
+    v2_parser.add_argument("--time-budget", type=int, default=120)
     v2_parser.add_argument("--allow-network", action="store_true")
     v2_parser.add_argument("--allow-shell", action="store_true")
     v2_parser.add_argument("--allow-write", action="store_true")
@@ -107,14 +115,13 @@ def build_parser() -> argparse.ArgumentParser:
     capability_source.add_argument("--file-list")
     capability_parser.add_argument("--pretty", action="store_true")
 
-    live_parser = subparsers.add_parser("live-github-comments", help="Read-only live GitHub PR comments fetch.")
+    live_parser = subparsers.add_parser("live-github-comments", help="Production-hardened read-only live GitHub PR evidence fetch.")
     live_parser.add_argument("repository", help="Repository in owner/name form.")
     live_parser.add_argument("pr_number", type=int, help="Pull request number.")
-    live_parser.add_argument("--token", default=None, help="Optional read-only GitHub token.")
-    live_parser.add_argument("--base-url", default="https://api.github.com")
+    _add_live_security_arguments(live_parser, proof=True)
     live_parser.add_argument("--pretty", action="store_true")
 
-    live_review_parser = subparsers.add_parser("live-github-review", help="Fetch live GitHub comments and run them through the app bridge.")
+    live_review_parser = subparsers.add_parser("live-github-review", help="Fetch validated live GitHub evidence and run it through the App Bridge.")
     live_review_parser.add_argument("repository", help="Repository in owner/name form.")
     live_review_parser.add_argument("pr_number", type=int, help="Pull request number.")
     live_review_parser.add_argument("path", nargs="?", default=".")
@@ -122,8 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     live_review_source = live_review_parser.add_mutually_exclusive_group()
     live_review_source.add_argument("--files")
     live_review_source.add_argument("--file-list")
-    live_review_parser.add_argument("--token", default=None, help="Optional read-only GitHub token.")
-    live_review_parser.add_argument("--base-url", default="https://api.github.com")
+    _add_live_security_arguments(live_review_parser)
     live_review_parser.add_argument("--pretty", action="store_true")
 
     ide_parser = subparsers.add_parser("ide-bench-contract", help="Print the VS Code, PyCharm, JetBrains, and AI handoff contract.")
@@ -133,10 +139,9 @@ def build_parser() -> argparse.ArgumentParser:
     battle_parser.add_argument("path", nargs="?", default=".")
     battle_parser.add_argument("--pretty", action="store_true")
 
-    battle_compare_parser = subparsers.add_parser("battle-compare", help="Fetch a real PR patch, run Sergeant, and compare expected battle findings.")
+    battle_compare_parser = subparsers.add_parser("battle-compare", help="Fetch a real PR patch into a sandbox and compare expected battle findings.")
     battle_compare_parser.add_argument("fixture", help="Path to one battle-tests/*.json fixture.")
-    battle_compare_parser.add_argument("--token", default=None, help="Optional read-only GitHub token.")
-    battle_compare_parser.add_argument("--base-url", default="https://api.github.com")
+    _add_live_security_arguments(battle_compare_parser)
     battle_compare_parser.add_argument("--match-threshold", type=float, default=0.5)
     battle_compare_parser.add_argument("--pretty", action="store_true")
 
@@ -144,6 +149,8 @@ def build_parser() -> argparse.ArgumentParser:
     boundary_parser.add_argument("action")
     boundary_parser.add_argument("--requires-write-token", action="store_true")
     boundary_parser.add_argument("--executes-untrusted-code", action="store_true")
+    boundary_parser.add_argument("--requires-shell", action="store_true")
+    boundary_parser.add_argument("--exports-private-data", action="store_true")
     boundary_parser.add_argument("--pretty", action="store_true")
 
     visibility_parser = subparsers.add_parser("visibility-policy", help="Show public/private split guidance.")
@@ -235,6 +242,15 @@ def _changed_from_args(files: str | None, file_list: str | None) -> list[str]:
     return parse_changed_files_text(files or "")
 
 
+def _token_from_env(name: str | None) -> str | None:
+    value = str(name or "").strip()
+    if not value:
+        return None
+    if not _ENV_NAME_RE.fullmatch(value):
+        raise ValueError(f"Invalid token environment variable name: {value!r}")
+    return os.getenv(value) or None
+
+
 def _cpl_status_payload() -> dict[str, object]:
     settings = LLMSettings.from_environment()
     route = discover_route(settings)
@@ -273,14 +289,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(review_repository(Path(args.path)), pretty=args.pretty)
         return 0
     if args.command == "pr-review":
-        _print_json(
-            run_independent_pr_review(
-                Path(args.path),
-                changed_files=_changed_from_args(args.files, args.file_list),
-                external_review_file=Path(args.external_review_file) if args.external_review_file else None,
-            ),
-            pretty=args.pretty,
-        )
+        _print_json(run_independent_pr_review(Path(args.path), changed_files=_changed_from_args(args.files, args.file_list), external_review_file=Path(args.external_review_file) if args.external_review_file else None), pretty=args.pretty)
         return 0
     if args.command in {"cpl-status", "llm-status"}:
         payload = _cpl_status_payload()
@@ -293,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
             "mission_type": args.mission_type,
             "changed_files": _changed_from_args(args.files, args.file_list),
             "source": args.source,
+            "policy_profile": args.policy_profile,
+            "time_budget": {"seconds": args.time_budget},
             "execution_permissions": {
                 "read_only": not args.allow_write,
                 "allow_network": args.allow_network,
@@ -310,12 +321,36 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(run_capability_engine(Path(args.path), _changed_from_args(args.files, args.file_list)), pretty=args.pretty)
         return 0
     if args.command == "live-github-comments":
-        _print_json(fetch_pr_comments_live(args.repository, args.pr_number, token=args.token, base_url=args.base_url).to_dict(), pretty=args.pretty)
+        live = fetch_pr_comments_live(
+            args.repository,
+            args.pr_number,
+            token=_token_from_env(args.token_env),
+            base_url=args.base_url,
+            allowed_hosts=args.allowed_host,
+            allow_insecure_loopback=args.allow_insecure_loopback,
+            allow_private=args.allow_private,
+            max_pages=args.max_pages,
+        )
+        proof = live.proof_dict()
+        if args.proof_output:
+            output_path = Path(args.proof_output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        _print_json(proof if args.proof_only else live.to_dict(), pretty=args.pretty)
         return 0
     if args.command == "live-github-review":
-        live = fetch_pr_comments_live(args.repository, args.pr_number, token=args.token, base_url=args.base_url).to_dict()
+        live = fetch_pr_comments_live(
+            args.repository,
+            args.pr_number,
+            token=_token_from_env(args.token_env),
+            base_url=args.base_url,
+            allowed_hosts=args.allowed_host,
+            allow_insecure_loopback=args.allow_insecure_loopback,
+            allow_private=args.allow_private,
+            max_pages=args.max_pages,
+        ).to_dict()
         provider = github_comments_to_external_provider(live)
-        request = {"root": args.path, "mode": args.mode, "changed_files": _changed_from_args(args.files, args.file_list), "external_providers": [provider], "source": "cli:live-github-review"}
+        request = {"root": args.path, "mode": args.mode, "changed_files": _changed_from_args(args.files, args.file_list), "external_providers": [provider], "source": "cli:live-github-review", "execution_permissions": {"read_only": True, "allow_network": True, "allow_shell": False, "allow_write": False, "allow_untrusted_code": False}}
         _print_json(handle_app_review_request(request), pretty=args.pretty)
         return 0
     if args.command == "ide-bench-contract":
@@ -325,12 +360,13 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(validate_battle_fixtures(Path(args.path)), pretty=args.pretty)
         return 0
     if args.command == "battle-compare":
-        result = run_battle_comparison(Path(args.fixture), token=args.token, base_url=args.base_url, match_threshold=args.match_threshold)
+        result = run_battle_comparison(Path(args.fixture), token=_token_from_env(args.token_env), base_url=args.base_url, match_threshold=args.match_threshold, allowed_hosts=args.allowed_host, allow_insecure_loopback=args.allow_insecure_loopback)
         _print_json(result.to_dict(), pretty=args.pretty)
         return 0
     if args.command == "boundary":
-        _print_json(check_action_boundary(args.action, {"requires_write_token": args.requires_write_token, "executes_untrusted_code": args.executes_untrusted_code}), pretty=args.pretty)
-        return 0
+        payload = check_action_boundary(args.action, {"requires_write_token": args.requires_write_token, "executes_untrusted_code": args.executes_untrusted_code, "requires_shell": args.requires_shell, "exports_private_data": args.exports_private_data})
+        _print_json(payload, pretty=args.pretty)
+        return 0 if payload["allowed"] else 2
     if args.command == "visibility-policy":
         _print_json(repository_visibility_policy(is_public=not args.private), pretty=args.pretty)
         return 0

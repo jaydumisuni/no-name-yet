@@ -1,11 +1,9 @@
 """App bridge for Sergeant.
 
 This is the stable integration layer an app can call without knowing Sergeant's
-internal module layout. It accepts the shared Sergeant review request shape,
-runs the review pipeline, and returns the shared response shape suitable for UI
-cards, API responses, IDE integrations, AI handoff, or logs.
+internal module layout. It accepts the shared production-hardened review request
+shape, runs the review pipeline, and returns the shared response contract.
 """
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,11 +11,11 @@ from typing import Any
 
 from .evidence_consensus import build_evidence_consensus
 from .graduation import run_graduation_benchmark, summarize_graduation
+from .hardened_mission import run_v2_mission
 from .learning_loop import run_learning_loop
 from .pr_reviewer import render_pr_review_markdown, run_independent_pr_review
 from .review_contract import build_review_response, normalize_review_request
 from .squad import run_squad_review
-from .v2_mission import run_v2_mission
 
 
 def _default_sergeant_metrics(packet: dict[str, Any], evidence_consensus: dict[str, Any]) -> dict[str, float]:
