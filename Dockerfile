@@ -9,6 +9,7 @@ WORKDIR /opt/sergeant
 COPY pyproject.toml README.md ./
 COPY main_review ./main_review
 COPY resources ./resources
+COPY review-benchmarks ./review-benchmarks
 
 RUN python -m pip install --no-cache-dir . \
     && groupadd --system sergeant \
