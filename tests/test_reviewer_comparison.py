@@ -10,6 +10,8 @@ from main_review.review_ingestion import ExternalReviewComment
 from main_review.reviewer_comparison import (
     COMPARISON_SCHEMA,
     ReviewerComparisonError,
+    _infer_category,
+    _infer_severity,
     compare_reviewer_reports,
     extract_external_findings,
     extract_sergeant_findings,
@@ -56,7 +58,42 @@ def _sergeant_packet() -> dict:
                 },
             ]
         },
+        "diff_review": {
+            "blocking_findings": [],
+            "major_findings": [
+                {
+                    "category": "risk",
+                    "severity": "major",
+                    "message": "Changed file is in a high-risk path.",
+                    "evidence": "Workflow assurance is required.",
+                    "path": ".github/workflows/proof.yml",
+                }
+            ],
+            "minor_findings": [],
+        },
+        "repository_review": {
+            "blocking_findings": [],
+            "major_findings": [],
+            "minor_findings": [],
+        },
     }
+
+
+def _coderabbit_comment() -> ExternalReviewComment:
+    return ExternalReviewComment(
+        source="live-github-review",
+        body=(
+            "_🎯 Functional Correctness_ | _🟡 Minor_ | _⚡ Quick win_\n\n"
+            "**Naive substring severity markers misfire on common words.**\n\n"
+            "The majority of reviewers may mention the word major in an example."
+        ),
+        repository="owner/repo",
+        pr_number=10,
+        path="main_review/reviewer_comparison.py",
+        line=111,
+        author="coderabbitai[bot]",
+        url="https://example.invalid/review/1",
+    )
 
 
 def _reference_comments() -> list[ExternalReviewComment]:
@@ -69,7 +106,7 @@ def _reference_comments() -> list[ExternalReviewComment]:
             path="src/admin.py",
             line=12,
             author="coderabbitai[bot]",
-            url="https://example.invalid/review/1",
+            url="https://example.invalid/review/auth",
         ),
         ExternalReviewComment(
             source="live-github-review",
@@ -79,6 +116,7 @@ def _reference_comments() -> list[ExternalReviewComment]:
             path="src/admin.py",
             line=4,
             author="coderabbitai[bot]",
+            url="https://example.invalid/review/nit",
         ),
         ExternalReviewComment(
             source="live-github-review",
@@ -86,15 +124,33 @@ def _reference_comments() -> list[ExternalReviewComment]:
             repository="owner/repo",
             pr_number=10,
             author="coderabbitai[bot]",
+            url="https://example.invalid/review/summary",
         ),
     ]
 
 
-def test_sergeant_extraction_keeps_grounded_and_minor_findings() -> None:
+def test_sergeant_extraction_keeps_all_verdict_bearing_layers() -> None:
     findings = extract_sergeant_findings(_sergeant_packet())
 
-    assert [item.finding_id for item in findings] == ["sgt-auth", "sgt-test"]
+    assert {item.finding_id for item in findings if item.finding_id.startswith("sgt-")} == {"sgt-auth", "sgt-test"}
+    assert any(item.source_layer == "diff_review" and item.path == ".github/workflows/proof.yml" for item in findings)
     assert all(item.message != "Input may reach a sink." for item in findings)
+
+
+def test_coderabbit_metadata_yields_real_title_severity_and_category() -> None:
+    findings = extract_external_findings([_coderabbit_comment()], "CodeRabbit")
+
+    assert len(findings) == 1
+    assert findings[0].message == "Naive substring severity markers misfire on common words."
+    assert findings[0].severity == "minor"
+    assert findings[0].category == "correctness"
+
+
+def test_word_boundaries_prevent_majority_author_and_latest_collisions() -> None:
+    assert _infer_severity("The majority of reviewers agree.") == "minor"
+    assert _infer_category("The author updated the latest version.") == "other"
+    assert _infer_category("Authorization is missing from the route.") == "security"
+    assert _infer_category("The regression test is missing.") == "testing"
 
 
 def test_external_extraction_excludes_nitpicks_and_walkthroughs() -> None:
@@ -104,6 +160,16 @@ def test_external_extraction_excludes_nitpicks_and_walkthroughs() -> None:
     assert findings[0].reviewer == "CodeRabbit"
     assert findings[0].path == "src/admin.py"
     assert findings[0].severity == "major"
+
+
+def test_external_finding_id_is_stable_when_filtered_comment_order_changes() -> None:
+    original = extract_external_findings([_coderabbit_comment()], "CodeRabbit")[0]
+    with_earlier_nitpick = extract_external_findings([
+        ExternalReviewComment(source="x", body="Nitpick: spacing", path="a.py", line=1),
+        _coderabbit_comment(),
+    ], "CodeRabbit")[0]
+
+    assert original.finding_id == with_earlier_nitpick.finding_id
 
 
 def test_matching_pairs_equivalent_findings_and_preserves_unique_work() -> None:
@@ -117,7 +183,8 @@ def test_matching_pairs_equivalent_findings_and_preserves_unique_work() -> None:
     assert shared[0].reference.path == "src/admin.py"
     assert shared[0].path_match is True
     assert shared[0].line_match is True
-    assert [item.finding_id for item in sergeant_only] == ["sgt-test"]
+    assert any(item.finding_id == "sgt-test" for item in sergeant_only)
+    assert any(item.source_layer == "diff_review" for item in sergeant_only)
     assert reference_only == []
 
 
@@ -129,25 +196,33 @@ def test_comparison_never_declares_winner_from_comment_volume() -> None:
     )
 
     assert result["schema_version"] == COMPARISON_SCHEMA
-    assert result["counts"] == {
-        "sergeant": 2,
-        "reference": 1,
-        "shared": 1,
-        "sergeant_only": 1,
-        "reference_only": 0,
-    }
+    assert result["counts"]["sergeant"] == 3
+    assert result["counts"]["reference"] == 1
+    assert result["counts"]["shared"] == 1
     assert result["winner"] is None
     assert "No winner" in result["winner_rule"]
     assert result["adjudication"]["complete"] is False
 
 
 def test_adjudication_reports_verified_precision_without_inventing_recall(tmp_path: Path) -> None:
+    comparison = compare_reviewer_reports(_sergeant_packet(), _reference_comments(), reference_name="CodeRabbit")
+    sergeant_ids = [
+        pair["sergeant"]["finding_id"] for pair in comparison["shared_findings"]
+    ] + [item["finding_id"] for item in comparison["sergeant_only"]]
+    reference_ids = [
+        pair["reference"]["finding_id"] for pair in comparison["shared_findings"]
+    ] + [item["finding_id"] for item in comparison["reference_only"]]
     decisions = tmp_path / "decisions.json"
     decisions.write_text(json.dumps({
         "decisions": [
-            {"reviewer": "Sergeant", "finding_id": "sgt-auth", "status": "confirmed"},
-            {"reviewer": "Sergeant", "finding_id": "sgt-test", "status": "suggestion"},
-            {"reviewer": "CodeRabbit", "finding_id": "reference-1", "status": "confirmed"},
+            *[
+                {"reviewer": "Sergeant", "finding_id": finding_id, "status": "confirmed"}
+                for finding_id in sergeant_ids
+            ],
+            *[
+                {"reviewer": "CodeRabbit", "finding_id": finding_id, "status": "confirmed"}
+                for finding_id in reference_ids
+            ],
         ]
     }), encoding="utf-8")
 
@@ -164,7 +239,7 @@ def test_adjudication_reports_verified_precision_without_inventing_recall(tmp_pa
     assert result["winner"] is None
 
 
-def test_markdown_renders_reviewers_side_by_side() -> None:
+def test_markdown_renders_reviewers_side_by_side_and_explicit_empty_rows() -> None:
     result = compare_reviewer_reports(_sergeant_packet(), _reference_comments(), reference_name="CodeRabbit")
     markdown = render_comparison_markdown(result)
 
@@ -172,6 +247,16 @@ def test_markdown_renders_reviewers_side_by_side() -> None:
     assert "src/admin.py:12" in markdown
     assert "## Unique findings" in markdown
     assert "No winner is declared" in markdown
+
+    empty = {
+        "reference_name": "CodeRabbit",
+        "counts": {"sergeant": 0, "reference": 0, "shared": 0, "sergeant_only": 0, "reference_only": 0},
+        "shared_findings": [],
+        "sergeant_only": [],
+        "reference_only": [],
+    }
+    assert "| _None_ | _None_ |" in render_comparison_markdown(empty)
+    assert "|  |  |" not in render_comparison_markdown(empty)
 
 
 @dataclass(frozen=True)
@@ -183,7 +268,7 @@ class FakeLiveResult:
         return {"proof_version": "test-proof"}
 
 
-def test_live_fetch_filters_author_and_freezes_head(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_fetch_filters_author_stale_commits_and_freezes_head(monkeypatch: pytest.MonkeyPatch) -> None:
     result = FakeLiveResult(
         pull_request={"head": {"sha": "frozen-head"}},
         all_comments=[
@@ -191,13 +276,23 @@ def test_live_fetch_filters_author_and_freezes_head(monkeypatch: pytest.MonkeyPa
                 "body": "Potential issue: missing authorization guard.",
                 "path": "src/admin.py",
                 "line": 12,
+                "commit_id": "frozen-head",
                 "html_url": "https://example.invalid/1",
+                "user": {"login": "coderabbitai[bot]"},
+            },
+            {
+                "body": "Potential issue: stale old-head finding.",
+                "path": "src/old.py",
+                "line": 3,
+                "commit_id": "old-head",
+                "html_url": "https://example.invalid/old",
                 "user": {"login": "coderabbitai[bot]"},
             },
             {
                 "body": "Unrelated human comment.",
                 "path": "src/admin.py",
                 "line": 8,
+                "commit_id": "frozen-head",
                 "user": {"login": "human"},
             },
         ],
@@ -215,6 +310,7 @@ def test_live_fetch_filters_author_and_freezes_head(monkeypatch: pytest.MonkeyPa
     assert comments[0].author == "coderabbitai[bot]"
     assert metadata["head_sha"] == "frozen-head"
     assert metadata["matched_author_comment_count"] == 1
+    assert metadata["stale_comment_count"] == 1
 
     with pytest.raises(ReviewerComparisonError, match="PR head changed"):
         load_live_external_comments(
@@ -248,3 +344,15 @@ def test_cli_writes_json_and_markdown(tmp_path: Path, capsys: pytest.CaptureFixt
     assert json.loads(capsys.readouterr().out)["reference_name"] == "CodeRabbit"
     assert json.loads(json_output.read_text(encoding="utf-8"))["winner"] is None
     assert "Sergeant Reviewer Comparison" in markdown_output.read_text(encoding="utf-8")
+
+
+def test_cli_returns_clean_error_without_traceback(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    missing = tmp_path / "missing.json"
+
+    code = main([
+        "--sergeant-packet", str(missing),
+        "--reference-review", str(missing),
+    ])
+
+    assert code == 2
+    assert "sergeant-compare:" in capsys.readouterr().err
