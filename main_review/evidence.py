@@ -1,9 +1,8 @@
 """Evidence providers for Main Review.
 
-Evidence providers produce facts. They do not decide the final verdict.
-Patch 03 keeps providers static and safe: no project code execution.
+Evidence providers produce facts. They do not decide the final verdict. All
+providers remain static and safe: no project code execution.
 """
-
 from __future__ import annotations
 
 import re
@@ -40,10 +39,6 @@ class EvidenceProvider(Protocol):
         ...
 
 
-# The generic assignment pattern is anchored to the actual key/variable at the
-# start of a line. This still catches Python/JS assignments and JSON/YAML/TOML
-# keys, but it does not treat a quoted example such as
-# ``"evidence": "PASSWORD = 'fake-value'"`` as a live credential.
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("private key", re.compile(r"-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
     (
@@ -139,9 +134,27 @@ class TestCoverageEvidenceProvider:
         source_count = sum(1 for file in insight.files if file.role == "source")
         test_count = len(insight.tests)
         if source_count and not test_count:
-            return [EvidenceFinding(self.name, "major", "testing", "Source files exist but no tests were detected.", evidence=f"Detected {source_count} source file(s) and 0 test files.", confidence=0.85)]
+            return [
+                EvidenceFinding(
+                    self.name,
+                    "major",
+                    "testing",
+                    "Source files exist but no tests were detected.",
+                    evidence=f"Detected {source_count} source file(s) and 0 test files.",
+                    confidence=0.85,
+                )
+            ]
         if test_count < max(1, source_count // 5) and source_count >= 10:
-            return [EvidenceFinding(self.name, "minor", "testing", "Test footprint appears low compared with source footprint.", evidence=f"Detected {source_count} source file(s) and {test_count} test file(s).", confidence=0.65)]
+            return [
+                EvidenceFinding(
+                    self.name,
+                    "minor",
+                    "testing",
+                    "Test footprint appears low compared with source footprint.",
+                    evidence=f"Detected {source_count} source file(s) and {test_count} test file(s).",
+                    confidence=0.65,
+                )
+            ]
         return []
 
 
@@ -150,9 +163,27 @@ class DocumentationEvidenceProvider:
 
     def collect(self, root: Path, insight: RepositoryInsight) -> list[EvidenceFinding]:
         if not insight.docs:
-            return [EvidenceFinding(self.name, "major", "documentation", "No documentation files were detected.", evidence="README/docs are absent from the repository scan.", confidence=0.8)]
+            return [
+                EvidenceFinding(
+                    self.name,
+                    "major",
+                    "documentation",
+                    "No documentation files were detected.",
+                    evidence="README/docs are absent from the repository scan.",
+                    confidence=0.8,
+                )
+            ]
         if "README.md" not in insight.docs and "readme.md" not in {doc.lower() for doc in insight.docs}:
-            return [EvidenceFinding(self.name, "minor", "documentation", "Documentation exists but no top-level README.md was detected.", evidence=f"Detected docs: {', '.join(insight.docs[:5])}.", confidence=0.7)]
+            return [
+                EvidenceFinding(
+                    self.name,
+                    "minor",
+                    "documentation",
+                    "Documentation exists but no top-level README.md was detected.",
+                    evidence=f"Detected docs: {', '.join(insight.docs[:5])}.",
+                    confidence=0.7,
+                )
+            ]
         return []
 
 
@@ -160,17 +191,49 @@ class RiskPathEvidenceProvider:
     name = "risk-path-checker"
 
     def collect(self, root: Path, insight: RepositoryInsight) -> list[EvidenceFinding]:
-        return [EvidenceFinding(self.name, "note", "risk", "High-risk path detected for review attention.", path=path, evidence="Infrastructure, CI, deployment, or sensitive path classification.", confidence=0.75) for path in insight.high_risk_files]
+        return [
+            EvidenceFinding(
+                self.name,
+                "note",
+                "risk",
+                "High-risk path detected for review attention.",
+                path=path,
+                evidence="Infrastructure, CI, deployment, or sensitive path classification.",
+                confidence=0.75,
+            )
+            for path in insight.high_risk_files
+        ]
+
+
+def _eligible_battle_path(path: str) -> bool:
+    """Keep learned battle rules on code/patch evidence, not fixture prose."""
+
+    normalized = path.replace("\\", "/")
+    if normalized.startswith(("battle-tests/", "docs/")):
+        return False
+    if normalized.lower() in {"readme.md", "submission_ready.md"}:
+        return False
+    suffix = Path(normalized).suffix.lower()
+    if suffix in {".md", ".mdx", ".txt", ".json"} and Path(normalized).name != "__sergeant_pr_comments.md":
+        return False
+    return True
 
 
 class BattleAwareEvidenceProvider:
-    """Static review rules learned from committed battle fixtures."""
+    """Static review rules learned from committed battle fixtures.
+
+    Fixture expectations and public documentation are training/evaluation data,
+    not review input. They are deliberately excluded from ordinary repository
+    scans so Sergeant cannot award itself credit for reading its answer key.
+    """
 
     name = "battle-aware-checker"
 
     def collect(self, root: Path, insight: RepositoryInsight) -> list[EvidenceFinding]:
         findings: list[EvidenceFinding] = []
         for path, text in _read_text_files(root, insight):
+            if not _eligible_battle_path(path):
+                continue
             lowered = text.lower()
             findings.extend(self._requests_rules(path, lowered))
             findings.extend(self._flask_context_rules(path, lowered))
@@ -212,7 +275,7 @@ class BattleAwareEvidenceProvider:
             findings.append(EvidenceFinding(self.name, "minor", "testing", "Regression tests cover existing destination query strings and incoming request query strings.", path=path, evidence="Detected RedirectView query-string regression cases covering destination and request query strings.", confidence=0.8))
         if "urlparse" in text and ".query" in text:
             findings.append(EvidenceFinding(self.name, "minor", "architecture", "Query-string merge logic should use explicit URL query detection instead of checking for a raw question mark.", path=path, evidence="Detected explicit URL query parsing for separator selection.", confidence=0.75))
-        elif "\"?\" in url" in text or "'?' in url" in text:
+        elif '"?" in url' in text or "'?' in url" in text:
             findings.append(EvidenceFinding(self.name, "minor", "architecture", "Query-string merge logic should use explicit URL query detection instead of checking for a raw question mark.", path=path, evidence="Detected separator selection based on raw question-mark membership in URL text.", confidence=0.7))
         if "following the review feedback" in text or "follow-up pr" in text or "follow up" in text:
             findings.append(EvidenceFinding(self.name, "minor", "documentation", "Follow-up review feedback should be tracked before treating the change as final.", path=path, evidence="Detected follow-up review continuation language.", confidence=0.75))
@@ -234,4 +297,9 @@ def collect_evidence(root: str | Path, providers: tuple[EvidenceProvider, ...] =
     findings: list[EvidenceFinding] = []
     for provider in providers:
         findings.extend(provider.collect(root_path, insight))
-    return {"root": str(root_path), "repository": insight.to_dict(), "findings": [finding.to_dict() for finding in findings], "finding_count": len(findings)}
+    return {
+        "root": str(root_path),
+        "repository": insight.to_dict(),
+        "findings": [finding.to_dict() for finding in findings],
+        "finding_count": len(findings),
+    }
