@@ -2,11 +2,12 @@
 
 Tier 1 scanners deliberately over-collect signals. Tier 2 consolidates,
 challenges, explains, and promotes only evidence-bearing findings. Its quality
-score measures the completeness of the review output, never the quality of the
-code under review.
+score measures the completeness of the finding-specific review output, never
+the quality of the code under review.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from statistics import mean
 from typing import Any
@@ -25,6 +26,16 @@ CAPABILITY_POINTS = {
     "call_graph": 7,
 }
 _PATH_OPTIONAL = {"test_impact"}
+_GENERIC_EVIDENCE_PHRASES = (
+    "patterns were both detected",
+    "needs validation review",
+    "requires compatibility review",
+    "may create scaling risk",
+    "may need race-condition review",
+    "path name indicates",
+    "appears near a risky sink",
+)
+_EVIDENCE_TOKEN_RE = re.compile(r"[a-z0-9_]+", re.I)
 
 
 @dataclass(frozen=True)
@@ -69,6 +80,9 @@ def _key(finding: dict[str, Any]) -> tuple[str, str, str | None, int | None]:
 
 
 def _root(finding: dict[str, Any]) -> str:
+    explicit = _text(finding.get("root_cause"))
+    if explicit:
+        return explicit
     cap = _text(finding.get("capability"))
     if cap in {"security_taint", "data_flow"}:
         return "unsafe-data-flow"
@@ -84,14 +98,15 @@ def _root(finding: dict[str, Any]) -> str:
 
 
 def _confidence(finding: dict[str, Any], duplicate_count: int) -> float:
-    score = float(finding.get("confidence") or 0.5)
+    raw = finding.get("confidence")
+    score = float(raw) if raw is not None else 0.5
     if _text(finding.get("evidence")):
         score += 0.08
     if finding.get("related_paths"):
         score += 0.04
     if duplicate_count > 1:
         score += min(0.08, duplicate_count * 0.02)
-    return round(max(0.1, min(0.99, score)), 2)
+    return round(max(0.0, min(0.99, score)), 2)
 
 
 def _priority(finding: dict[str, Any], confidence: float) -> int:
@@ -190,29 +205,52 @@ def _evidence_strength(finding: dict[str, Any], confidence: float) -> float:
     return round(min(1.0, score), 2)
 
 
+def _evidence_is_specific(finding: dict[str, Any]) -> bool:
+    evidence = _text(finding.get("evidence"))
+    lowered = evidence.lower()
+    if not evidence:
+        return False
+    tokens = {token.lower() for token in _EVIDENCE_TOKEN_RE.findall(evidence) if len(token) > 2}
+    has_location = bool(finding.get("line_start") or finding.get("line") or finding.get("evidence_ref"))
+    has_related_scope = bool(finding.get("related_paths"))
+    has_concrete_marker = bool(re.search(r"[()/:?=._-]|\b\d+\b", evidence))
+    generic_only = any(phrase in lowered for phrase in _GENERIC_EVIDENCE_PHRASES) and not has_concrete_marker
+    if generic_only:
+        return False
+    if _text(finding.get("capability")) in _PATH_OPTIONAL:
+        return len(tokens) >= 6 and (has_concrete_marker or has_related_scope)
+    return len(tokens) >= 6 and (has_location or has_related_scope or has_concrete_marker)
+
+
 def _challenge(finding: dict[str, Any], evidence_strength: float) -> str:
     capability = _text(finding.get("capability"))
     if not _text(finding.get("evidence")):
         return "weakened: missing direct evidence"
     if capability not in _PATH_OPTIONAL and not finding.get("path"):
         return "weakened: missing affected path"
-    if float(finding.get("confidence") or 0.0) < 0.55:
+    raw_confidence = finding.get("confidence")
+    confidence = float(raw_confidence) if raw_confidence is not None else 0.5
+    if confidence < 0.55:
         return "weakened: low confidence"
-    if evidence_strength < 0.58:
+    if not _evidence_is_specific(finding):
         return "weakened: evidence is too generic"
+    if evidence_strength < 0.65:
+        return "weakened: evidence strength is below the promotion threshold"
     return "survived: evidence is specific enough for review output"
 
 
 def _completeness(finding: dict[str, Any], capability: str, evidence_strength: float) -> float:
+    path_present = bool(finding.get("path")) or capability in _PATH_OPTIONAL
+    location_present = bool(finding.get("line_start") or finding.get("line") or finding.get("evidence_ref")) or capability in _PATH_OPTIONAL
+    direct_evidence = bool(finding.get("direct_evidence")) or capability in _PATH_OPTIONAL
     checks = [
         bool(_text(finding.get("message"))),
         bool(_text(finding.get("evidence"))),
-        bool(finding.get("path")) or capability in _PATH_OPTIONAL,
-        bool(_why(capability)),
-        bool(_trigger(capability)),
-        bool(_consequence(capability)),
-        bool(_alternative(capability)),
-        bool(_verification(capability)),
+        path_present,
+        location_present,
+        bool(_text(finding.get("root_cause"))) or bool(capability),
+        finding.get("confidence") is not None,
+        direct_evidence,
     ]
     return round((sum(checks) / len(checks)) * 0.8 + evidence_strength * 0.2, 2)
 
