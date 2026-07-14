@@ -1,0 +1,123 @@
+name: Review Intelligence Proof
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Reviewer mode to measure
+        required: true
+        default: deterministic
+        type: choice
+        options:
+          - deterministic
+          - one-model
+          - council
+
+permissions:
+  contents: read
+
+jobs:
+  blind-review-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BENCHMARK_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'deterministic' }}
+      SERGEANT_CPL_BASE_URL: ${{ secrets.SERGEANT_CPL_BASE_URL }}
+      SERGEANT_CPL_API_KEY: ${{ secrets.SERGEANT_CPL_API_KEY }}
+      SERGEANT_CPL_MODEL: ${{ secrets.SERGEANT_CPL_MODEL }}
+      SERGEANT_CPL_PROVIDER: ${{ secrets.SERGEANT_CPL_PROVIDER }}
+      SERGEANT_CPL_PROTOCOL: ${{ secrets.SERGEANT_CPL_PROTOCOL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install proof dependencies
+        run: |
+          python -m pip install --upgrade pip pytest build
+          python -m pip install -e .
+
+      - name: Run focused reviewer-intelligence tests
+        run: |
+          python -m pytest \
+            tests/test_review_benchmark.py \
+            tests/test_review_intelligence.py \
+            tests/test_review_intelligence_proof.py \
+            tests/test_capability_policy.py \
+            tests/test_battle_compare.py \
+            tests/test_pr_reviewer.py \
+            -q
+
+      - name: Run blind benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          args=(
+            review-benchmarks/blind
+            --mode "$BENCHMARK_MODE"
+            --minimum-precision 0.60
+            --minimum-recall 0.75
+            --output "build/review-benchmark-${BENCHMARK_MODE}.json"
+            --pretty
+          )
+          if [[ "$BENCHMARK_MODE" != "deterministic" ]]; then
+            args+=(--require-route)
+          fi
+          sergeant-bench "${args[@]}"
+
+      - name: Build wheel
+        run: python -m build --wheel
+
+      - name: Prove installed benchmark package data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv build/benchmark-wheel-venv
+          build/benchmark-wheel-venv/bin/python -m pip install --upgrade pip
+          build/benchmark-wheel-venv/bin/python -m pip install dist/sergeant_reviewer-*.whl
+          cd /tmp
+          "$GITHUB_WORKSPACE/build/benchmark-wheel-venv/bin/sergeant-bench" \
+            --mode deterministic \
+            --minimum-precision 0.60 \
+            --minimum-recall 0.75 \
+            --output "$GITHUB_WORKSPACE/build/installed-wheel-review-benchmark.json" \
+            --pretty
+
+      - name: Verify proof artifacts contain no configured secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          artifacts = list(Path("build").glob("*review-benchmark*.json"))
+          assert artifacts, "No review benchmark artifacts were generated"
+          secrets = [
+              os.getenv("SERGEANT_CPL_API_KEY", ""),
+          ]
+          for path in artifacts:
+              text = path.read_text(encoding="utf-8", errors="replace")
+              for value in secrets:
+                  if value:
+                      assert value not in text, f"Configured secret leaked into {path}"
+          PY
+
+      - name: Upload reviewer-intelligence proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-intelligence-proof-${{ env.BENCHMARK_MODE }}
+          path: |
+            build/review-benchmark-*.json
+            build/installed-wheel-review-benchmark.json
+            dist/sergeant_reviewer-*.whl
+          if-no-files-found: error
