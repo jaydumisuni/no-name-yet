@@ -17,7 +17,7 @@
       "category": "concurrency",
       "severity": "minor",
       "paths": ["src/jobs.py"],
-      "line_start": 7,
+      "line_start": 6,
       "line_end": 8,
       "root_cause": "runtime-risk",
       "keywords": ["async", "shared", "state", "race"]
