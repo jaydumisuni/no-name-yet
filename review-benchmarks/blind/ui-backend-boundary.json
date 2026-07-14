@@ -1,0 +1,27 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "ui-backend-boundary",
+  "title": "UI layer imports backend implementation directly",
+  "changed_files": ["web/dashboard.py", "tests/test_dashboard.py"],
+  "files": [
+    {"path": "pyproject.toml", "content": "[project]\nname='benchmark-case'\nversion='0.0.0'\n"},
+    {"path": "README.md", "content": "# Blind benchmark case\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"},
+    {"path": "backend/database.py", "content": "def query(sql):\n    return []\n"},
+    {"path": "web/dashboard.py", "content": "from backend.database import query\n\ndef load_dashboard():\n    return query('SELECT 1')\n"},
+    {"path": "tests/test_dashboard.py", "content": "from web.dashboard import load_dashboard\n\ndef test_dashboard():\n    assert load_dashboard() == []\n"}
+  ],
+  "expected_verdict": "REQUEST_CHANGES",
+  "expected_findings": [
+    {
+      "id": "architecture-boundary",
+      "category": "architecture",
+      "severity": "major",
+      "paths": ["web/dashboard.py"],
+      "line_start": 1,
+      "line_end": 1,
+      "root_cause": "architecture-boundary",
+      "keywords": ["ui", "backend", "imports", "boundary"]
+    }
+  ]
+}
