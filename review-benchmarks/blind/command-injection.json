@@ -1,0 +1,36 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "command-injection",
+  "title": "Request input reaches shell command execution",
+  "changed_files": ["src/jobs.py", "tests/test_jobs.py"],
+  "files": [
+    {"path": "pyproject.toml", "content": "[project]\nname='benchmark-case'\nversion='0.0.0'\n"},
+    {"path": "README.md", "content": "# Blind benchmark case\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"},
+    {"path": "src/jobs.py", "content": "import subprocess\n\ndef run_job(request):\n    command = request.args.get('command')\n    return subprocess.run(command, shell=True)\n"},
+    {"path": "tests/test_jobs.py", "content": "from src.jobs import run_job\n\ndef test_symbol_exists():\n    assert run_job\n"}
+  ],
+  "expected_verdict": "REQUEST_CHANGES",
+  "expected_findings": [
+    {
+      "id": "command-data-flow",
+      "category": "data_flow",
+      "severity": "major",
+      "paths": ["src/jobs.py"],
+      "line_start": 5,
+      "line_end": 5,
+      "root_cause": "unsafe-data-flow",
+      "keywords": ["request", "input", "command", "execution"]
+    },
+    {
+      "id": "command-security",
+      "category": "security_taint",
+      "severity": "major",
+      "paths": ["src/jobs.py"],
+      "line_start": 5,
+      "line_end": 5,
+      "root_cause": "unsafe-data-flow",
+      "keywords": ["input", "command", "shell", "execution"]
+    }
+  ]
+}
