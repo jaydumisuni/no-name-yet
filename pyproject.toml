@@ -36,9 +36,19 @@ Issues = "https://github.com/jaydumisuni/Sergeant/issues"
 [project.scripts]
 sergeant = "main_review.cli:main"
 main-review = "main_review.cli:main"
+sergeant-serve = "main_review.standalone:main"
 
 [tool.setuptools]
 packages = ["main_review"]
+
+[tool.setuptools.data-files]
+"share/sergeant/resources" = [
+  "resources/sergeant-command-center-v2.html",
+  "resources/sergeant-command-center-v2.css",
+  "resources/sergeant-command-center-v2-responsive.css",
+  "resources/sergeant-command-center-v2.js",
+  "resources/sergeant-standalone-host.js",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
