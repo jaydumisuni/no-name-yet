@@ -122,10 +122,45 @@ def test_prediction_extraction_deduplicates_same_finding() -> None:
     packet = _empty_packet("REQUEST_CHANGES")
     packet["capability_review"] = {"findings": [finding, dict(finding)]}
 
-    predictions, raw_count = extract_predictions(packet)
+    predictions, valid_count = extract_predictions(packet)
 
-    assert raw_count == 2
+    assert valid_count == 2
     assert len(predictions) == 1
+
+
+def test_filtered_note_does_not_inflate_duplicate_denominator(monkeypatch: pytest.MonkeyPatch) -> None:
+    finding = {
+        "capability": "data_flow",
+        "severity": "major",
+        "message": "Unsafe data flow.",
+        "evidence": "Input reaches sink.",
+        "path": "src/app.py",
+        "line_start": 2,
+    }
+    note = {
+        "capability": "data_flow",
+        "severity": "note",
+        "message": "Context only.",
+        "evidence": "No actionable defect.",
+        "path": "src/app.py",
+    }
+    packet = _empty_packet("REQUEST_CHANGES")
+    packet["capability_review"] = {"findings": [finding, note]}
+    predictions, valid_count = extract_predictions(packet)
+    assert valid_count == 1
+    assert len(predictions) == 1
+
+    payload = _case(expected_findings=[{
+        "id": "unsafe-flow",
+        "category": "data_flow",
+        "severity": "major",
+        "paths": ["src/app.py"],
+        "line_start": 2,
+        "keywords": ["unsafe", "data", "flow"],
+    }], expected_verdict="REQUEST_CHANGES")
+    monkeypatch.setattr("main_review.review_benchmark.run_independent_pr_review", lambda *args, **kwargs: packet)
+    result = run_case(payload, mode="deterministic", match_threshold=0.5)
+    assert result.duplicate_rate == 0.0
 
 
 def test_mode_environment_restores_process_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
