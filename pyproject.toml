@@ -53,7 +53,11 @@ packages = ["main_review"]
 "share/sergeant/review-benchmarks/blind" = [
   "review-benchmarks/blind/api-contract-without-proof.json",
   "review-benchmarks/blind/clean-focused-change.json",
+  "review-benchmarks/blind/command-injection.json",
   "review-benchmarks/blind/nested-loop-cost.json",
+  "review-benchmarks/blind/path-traversal.json",
+  "review-benchmarks/blind/privileged-route-without-authorization.json",
+  "review-benchmarks/blind/safe-parameterized-query.json",
   "review-benchmarks/blind/shared-counter-race.json",
   "review-benchmarks/blind/ui-backend-boundary.json",
   "review-benchmarks/blind/unsafe-sql-data-flow.json",
