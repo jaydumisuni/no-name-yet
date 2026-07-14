@@ -36,6 +36,9 @@ _GENERIC_EVIDENCE_PHRASES = (
     "appears near a risky sink",
 )
 _EVIDENCE_TOKEN_RE = re.compile(r"[a-z0-9_]+", re.I)
+_CODE_MARKER_RE = re.compile(
+    r"(?:[()/:?=]|\b\d+\b|[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)"
+)
 
 
 @dataclass(frozen=True)
@@ -213,7 +216,7 @@ def _evidence_is_specific(finding: dict[str, Any]) -> bool:
     tokens = {token.lower() for token in _EVIDENCE_TOKEN_RE.findall(evidence) if len(token) > 2}
     has_location = bool(finding.get("line_start") or finding.get("line") or finding.get("evidence_ref"))
     has_related_scope = bool(finding.get("related_paths"))
-    has_concrete_marker = bool(re.search(r"[()/:?=._-]|\b\d+\b", evidence))
+    has_concrete_marker = bool(_CODE_MARKER_RE.search(evidence))
     generic_only = any(phrase in lowered for phrase in _GENERIC_EVIDENCE_PHRASES) and not has_concrete_marker
     if generic_only:
         return False
@@ -240,12 +243,14 @@ def _challenge(finding: dict[str, Any], evidence_strength: float) -> str:
 
 
 def _completeness(finding: dict[str, Any], capability: str, evidence_strength: float) -> float:
+    evidence_present = bool(_text(finding.get("evidence")))
     path_present = bool(finding.get("path")) or capability in _PATH_OPTIONAL
     location_present = bool(finding.get("line_start") or finding.get("line") or finding.get("evidence_ref")) or capability in _PATH_OPTIONAL
-    direct_evidence = bool(finding.get("direct_evidence")) or capability in _PATH_OPTIONAL
+    inferred_direct_evidence = evidence_present and path_present and location_present
+    direct_evidence = bool(finding.get("direct_evidence")) or inferred_direct_evidence or capability in _PATH_OPTIONAL
     checks = [
         bool(_text(finding.get("message"))),
-        bool(_text(finding.get("evidence"))),
+        evidence_present,
         path_present,
         location_present,
         bool(_text(finding.get("root_cause"))) or bool(capability),
