@@ -30,6 +30,10 @@ jobs:
       SERGEANT_CPL_MODEL: ${{ secrets.SERGEANT_CPL_MODEL }}
       SERGEANT_CPL_PROVIDER: ${{ secrets.SERGEANT_CPL_PROVIDER }}
       SERGEANT_CPL_PROTOCOL: ${{ secrets.SERGEANT_CPL_PROTOCOL }}
+      SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+      SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+      SERGEANT_CPL_MODEL_PRESET: ${{ vars.SERGEANT_CPL_MODEL_PRESET }}
+      SERGEANT_CPL_MODELS: ${{ vars.SERGEANT_CPL_MODELS }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,6 +61,7 @@ jobs:
             tests/test_capability_policy.py \
             tests/test_battle_compare.py \
             tests/test_pr_reviewer.py \
+            tests/test_cloudflare_provider.py \
             -q
 
       - name: Prove verified learning and recurrence handling
@@ -65,6 +70,10 @@ jobs:
           python -m main_review.learning_proof \
             --output build/verified-learning-proof.json \
             --pretty
+
+      - name: Require a live route for model modes
+        if: env.BENCHMARK_MODE != 'deterministic'
+        run: sergeant cpl-status --require
 
       - name: Run blind benchmark
         shell: bash
@@ -112,12 +121,16 @@ jobs:
 
           artifacts = list(Path("build").glob("*.json"))
           assert artifacts, "No reviewer-intelligence artifacts were generated"
-          values = [os.getenv("SERGEANT_CPL_API_KEY", "")]
+          values = [
+              os.getenv("SERGEANT_CPL_API_KEY", ""),
+              os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", ""),
+              os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ""),
+          ]
           for path in artifacts:
               text = path.read_text(encoding="utf-8", errors="replace")
               for value in values:
                   if value:
-                      assert value not in text, f"Configured secret leaked into {path}"
+                      assert value not in text, f"Configured secret or account identifier leaked into {path}"
           PY
 
       - name: Upload reviewer-intelligence proof
