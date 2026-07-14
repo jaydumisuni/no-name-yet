@@ -7,6 +7,7 @@ from main_review.capability_engine import run_capability_engine
 from main_review.capability_policy import normalize_capability_review
 from main_review.diff_policy import normalize_diff_review
 from main_review.diff_review import review_changed_files
+from main_review.review_scope import scope_repository_review
 
 
 def test_capability_engine_excludes_evaluation_fixture_payloads(tmp_path: Path) -> None:
@@ -89,3 +90,111 @@ def test_capability_findings_receive_canonical_root_causes(tmp_path: Path) -> No
     }, tmp_path)
 
     assert normalized["findings"][0]["root_cause"] == "runtime-risk"
+
+
+def test_parameterized_query_suppresses_lexical_taint_findings(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "api.py").write_text(
+        "def get_user(request, db):\n"
+        "    user_id = request.args.get('id')\n"
+        "    return db.query(\"SELECT * FROM users WHERE id = ?\", [user_id])\n",
+        encoding="utf-8",
+    )
+    normalized = normalize_capability_review({
+        "verdict": "NEEDS WORK",
+        "changed_files": ["src/api.py"],
+        "findings": [
+            {
+                "capability": "data_flow",
+                "severity": "major",
+                "path": "src/api.py",
+                "message": "User-controlled input appears near a risky sink.",
+                "evidence": "Input and query patterns coexist.",
+            },
+            {
+                "capability": "security_taint",
+                "severity": "major",
+                "path": "src/api.py",
+                "message": "Potential tainted input path needs validation review.",
+                "evidence": "Input and query patterns coexist.",
+            },
+        ],
+    }, tmp_path)
+
+    assert normalized["verdict"] == "PASS"
+    assert {item["severity"] for item in normalized["findings"]} == {"note"}
+    assert all(item["safe_binding_signal"] is True for item in normalized["findings"])
+
+
+def test_uncontained_request_path_creates_two_grounded_findings(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "files.py").write_text(
+        "from pathlib import Path\n\n"
+        "BASE = Path('/srv/files')\n\n"
+        "def download(request):\n"
+        "    name = request.args.get('name')\n"
+        "    return open(BASE / name, 'rb')\n",
+        encoding="utf-8",
+    )
+
+    normalized = normalize_capability_review({
+        "verdict": "PASS",
+        "changed_files": ["src/files.py"],
+        "findings": [],
+    }, tmp_path)
+
+    assert normalized["verdict"] == "NEEDS WORK"
+    assert len(normalized["findings"]) == 2
+    assert {item["capability"] for item in normalized["findings"]} == {"data_flow", "security_taint"}
+    assert {item["root_cause"] for item in normalized["findings"]} == {"unsafe-file-access"}
+    assert {item["line_start"] for item in normalized["findings"]} == {7}
+
+
+def test_privileged_route_without_guard_creates_authorization_finding(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "admin_api.py").write_text(
+        "def delete_user(request):\n"
+        "    return {'deleted': request.params['id']}\n\n"
+        "app.delete('/admin/users/:id', delete_user)\n",
+        encoding="utf-8",
+    )
+
+    normalized = normalize_capability_review({
+        "verdict": "PASS",
+        "changed_files": ["src/admin_api.py"],
+        "findings": [],
+    }, tmp_path)
+
+    assert normalized["verdict"] == "NEEDS WORK"
+    finding = normalized["findings"][0]
+    assert finding["capability"] == "security_taint"
+    assert finding["root_cause"] == "authorization-gap"
+    assert finding["line_start"] == 4
+
+
+def test_battle_rule_source_matches_are_suppressed_not_scoped() -> None:
+    review = {
+        "verdict": {"verdict": "PASS"},
+        "evidence": {"findings": [
+            {
+                "provider": "battle-aware-checker",
+                "severity": "minor",
+                "category": "testing",
+                "path": "main_review/evidence.py",
+                "message": "Duplicate tests should be removed or parameterized.",
+            },
+            {
+                "provider": "documentation-checker",
+                "severity": "minor",
+                "category": "documentation",
+                "path": "README.md",
+                "message": "A real changed-scope documentation finding.",
+            },
+        ]},
+    }
+
+    scoped = scope_repository_review(review, ["main_review/evidence.py", "README.md"])
+
+    assert scoped["scope"]["suppressed_finding_count"] == 1
+    assert scoped["scope"]["scoped_finding_count"] == 1
+    assert scoped["suppressed"]["sample"][0]["path"] == "main_review/evidence.py"
