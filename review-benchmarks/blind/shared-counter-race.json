@@ -1,0 +1,26 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "shared-counter-race",
+  "title": "Async work mutates shared global state",
+  "changed_files": ["src/jobs.py", "tests/test_jobs.py"],
+  "files": [
+    {"path": "pyproject.toml", "content": "[project]\nname='benchmark-case'\nversion='0.0.0'\n"},
+    {"path": "README.md", "content": "# Blind benchmark case\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"},
+    {"path": "src/jobs.py", "content": "import asyncio\n\nglobal_counter = 0\n\nasync def process(job):\n    global global_counter\n    await asyncio.create_task(job())\n    global_counter += 1\n    return global_counter\n"},
+    {"path": "tests/test_jobs.py", "content": "from src.jobs import process\n\ndef test_symbol_exists():\n    assert process\n"}
+  ],
+  "expected_verdict": "APPROVE",
+  "expected_findings": [
+    {
+      "id": "concurrency-risk",
+      "category": "concurrency",
+      "severity": "minor",
+      "paths": ["src/jobs.py"],
+      "line_start": 7,
+      "line_end": 8,
+      "root_cause": "runtime-risk",
+      "keywords": ["async", "shared", "state", "race"]
+    }
+  ]
+}
