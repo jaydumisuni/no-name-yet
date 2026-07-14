@@ -40,6 +40,20 @@ def test_cloudflare_settings_use_scoped_environment_without_exposing_secret(monk
     assert "1234567890abcdef" not in str(public)
 
 
+def test_cloudflare_credentials_auto_select_provider(monkeypatch) -> None:
+    monkeypatch.delenv("SERGEANT_CPL_PROVIDER", raising=False)
+    monkeypatch.delenv("SERGEANT_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("SERGEANT_CPL_BASE_URL", raising=False)
+    monkeypatch.delenv("SERGEANT_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", "1234567890abcdef")
+    monkeypatch.setenv("SERGEANT_CLOUDFLARE_API_TOKEN", "token")
+
+    settings = LLMSettings.from_environment()
+
+    assert settings.provider == "cloudflare"
+    assert settings.model == CLOUDFLARE_FREE_BALANCED_MODELS[0]
+
+
 def test_cloudflare_default_roster_is_balanced(monkeypatch) -> None:
     monkeypatch.delenv("SERGEANT_CPL_MODELS", raising=False)
     monkeypatch.delenv("SERGEANT_CPL_MODEL_PRESET", raising=False)
