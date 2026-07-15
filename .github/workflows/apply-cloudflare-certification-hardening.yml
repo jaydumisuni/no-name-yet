@@ -1,0 +1,56 @@
+name: Apply Cloudflare Certification Hardening
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-cloudflare-certification-hardening.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'cloudflare-certification-semantics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout semantics branch
+        uses: actions/checkout@v4
+        with:
+          ref: cloudflare-certification-semantics
+          fetch-depth: 0
+
+      - name: Apply reviewed hardening
+        run: python tools/harden_cloudflare_certification_semantics.py
+
+      - name: Validate reviewed semantics
+        run: |
+          python -m py_compile \
+            main_review/cpl_council.py \
+            main_review/cpl_runtime.py \
+            main_review/llm_review.py \
+            main_review/cloudflare_cli.py
+          python -m pip install pytest
+          python -m pytest \
+            tests/test_cloudflare_certification_semantics.py \
+            tests/test_cpl_council_runtime.py \
+            tests/test_cloudflare_native_fallback.py \
+            tests/test_cloudflare_provider.py \
+            tests/test_cloudflare_roster.py \
+            -q
+
+      - name: Commit hardened product files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            main_review/cpl_council.py \
+            main_review/cpl_runtime.py \
+            main_review/llm_review.py \
+            main_review/cloudflare_cli.py \
+            tests/test_cloudflare_certification_semantics.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Harden council finding identity and certification proof"
+            git push origin HEAD:cloudflare-certification-semantics
+          fi
