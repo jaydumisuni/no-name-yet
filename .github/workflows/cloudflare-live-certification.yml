@@ -1,0 +1,218 @@
+name: Cloudflare Live Council Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: Cloudflare model roster to certify
+        required: true
+        default: cloudflare-free-balanced
+        type: choice
+        options:
+          - cloudflare-free-efficient
+          - cloudflare-free-balanced
+          - cloudflare-free-strong
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-live-certification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+      SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+      SERGEANT_CPL_MODEL_PRESET: ${{ inputs.preset }}
+      SERGEANT_CPL_ENABLED: "true"
+      SERGEANT_CPL_POLICY: required
+      SERGEANT_CPL_DEPTH: adaptive
+      SERGEANT_CPL_MAX_PASSES: "3"
+      SERGEANT_CPL_MAX_COUNCIL_MEMBERS: "3"
+      SERGEANT_CPL_MAX_ROUNDS: "2"
+      SERGEANT_CPL_MAX_INPUT_CHARS: "16000"
+      SERGEANT_CLOUDFLARE_TIMEOUT_SECONDS: "75"
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Sergeant
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Capture credential-safe route status
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          sergeant-cloudflare --pretty status > build/cloudflare-status.json
+
+      - name: Test every configured model once
+        shell: bash
+        run: |
+          set +e
+          sergeant-cloudflare --pretty test-models > build/cloudflare-model-proof.json
+          code=$?
+          set -e
+          echo "MODEL_PROOF_EXIT=$code" >> "$GITHUB_ENV"
+
+      - name: Select only models that passed the structured contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("build/cloudflare-model-proof.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          rows = payload.get("models", []) if isinstance(payload, dict) else []
+          passed = [
+              str(item.get("model"))
+              for item in rows
+              if isinstance(item, dict) and item.get("passed") is True and item.get("model")
+          ]
+          Path("build/cloudflare-certified-models.json").write_text(
+              json.dumps({"models": passed, "count": len(passed)}, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"CERTIFIED_MODEL_COUNT={len(passed)}\n")
+              handle.write(f"SERGEANT_CLOUDFLARE_MODELS={','.join(passed)}\n")
+          PY
+
+      - name: Create focused council fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/live-council-fixture/src
+          cat > build/live-council-fixture/src/auth.py <<'PY'
+          import subprocess
+
+          def run_user_command(request):
+              command = request.args.get("command")
+              return subprocess.run(command, shell=True)
+          PY
+
+      - name: Run focused multi-model council proof
+        if: env.CERTIFIED_MODEL_COUNT != '0' && env.CERTIFIED_MODEL_COUNT != '1'
+        shell: bash
+        run: |
+          set +e
+          sergeant-cloudflare --pretty council-proof build/live-council-fixture \
+            --files src/auth.py \
+            --output build/cloudflare-council-proof.json \
+            --no-fail
+          code=$?
+          set -e
+          echo "COUNCIL_PROOF_EXIT=$code" >> "$GITHUB_ENV"
+
+      - name: Record unavailable council proof
+        if: env.CERTIFIED_MODEL_COUNT == '0' || env.CERTIFIED_MODEL_COUNT == '1'
+        shell: bash
+        run: |
+          cat > build/cloudflare-council-proof.json <<'JSON'
+          {
+            "schema_version": "sergeant.cloudflare-council-proof.v1",
+            "passed": false,
+            "error": "Fewer than two Cloudflare models passed the structured model proof."
+          }
+          JSON
+
+      - name: Build certification summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          status = json.loads(Path("build/cloudflare-status.json").read_text(encoding="utf-8"))
+          models = json.loads(Path("build/cloudflare-model-proof.json").read_text(encoding="utf-8"))
+          council = json.loads(Path("build/cloudflare-council-proof.json").read_text(encoding="utf-8"))
+          payload = {
+              "schema_version": "sergeant.cloudflare-live-certification.v1",
+              "provider": "cloudflare-workers-ai",
+              "preset": "${{ inputs.preset }}",
+              "route_valid": status.get("valid") is True,
+              "configured_model_count": models.get("model_count", 0),
+              "structured_model_pass_count": models.get("passed_count", 0),
+              "all_configured_models_passed": models.get("all_passed") is True,
+              "council_passed": council.get("passed") is True,
+              "distinct_models": council.get("distinct_models", []),
+              "model_call_count": council.get("model_call_count", 0),
+              "true_model_independence": council.get("true_model_independence", False),
+              "council_complete": council.get("council_complete", False),
+              "errors": council.get("errors", []),
+              "final_gaps": council.get("final_gaps", []),
+          }
+          payload["passed"] = bool(
+              payload["route_valid"]
+              and payload["all_configured_models_passed"]
+              and payload["council_passed"]
+              and payload["true_model_independence"]
+              and payload["council_complete"]
+          )
+          Path("build/cloudflare-live-certification.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+      - name: Verify credentials are absent from artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          values = [
+              os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ""),
+              os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", ""),
+          ]
+          for path in Path("build").glob("*.json"):
+              text = path.read_text(encoding="utf-8", errors="replace")
+              for value in values:
+                  if value:
+                      assert value not in text, f"Cloudflare credential leaked into {path}"
+          PY
+
+      - name: Upload live certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-live-certification-${{ inputs.preset }}
+          path: |
+            build/cloudflare-status.json
+            build/cloudflare-model-proof.json
+            build/cloudflare-certified-models.json
+            build/cloudflare-council-proof.json
+            build/cloudflare-live-certification.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce certification verdict
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("build/cloudflare-live-certification.json").read_text(encoding="utf-8"))
+          assert payload.get("passed") is True, "Cloudflare live council certification did not pass."
+          PY
