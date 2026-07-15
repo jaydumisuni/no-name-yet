@@ -15,7 +15,6 @@ CLOUDFLARE_PROVIDER_ALIASES = {
     CLOUDFLARE_PROVIDER,
     "cloudflare-workers-ai",
     "workers-ai",
-    "cloudflare-workers-ai",
     "cf",
 }
 CLOUDFLARE_BASE_TEMPLATE = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
