@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .cpl_council import finding_key
 from .cpl_reasoning import (
     CplAssignment,
     cpl_depth,
@@ -338,21 +339,11 @@ def _validate_pass(
     }
 
 
-def _finding_key(finding: dict[str, Any]) -> tuple[object, ...]:
-    message = re.sub(r"\W+", " ", str(finding.get("message", "")).lower()).strip()
-    return (
-        finding.get("path"),
-        finding.get("line_start"),
-        finding.get("line_end"),
-        message,
-    )
-
-
 def _merge_passes(passes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str, float]:
     merged: dict[tuple[object, ...], dict[str, Any]] = {}
     for item in passes:
         for finding in item.get("findings", []):
-            key = _finding_key(finding)
+            key = finding_key(finding)
             if key not in merged:
                 merged[key] = {
                     **finding,

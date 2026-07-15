@@ -123,11 +123,77 @@ def _changed_files(value: str, file_list: str | None) -> list[str]:
     return parse_changed_files_text(value)
 
 
+def _finding_supporting_models(finding: dict[str, Any]) -> list[str]:
+    values = [
+        *finding.get("supporting_models", []),
+        *finding.get("council_confirmed_by", []),
+    ]
+    return sorted({str(value) for value in values if str(value).strip()})
+
+
+def _expected_finding_result(
+    findings: list[dict[str, Any]],
+    *,
+    expected_path: str,
+    expected_category: str,
+    expected_severity: str,
+    expected_evidence: str,
+    minimum_supporting_models: int,
+) -> dict[str, Any]:
+    expected_path = expected_path.strip()
+    expected_category = expected_category.strip().lower()
+    expected_severity = expected_severity.strip().lower()
+    expected_evidence = expected_evidence.strip().lower()
+    required = bool(expected_path or expected_category or expected_severity or expected_evidence)
+    matches: list[dict[str, Any]] = []
+    for finding in findings:
+        if expected_path and str(finding.get("path") or "") != expected_path:
+            continue
+        if expected_category and str(finding.get("category") or "").lower() != expected_category:
+            continue
+        if expected_severity and str(finding.get("severity") or "").lower() != expected_severity:
+            continue
+        searchable = " ".join(
+            str(finding.get(field, ""))
+            for field in ("message", "evidence", "why_it_matters", "safer_alternative", "root_cause")
+        ).lower()
+        if expected_evidence and expected_evidence not in searchable:
+            continue
+        models = _finding_supporting_models(finding)
+        matches.append({
+            "path": finding.get("path"),
+            "category": finding.get("category"),
+            "severity": finding.get("severity"),
+            "message": finding.get("message"),
+            "supporting_models": models,
+            "support_count": len(models),
+        })
+    passed = (not required) or any(
+        int(item.get("support_count", 0)) >= minimum_supporting_models for item in matches
+    )
+    return {
+        "required": required,
+        "passed": passed,
+        "expected_path": expected_path,
+        "expected_category": expected_category,
+        "expected_severity": expected_severity,
+        "expected_evidence": expected_evidence,
+        "minimum_supporting_models": minimum_supporting_models,
+        "matches": matches,
+    }
+
+
 def run_council_proof(
     settings: CloudflareGatewaySettings,
     *,
     root: str | Path,
     changed_files: list[str],
+    expected_verdict: str = "",
+    expected_path: str = "",
+    expected_category: str = "",
+    expected_severity: str = "",
+    expected_evidence: str = "",
+    minimum_supporting_models: int = 1,
 ) -> dict[str, Any]:
     settings.validate()
     if len(settings.models) < 2:
@@ -165,9 +231,24 @@ def run_council_proof(
     errors = [str(item) for item in result.get("errors", []) if str(item).strip()]
     final_gaps = council.get("final_gaps", []) if isinstance(council.get("final_gaps"), list) else []
     verdict = str(result.get("verdict") or "")
+    effective_findings = [
+        item for item in council.get("effective_findings", []) if isinstance(item, dict)
+    ]
+    expected_result = _expected_finding_result(
+        effective_findings,
+        expected_path=expected_path,
+        expected_category=expected_category,
+        expected_severity=expected_severity,
+        expected_evidence=expected_evidence,
+        minimum_supporting_models=max(1, minimum_supporting_models),
+    )
+    expected_verdict = expected_verdict.strip().upper()
+    verdict_matches = not expected_verdict or verdict == expected_verdict
     passed = (
         result.get("status") == "completed"
         and verdict in VALID_COUNCIL_VERDICTS
+        and verdict_matches
+        and expected_result["passed"] is True
         and len(distinct_models) > 1
         and council.get("true_model_independence") is True
         and council.get("complete") is True
@@ -186,6 +267,9 @@ def run_council_proof(
         "final_gaps": final_gaps,
         "status": result.get("status"),
         "verdict": verdict,
+        "expected_verdict": expected_verdict,
+        "verdict_matches": verdict_matches,
+        "expected_finding": expected_result,
         "errors": errors,
         "council": council,
     }
@@ -225,6 +309,12 @@ def build_parser() -> argparse.ArgumentParser:
     source = council.add_mutually_exclusive_group(required=True)
     source.add_argument("--files", help="Comma/newline-separated changed files.")
     source.add_argument("--file-list", help="File containing changed paths.")
+    council.add_argument("--expected-verdict", choices=sorted(VALID_COUNCIL_VERDICTS), default="")
+    council.add_argument("--expected-path", default="")
+    council.add_argument("--expected-category", default="")
+    council.add_argument("--expected-severity", default="")
+    council.add_argument("--expected-evidence", default="")
+    council.add_argument("--minimum-supporting-models", type=int, default=1)
     council.add_argument("--output")
     council.add_argument("--no-fail", action="store_true")
     return parser
@@ -293,7 +383,17 @@ def main(argv: list[str] | None = None) -> int:
         if not changed:
             parser.error("At least one changed file is required.")
         try:
-            payload = run_council_proof(settings, root=args.path, changed_files=changed)
+            payload = run_council_proof(
+                settings,
+                root=args.path,
+                changed_files=changed,
+                expected_verdict=args.expected_verdict,
+                expected_path=args.expected_path,
+                expected_category=args.expected_category,
+                expected_severity=args.expected_severity,
+                expected_evidence=args.expected_evidence,
+                minimum_supporting_models=max(1, args.minimum_supporting_models),
+            )
         except CloudflareGatewayError as error:
             payload = {"schema_version": "sergeant.cloudflare-council-proof.v1", "passed": False, "error": str(error)}
         text = json.dumps(payload, indent=2 if args.pretty else None, sort_keys=True) + "\n"

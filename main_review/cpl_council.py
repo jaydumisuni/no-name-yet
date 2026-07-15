@@ -62,9 +62,63 @@ def specialist_for_text(value: object) -> str:
     return "correctness"
 
 
+ROOT_CAUSE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "unsafe-shell-execution",
+        re.compile(
+            r"(?:shell\s*=\s*true|subprocess\.(?:run|popen)|command\s+injection|"
+            r"arbitrary\s+(?:shell\s+)?commands?|shell\s+command\s+execution)",
+            re.I,
+        ),
+    ),
+    (
+        "sql-injection",
+        re.compile(r"(?:sql\s+injection|unparameteri[sz]ed\s+quer|raw\s+sql|query\s+concatenation)", re.I),
+    ),
+    (
+        "unsafe-file-access",
+        re.compile(r"(?:path\s+traversal|directory\s+traversal|untrusted\s+path|file\s+access\s+without\s+containment)", re.I),
+    ),
+    (
+        "authorization-gap",
+        re.compile(r"(?:missing\s+authorization|lacks?\s+(?:an?\s+)?authorization|privileged\s+route.*without)", re.I),
+    ),
+    (
+        "secret-exposure",
+        re.compile(r"(?:secret|credential|api\s*key|token).*(?:leak|expos|log|print)", re.I),
+    ),
+)
+
+
+def finding_root_cause(finding: dict[str, Any]) -> str:
+    """Return a deterministic root-cause class for well-known defect shapes."""
+
+    text = " ".join(
+        str(finding.get(field, ""))
+        for field in ("message", "evidence", "why_it_matters", "safer_alternative", "root_cause")
+    )
+    for name, pattern in ROOT_CAUSE_PATTERNS:
+        if pattern.search(text):
+            return name
+    return str(finding.get("root_cause") or "").strip().lower()
+
+
 def finding_key(finding: dict[str, Any]) -> tuple[object, ...]:
+    """Identify one underlying defect across model wording and nearby line drift."""
+
+    path = str(finding.get("path") or "").replace("\\", "/")
+    category = str(finding.get("category") or "other").strip().lower()
+    root_cause = finding_root_cause(finding)
+    if root_cause:
+        try:
+            line_start = max(1, int(finding.get("line_start") or 1))
+        except (TypeError, ValueError):
+            line_start = 1
+        line_window = (line_start - 1) // 10
+        return path, category, root_cause, line_window
+
     message = re.sub(r"\W+", " ", str(finding.get("message", "")).lower()).strip()
-    return finding.get("path"), finding.get("line_start"), finding.get("line_end"), message
+    return path, finding.get("line_start"), finding.get("line_end"), message
 
 
 def finding_reference(finding: dict[str, Any]) -> dict[str, Any]:
