@@ -1,0 +1,137 @@
+name: Cpl Quality Governor Live Proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/cpl-quality-live-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  blind-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_CPL_ENABLED: 'true'
+      SERGEANT_CPL_POLICY: required
+      SERGEANT_CPL_PROVIDER: cloudflare
+      SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+      SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+      SERGEANT_CPL_MODELS: '@cf/qwen/qwen3-30b-a3b-fp8,@cf/openai/gpt-oss-20b'
+      SERGEANT_CPL_MAX_OUTPUT_TOKENS: '1200'
+      SERGEANT_CPL_TIMEOUT_SECONDS: '75'
+      SERGEANT_CPL_MAX_INPUT_CHARS: '30000'
+      SERGEANT_CPL_MAX_PASSES: '2'
+      SERGEANT_CPL_MAX_COUNCIL_MEMBERS: '2'
+      SERGEANT_CPL_MAX_ROUNDS: '2'
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Sergeant
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Record tested head
+        run: |
+          mkdir -p build
+          git rev-parse HEAD | tee build/cpl-quality-tested-sha.txt
+
+      - name: Require Cloudflare route
+        run: sergeant cpl-status --require
+
+      - name: Run strict ten-case blind benchmark
+        id: benchmark
+        shell: bash
+        run: |
+          set +e
+          sergeant-bench review-benchmarks/blind \
+            --mode council \
+            --require-route \
+            --minimum-precision 0.90 \
+            --minimum-recall 0.90 \
+            --include-packets \
+            --output build/cpl-quality-live-benchmark.json \
+            --pretty
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "BENCHMARK_EXIT=$code" >> "$GITHUB_ENV"
+
+      - name: Write compact summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('build/cpl-quality-live-benchmark.json')
+          tested_sha = Path('build/cpl-quality-tested-sha.txt').read_text(encoding='utf-8').strip()
+          if path.exists():
+              benchmark = json.loads(path.read_text(encoding='utf-8'))
+              keys = [
+                  'passed', 'precision', 'recall', 'f1', 'verdict_accuracy',
+                  'duplicate_rate', 'finding_completeness', 'model_call_count',
+                  'distinct_models', 'duration_ms', 'case_count',
+                  'false_positive_count', 'false_negative_count', 'route_ready',
+              ]
+              payload = {'tested_sha': tested_sha, **{key: benchmark.get(key) for key in keys}}
+          else:
+              payload = {'tested_sha': tested_sha, 'passed': False, 'error': 'Benchmark artifact missing.'}
+          Path('build/cpl-quality-live-summary.json').write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+      - name: Scan proof for configured credential values
+        id: credential_scan
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          artifacts = list(Path('build').glob('*.json'))
+          assert artifacts, 'No live proof artifact generated.'
+          values = [
+              os.getenv('SERGEANT_CLOUDFLARE_API_TOKEN', ''),
+              os.getenv('SERGEANT_CLOUDFLARE_ACCOUNT_ID', ''),
+          ]
+          for path in artifacts:
+              text = path.read_text(encoding='utf-8', errors='replace')
+              for value in values:
+                  if value:
+                      assert value not in text, f'Credential or account identifier leaked into {path}'
+          PY
+
+      - name: Upload live quality artifact
+        if: always() && steps.credential_scan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpl-quality-governor-live-proof
+          path: |
+            build/cpl-quality-live-benchmark.json
+            build/cpl-quality-live-summary.json
+            build/cpl-quality-tested-sha.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce strict quality gate
+        if: always()
+        run: exit "${BENCHMARK_EXIT:-1}"
