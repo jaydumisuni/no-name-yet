@@ -1,0 +1,78 @@
+name: Apply Quality Adjudication Once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ops/**
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-prove:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out construction branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install focused proof tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+
+      - name: Apply adjudication integration once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q "def _gap_impact" main_review/cpl_runtime.py; then
+            python tools/apply_quality_adjudication.py
+          fi
+
+      - name: Compile changed modules
+        run: |
+          python -m compileall -q \
+            main_review/finding_ledger.py \
+            main_review/cpl_runtime.py \
+            main_review/pr_reviewer.py \
+            main_review/review_benchmark.py \
+            main_review/reviewer_comparison.py \
+            tests/test_finding_ledger.py
+
+      - name: Run focused adjudication proof
+        run: |
+          pytest -q \
+            tests/test_finding_ledger.py \
+            tests/test_cpl_council_runtime.py \
+            tests/test_pr_reviewer.py \
+            tests/test_reviewer_comparison.py \
+            tests/test_cloudflare_certification_semantics.py \
+            tests/test_cloudflare_mission_qualification.py
+
+      - name: Commit generated permanent integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            main_review/cpl_runtime.py \
+            main_review/pr_reviewer.py \
+            main_review/review_benchmark.py \
+            main_review/reviewer_comparison.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Integrate evidence-led finding adjudication"
+            git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          fi
