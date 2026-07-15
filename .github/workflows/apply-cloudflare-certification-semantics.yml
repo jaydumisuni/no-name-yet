@@ -47,9 +47,10 @@ jobs:
             main_review/cpl_council.py \
             main_review/llm_review.py \
             main_review/cloudflare_cli.py \
-            .github/workflows/cloudflare-live-certification.yml \
             tests/test_cloudflare_certification_semantics.py
           if ! git diff --cached --quiet; then
             git commit -m "Align council identity and Cloudflare certification semantics"
             git push origin HEAD:cloudflare-certification-semantics
           fi
+
+# The permanent certification workflow is updated separately through the repository connector.
