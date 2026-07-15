@@ -169,6 +169,62 @@ def test_model_route_failover_uses_next_council_member(monkeypatch: pytest.Monke
     assert attempts == ["model-a", "model-b"]
 
 
+def test_same_family_findings_remain_separate_when_far_apart() -> None:
+    left = {**cpl_shell(), "line_start": 5, "line_end": 5}
+    right = {**deterministic_shell(), "line_start": 50, "line_end": 50}
+
+    assert findings_overlap(left, right) is False
+
+
+def test_supporting_model_normalization_drops_null_values() -> None:
+    major = {
+        "category": "correctness",
+        "severity": "major",
+        "message": "Returned value violates the documented contract.",
+        "evidence": "return None",
+        "evidence_verified": True,
+        "path": "src/app.py",
+        "line_start": 8,
+        "line_end": 8,
+        "supporting_models": [None, "model-a", "model-b"],
+    }
+
+    result = reconcile_cpl_findings(
+        {"status": "completed", "verdict": "NEEDS WORK", "findings": [major]},
+        [],
+    )
+
+    assert result["actionable_findings"][0]["supporting_models"] == ["model-a", "model-b"]
+
+
+def test_all_model_failures_report_only_safe_failure_categories(monkeypatch: pytest.MonkeyPatch) -> None:
+    route = LLMRoute(
+        provider="cloudflare",
+        base_url="https://example.invalid/v1",
+        model="model-a",
+        protocol="chat_completions",
+        discovered_models=("model-a", "model-b"),
+    )
+
+    def fail(candidate: LLMRoute, *, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        raise LLMProviderError(
+            "Cpl model endpoint returned HTTP 429: private upstream response text"
+        )
+
+    monkeypatch.setattr(llm_review, "invoke_json", fail)
+
+    with pytest.raises(LLMProviderError) as captured:
+        llm_review._invoke_json_with_failover(
+            route,
+            system_prompt="system",
+            user_prompt="user",
+        )
+
+    message = str(captured.value)
+    assert "http_429=2" in message
+    assert "private upstream response text" not in message
+
+
 def test_final_decision_uses_noise_governed_cpl_verdict() -> None:
     verdict = _decide(
         {"verdict": "PASS"},

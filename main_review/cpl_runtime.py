@@ -10,7 +10,6 @@ from .cpl_council import (
     agreement,
     assess,
     available_models,
-    finding_key,
     finding_reference,
     findings_match,
     gap_signature,
@@ -27,8 +26,8 @@ from .llm_provider import LLMProviderError, LLMRoute, LLMSettings, discover_rout
 from .llm_review import (
     SYSTEM_PROMPT,
     _build_user_prompt,
-    _invoke_json_with_failover,
     _merge_passes,
+    _provider_failure_summary,
     _validate_pass,
     collect_changed_file_excerpts,
     run_cpl_review as run_cpl_review_once,
@@ -77,6 +76,7 @@ def _invoke_follow_up_with_failover(
     """Preserve the runtime transport seam while rerouting failed council members."""
 
     failed_models: list[str] = []
+    failures: list[LLMProviderError] = []
     for model in available_models(route):
         candidate = replace(route, model=model)
         try:
@@ -85,10 +85,14 @@ def _invoke_follow_up_with_failover(
                 candidate,
                 failed_models,
             )
-        except LLMProviderError:
+        except LLMProviderError as error:
             failed_models.append(model)
+            failures.append(error)
+    summary = _provider_failure_summary(failures)
+    suffix = f" ({summary})" if summary else ""
     raise LLMProviderError(
-        "No configured Cpl council model completed the follow-up officer pass."
+        "No configured Cpl council model completed the follow-up officer pass"
+        f"{suffix}."
     )
 
 

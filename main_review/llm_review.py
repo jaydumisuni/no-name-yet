@@ -79,6 +79,33 @@ Return this shape:
 """
 
 
+def _provider_failure_kind(error: LLMProviderError) -> str:
+    """Return a credential-safe provider failure category for audit and retry policy."""
+
+    message = str(error)
+    status = re.search(r"\bHTTP\s+(\d{3})\b", message, flags=re.IGNORECASE)
+    if status:
+        return f"http_{status.group(1)}"
+    lowered = message.lower()
+    if "timed out" in lowered or "timeout" in lowered:
+        return "timeout"
+    if "unavailable" in lowered or "urlopen error" in lowered:
+        return "unavailable"
+    if "invalid json" in lowered or "non-json" in lowered:
+        return "invalid_json"
+    if "did not contain" in lowered or "unexpected json shape" in lowered:
+        return "response_contract"
+    return "provider_error"
+
+
+def _provider_failure_summary(errors: list[LLMProviderError]) -> str:
+    counts: dict[str, int] = {}
+    for error in errors:
+        kind = _provider_failure_kind(error)
+        counts[kind] = counts.get(kind, 0) + 1
+    return ", ".join(f"{kind}={counts[kind]}" for kind in sorted(counts))
+
+
 def _invoke_json_with_failover(
     route: LLMRoute,
     *,
@@ -88,6 +115,7 @@ def _invoke_json_with_failover(
     """Try each configured council model before declaring the officer pass failed."""
 
     failed_models: list[str] = []
+    failures: list[LLMProviderError] = []
     for model in available_models(route):
         candidate = replace(route, model=model)
         try:
@@ -96,10 +124,14 @@ def _invoke_json_with_failover(
                 candidate,
                 failed_models,
             )
-        except LLMProviderError:
+        except LLMProviderError as error:
             failed_models.append(model)
+            failures.append(error)
+    summary = _provider_failure_summary(failures)
+    suffix = f" ({summary})" if summary else ""
     raise LLMProviderError(
-        "No configured Cpl council model completed the required structured officer pass."
+        "No configured Cpl council model completed the required structured officer pass"
+        f"{suffix}."
     )
 
 

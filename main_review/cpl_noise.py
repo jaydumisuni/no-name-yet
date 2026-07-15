@@ -113,7 +113,7 @@ def _supporting_models(finding: dict[str, Any]) -> list[str]:
     values = finding.get("supporting_models", [])
     if not isinstance(values, list):
         return []
-    return sorted({str(value) for value in values if str(value).strip()})
+    return sorted({str(value) for value in values if value is not None and str(value).strip()})
 
 
 def _decision_verdict(

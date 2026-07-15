@@ -100,7 +100,7 @@ route_failovers[].completed_by
 
 Follow-up recruitment records the corresponding `failover_from` list.
 
-If every configured model fails, the pass remains failed and Sergeant preserves the required-route error honestly.
+If every configured model fails, the pass remains failed and Sergeant preserves the required-route error honestly. The final error exposes only a safe category summary such as `http_429=2`, `timeout=1`, or `response_contract=1`; upstream response bodies are not copied into the council packet.
 
 ## Benchmark behavior
 
