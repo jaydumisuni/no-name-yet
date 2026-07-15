@@ -31,15 +31,29 @@ jobs:
           python tools/apply_cloudflare_mission_qualification.py
 
       - name: Install and prove patch
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-          python -m py_compile main_review/cloudflare_cli.py
-          pytest -q \
-            tests/test_cloudflare_gateway.py \
-            tests/test_cloudflare_mission_qualification.py \
-            tests/test_cloudflare_certification_semantics.py
-          pytest -q
+          set -o pipefail
+          mkdir -p build
+          {
+            python -m pip install --upgrade pip
+            python -m pip install -e .
+            python -m py_compile main_review/cloudflare_cli.py
+            pytest -q \
+              tests/test_cloudflare_gateway.py \
+              tests/test_cloudflare_mission_qualification.py \
+              tests/test_cloudflare_certification_semantics.py
+            pytest -q
+          } 2>&1 | tee build/cloudflare-mission-patch-proof.log
+
+      - name: Upload constructor proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-mission-patch-proof
+          path: build/cloudflare-mission-patch-proof.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Commit proven product changes
         run: |
