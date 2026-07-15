@@ -32,6 +32,7 @@ from .llm_provider import (
 
 ALLOWED_VERDICTS = {"PASS", "NEEDS WORK", "BLOCK"}
 ALLOWED_SEVERITIES = {"blocker", "major", "minor", "note"}
+SEVERITY_RANK = {"note": 0, "minor": 1, "major": 2, "blocker": 3}
 
 SYSTEM_PROMPT = """You are Cpl, Sergeant's Corporal Specialist reasoning officer.
 
@@ -351,6 +352,24 @@ def _merge_passes(passes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], s
                     "supporting_specialists": [item.get("specialist")],
                 })
                 continue
+            incoming_severity = str(finding.get("severity") or "note")
+            existing_severity = str(merged.get("severity") or "note")
+            if SEVERITY_RANK.get(incoming_severity, 0) > SEVERITY_RANK.get(existing_severity, 0):
+                for field in (
+                    "severity",
+                    "category",
+                    "path",
+                    "line_start",
+                    "line_end",
+                    "message",
+                    "evidence",
+                    "evidence_verified",
+                    "why_it_matters",
+                    "safer_alternative",
+                    "root_cause",
+                ):
+                    if field in finding:
+                        merged[field] = finding[field]
             models = merged.setdefault("supporting_models", [])
             if item.get("model") not in models:
                 models.append(item.get("model"))

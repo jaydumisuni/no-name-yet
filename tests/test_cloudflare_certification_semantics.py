@@ -197,8 +197,12 @@ def test_adjacent_lines_match_across_fixed_bucket_boundaries() -> None:
 
 
 def test_expected_contract_uses_verified_evidence_only() -> None:
-    finding = _shell_finding(line=4, message="Unsafe command", evidence="subprocess.run(command)")
-    finding["safer_alternative"] = "Avoid shell=True."
+    finding = _shell_finding(
+        line=4,
+        message="Unsafe command",
+        evidence="subprocess.run(command, shell=True)",
+    )
+    finding["evidence_verified"] = False
     finding["supporting_models"] = [MODEL_A, MODEL_B]
     result = cloudflare_cli._expected_finding_result(
         [finding],
@@ -222,6 +226,69 @@ def test_expected_contract_ignores_claimed_models_without_matching_passes() -> N
     result = cloudflare_cli._expected_finding_result(
         [finding],
         [{"model": MODEL_A, "findings": [finding]}, {"model": MODEL_B, "findings": []}],
+        expected_path="src/auth.py",
+        expected_category="security",
+        expected_severity="blocker",
+        expected_evidence="shell=true",
+        minimum_supporting_models=2,
+    )
+
+    assert result["passed"] is False
+    assert result["matches"][0]["supporting_models"] == [MODEL_A]
+
+
+
+def test_remediation_text_does_not_define_root_cause() -> None:
+    finding = _shell_finding(
+        line=4,
+        message="Subprocess environment inherits an unsafe PATH",
+        evidence="subprocess.run([tool, '--version'], shell=False)",
+    )
+    finding["why_it_matters"] = "Executable resolution may select an unintended binary."
+    finding["safer_alternative"] = "Keep shell=True disabled and use an absolute executable path."
+
+    assert finding_root_cause(finding) != "unsafe-shell-execution"
+
+
+def test_pass_merger_retains_strongest_severity_regardless_of_order() -> None:
+    major = _shell_finding(line=4, message="Command injection risk", evidence="shell=True")
+    major["severity"] = "major"
+    blocker = _shell_finding(line=5, message="Arbitrary shell command execution", evidence="shell=True")
+    blocker["severity"] = "blocker"
+
+    for ordered in ((major, blocker), (blocker, major)):
+        findings, verdict, _ = _merge_passes([
+            {
+                "model": MODEL_A,
+                "specialist": "generalist",
+                "verdict": "NEEDS WORK",
+                "confidence": 0.9,
+                "findings": [ordered[0]],
+            },
+            {
+                "model": MODEL_B,
+                "specialist": "security",
+                "verdict": "BLOCK",
+                "confidence": 0.9,
+                "findings": [ordered[1]],
+            },
+        ])
+
+        assert len(findings) == 1
+        assert findings[0]["severity"] == "blocker"
+        assert verdict == "BLOCK"
+
+
+def test_expected_support_requires_each_model_to_meet_full_contract() -> None:
+    blocker = _shell_finding(line=4, message="Command injection", evidence="shell=True")
+    weaker = _shell_finding(line=5, message="Shell execution concern", evidence="shell=True")
+    weaker["severity"] = "minor"
+    result = cloudflare_cli._expected_finding_result(
+        [blocker],
+        [
+            {"model": MODEL_A, "findings": [blocker]},
+            {"model": MODEL_B, "findings": [weaker]},
+        ],
         expected_path="src/auth.py",
         expected_category="security",
         expected_severity="blocker",

@@ -124,12 +124,46 @@ def _changed_files(value: str, file_list: str | None) -> list[str]:
     return parse_changed_files_text(value)
 
 
-def _completed_matching_models(finding: dict[str, Any], passes: list[dict[str, Any]]) -> list[str]:
+def _candidate_meets_expected_contract(
+    candidate: dict[str, Any],
+    *,
+    expected_category: str,
+    expected_severity: str,
+    expected_evidence: str,
+) -> bool:
+    if expected_category and str(candidate.get("category") or "").lower() != expected_category:
+        return False
+    if expected_severity and str(candidate.get("severity") or "").lower() != expected_severity:
+        return False
+    if expected_evidence:
+        evidence = str(candidate.get("evidence") or "").lower()
+        if candidate.get("evidence_verified") is not True or expected_evidence not in evidence:
+            return False
+    return True
+
+
+def _completed_matching_models(
+    finding: dict[str, Any],
+    passes: list[dict[str, Any]],
+    *,
+    expected_category: str,
+    expected_severity: str,
+    expected_evidence: str,
+) -> list[str]:
     return sorted({
         str(report.get("model"))
         for report in passes
         if report.get("model")
-        and any(findings_match(finding, candidate) for candidate in report.get("findings", []))
+        and any(
+            findings_match(finding, candidate)
+            and _candidate_meets_expected_contract(
+                candidate,
+                expected_category=expected_category,
+                expected_severity=expected_severity,
+                expected_evidence=expected_evidence,
+            )
+            for candidate in report.get("findings", [])
+        )
     })
 
 
@@ -162,7 +196,13 @@ def _expected_finding_result(
             or expected_evidence not in evidence
         ):
             continue
-        models = _completed_matching_models(finding, passes)
+        models = _completed_matching_models(
+            finding,
+            passes,
+            expected_category=expected_category,
+            expected_severity=expected_severity,
+            expected_evidence=expected_evidence,
+        )
         matches.append({
             "path": finding.get("path"),
             "category": finding.get("category"),

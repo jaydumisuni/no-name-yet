@@ -95,7 +95,7 @@ def finding_root_cause(finding: dict[str, Any]) -> str:
 
     text = " ".join(
         str(finding.get(field, ""))
-        for field in ("message", "evidence", "why_it_matters", "safer_alternative", "root_cause")
+        for field in ("message", "evidence", "why_it_matters", "root_cause")
     )
     for name, pattern in ROOT_CAUSE_PATTERNS:
         if pattern.search(text):
@@ -203,7 +203,11 @@ def assess(passes: list[dict[str, Any]], plan: list[dict[str, Any]], errors: lis
                     str(other.get("model"))
                     for other in passes
                     if other.get("model")
-                    and any(findings_match(finding, candidate) for candidate in other.get("findings", []))
+                    and any(
+                        candidate.get("severity") in {"blocker", "major"}
+                        and findings_match(finding, candidate)
+                        for candidate in other.get("findings", [])
+                    )
                 }
                 if len(supporting_models) > 1:
                     continue
