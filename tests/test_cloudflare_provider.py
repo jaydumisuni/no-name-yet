@@ -8,28 +8,31 @@ from main_review.cloudflare_models import (
 )
 from main_review.llm_provider import LLMSettings, discover_route
 
+ACCOUNT_ID = "0123456789abcdef0123456789abcdef"
+
 
 def test_parse_model_list_preserves_order_and_removes_duplicates() -> None:
     assert parse_model_list("model-a, model-b\nmodel-a") == ("model-a", "model-b")
 
 
 def test_cloudflare_base_url_rejects_unsafe_account_id() -> None:
-    assert cloudflare_base_url("account-123") == (
-        "https://api.cloudflare.com/client/v4/accounts/account-123/ai/v1"
+    assert cloudflare_base_url(ACCOUNT_ID) == (
+        f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1"
     )
+    assert cloudflare_base_url("account-123") == ""
     assert cloudflare_base_url("bad/account") == ""
 
 
 def test_cloudflare_settings_use_scoped_environment_without_exposing_secret(monkeypatch) -> None:
     monkeypatch.setenv("SERGEANT_CPL_PROVIDER", "cloudflare")
-    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", "1234567890abcdef")
+    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ACCOUNT_ID)
     monkeypatch.setenv("SERGEANT_CLOUDFLARE_API_TOKEN", "top-secret-token")
 
     settings = LLMSettings.from_environment()
     public = settings.public_dict()
 
     assert settings.base_url == (
-        "https://api.cloudflare.com/client/v4/accounts/1234567890abcdef/ai/v1"
+        f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1"
     )
     assert settings.api_key == "top-secret-token"
     assert settings.model == CLOUDFLARE_FREE_BALANCED_MODELS[0]
@@ -37,7 +40,7 @@ def test_cloudflare_settings_use_scoped_environment_without_exposing_secret(monk
     assert public["base_url"] == "https://api.cloudflare.com/client/v4/accounts/***/ai/v1"
     assert public["configured_models"] == list(CLOUDFLARE_FREE_BALANCED_MODELS)
     assert "top-secret-token" not in str(public)
-    assert "1234567890abcdef" not in str(public)
+    assert ACCOUNT_ID not in str(public)
 
 
 def test_cloudflare_credentials_auto_select_provider(monkeypatch) -> None:
@@ -46,7 +49,7 @@ def test_cloudflare_credentials_auto_select_provider(monkeypatch) -> None:
     monkeypatch.delenv("SERGEANT_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("SERGEANT_CPL_BASE_URL", raising=False)
     monkeypatch.delenv("SERGEANT_LLM_BASE_URL", raising=False)
-    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", "1234567890abcdef")
+    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ACCOUNT_ID)
     monkeypatch.setenv("SERGEANT_CLOUDFLARE_API_TOKEN", "token")
 
     settings = LLMSettings.from_environment()
@@ -57,6 +60,7 @@ def test_cloudflare_credentials_auto_select_provider(monkeypatch) -> None:
 
 
 def test_cloudflare_default_roster_is_balanced(monkeypatch) -> None:
+    monkeypatch.delenv("SERGEANT_CLOUDFLARE_MODELS", raising=False)
     monkeypatch.delenv("SERGEANT_CPL_MODELS", raising=False)
     monkeypatch.delenv("SERGEANT_CPL_MODEL_PRESET", raising=False)
 
@@ -65,6 +69,7 @@ def test_cloudflare_default_roster_is_balanced(monkeypatch) -> None:
 
 
 def test_explicit_roster_wins_over_cloudflare_preset(monkeypatch) -> None:
+    monkeypatch.delenv("SERGEANT_CLOUDFLARE_MODELS", raising=False)
     monkeypatch.setenv("SERGEANT_CPL_MODELS", "model-one,model-two")
     monkeypatch.setenv("SERGEANT_CPL_MODEL_PRESET", "cloudflare-free-strong")
 
@@ -74,7 +79,7 @@ def test_explicit_roster_wins_over_cloudflare_preset(monkeypatch) -> None:
 def test_discover_route_uses_cloudflare_roster_without_model_listing(monkeypatch) -> None:
     monkeypatch.setenv("SERGEANT_CPL_ENABLED", "true")
     monkeypatch.setenv("SERGEANT_CPL_PROVIDER", "cloudflare")
-    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", "1234567890abcdef")
+    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ACCOUNT_ID)
     monkeypatch.setenv("SERGEANT_CLOUDFLARE_API_TOKEN", "token")
     monkeypatch.setattr(
         "main_review.llm_provider.list_models",
@@ -93,7 +98,7 @@ def test_discover_route_uses_cloudflare_roster_without_model_listing(monkeypatch
 
 def test_cloudflare_alias_is_normalized(monkeypatch) -> None:
     monkeypatch.setenv("SERGEANT_CPL_PROVIDER", "workers-ai")
-    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", "1234567890abcdef")
+    monkeypatch.setenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ACCOUNT_ID)
     monkeypatch.setenv("SERGEANT_CLOUDFLARE_API_TOKEN", "token")
 
     settings = LLMSettings.from_environment()
