@@ -1,0 +1,196 @@
+name: Cleanup Cloudflare Fallback Duplication
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-cloudflare-fallback-duplication.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.head_ref == 'cloudflare-native-response-fallback'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: cloudflare-native-response-fallback
+          fetch-depth: 0
+
+      - name: Remove duplicate definitions and redact fallback errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def collapse_exact_duplicate(path: Path, block: str, *, label: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(block)
+              if count != 2:
+                  raise SystemExit(f"Expected exactly two {label} blocks in {path}; found {count}")
+              path.write_text(text.replace(block + block, block, 1), encoding="utf-8")
+
+          models = Path("main_review/cloudflare_models.py")
+          constants = '''CLOUDFLARE_REASONING_MODELS = {
+              "@cf/qwen/qwen3-30b-a3b-fp8",
+              "@cf/zai-org/glm-4.7-flash",
+              "@cf/openai/gpt-oss-20b",
+              "@cf/openai/gpt-oss-120b",
+          }
+          DEFAULT_MODEL_PROOF_OUTPUT_TOKENS = 384
+          REASONING_MODEL_PROOF_OUTPUT_TOKENS = 900
+
+          '''
+          constants = "\n".join(line[10:] if line.startswith("          ") else line for line in constants.splitlines()) + "\n"
+          collapse_exact_duplicate(models, constants, label="Cloudflare proof constants")
+
+          proof_function = '''def model_proof_output_tokens(model: str) -> int:
+              """Return a small but viable structured-proof budget for a model."""
+
+              return (
+                  REASONING_MODEL_PROOF_OUTPUT_TOKENS
+                  if model in CLOUDFLARE_REASONING_MODELS
+                  else DEFAULT_MODEL_PROOF_OUTPUT_TOKENS
+              )
+
+          '''
+          proof_function = "\n".join(line[10:] if line.startswith("          ") else line for line in proof_function.splitlines()) + "\n"
+          collapse_exact_duplicate(models, proof_function, label="model_proof_output_tokens")
+
+          cli = Path("main_review/cloudflare_cli.py")
+          import_block = '''from .cloudflare_models import (
+              DEFAULT_MODEL_PROOF_OUTPUT_TOKENS,
+              model_proof_output_tokens,
+          )
+          '''
+          import_block = "\n".join(line[10:] if line.startswith("          ") else line for line in import_block.splitlines()) + "\n"
+          collapse_exact_duplicate(cli, import_block, label="Cloudflare model import")
+
+          provider = Path("main_review/llm_provider.py")
+          helper_block = '''def _cloudflare_native_endpoint(route: LLMRoute) -> str:
+              base = route.base_url.rstrip("/")
+              if base.endswith("/ai/v1"):
+                  base = base[:-3]
+              elif base.endswith("/v1"):
+                  base = base[:-3]
+              model = urllib.parse.quote(route.model, safe="@/")
+              return f"{base}/run/{model}"
+
+
+          def _invoke_cloudflare_native_text(
+              route: LLMRoute,
+              *,
+              system_prompt: str,
+              user_prompt: str,
+          ) -> str:
+              body = {
+                  "messages": [
+                      {"role": "system", "content": system_prompt},
+                      {"role": "user", "content": user_prompt},
+                  ],
+                  "temperature": 0,
+                  "max_tokens": route.max_output_tokens,
+              }
+              request = urllib.request.Request(
+                  _cloudflare_native_endpoint(route),
+                  data=json.dumps(body).encode("utf-8"),
+                  headers=_request_headers(route.api_key),
+                  method="POST",
+              )
+              response = _load_json_response(request, route.timeout_seconds)
+              return _extract_text(response, "chat_completions")
+
+
+          '''
+          helper_block = "\n".join(line[10:] if line.startswith("          ") else line for line in helper_block.splitlines()) + "\n"
+          collapse_exact_duplicate(provider, helper_block, label="Cloudflare native helper")
+
+          text = provider.read_text(encoding="utf-8")
+          old = '''            raise LLMProviderError(
+                      "Cloudflare OpenAI-compatible and native model routes both failed. "
+                      f"Compatible route: {compatible_error} Native route: {native_error}"
+                  ) from native_error
+          '''
+          old = "\n".join(line[10:] if line.startswith("          ") else line for line in old.splitlines())
+          new = '''            raise LLMProviderError(
+                      "Cloudflare OpenAI-compatible and native model routes both failed."
+                  ) from native_error
+          '''
+          new = "\n".join(line[10:] if line.startswith("          ") else line for line in new.splitlines())
+          if text.count(old) != 1:
+              raise SystemExit("Expected one raw-detail fallback error block")
+          provider.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          tests = Path("tests/test_cloudflare_native_fallback.py")
+          text = tests.read_text(encoding="utf-8")
+          if "test_fallback_error_does_not_expose_upstream_details" in text:
+              raise SystemExit("Privacy regression test already exists unexpectedly")
+          text += '''
+
+          def test_fallback_error_does_not_expose_upstream_details(monkeypatch) -> None:
+              responses = iter(
+                  [
+                      {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]},
+                      llm_provider.LLMProviderError("raw upstream response body"),
+                  ]
+              )
+
+              def fake_load(request, timeout):
+                  value = next(responses)
+                  if isinstance(value, Exception):
+                      raise value
+                  return value
+
+              monkeypatch.setattr(llm_provider, "_load_json_response", fake_load)
+              with pytest.raises(llm_provider.LLMProviderError) as caught:
+                  llm_provider.invoke_json(_route(), system_prompt="system", user_prompt="user")
+
+              assert str(caught.value) == (
+                  "Cloudflare OpenAI-compatible and native model routes both failed."
+              )
+              assert "raw upstream response body" not in str(caught.value)
+
+
+          def test_cloudflare_fallback_definitions_are_unique() -> None:
+              provider_source = Path(llm_provider.__file__).read_text(encoding="utf-8")
+              models_source = Path(__import__("main_review.cloudflare_models", fromlist=["x"]).__file__).read_text(
+                  encoding="utf-8"
+              )
+
+              assert provider_source.count("def _cloudflare_native_endpoint(") == 1
+              assert provider_source.count("def _invoke_cloudflare_native_text(") == 1
+              assert models_source.count("def model_proof_output_tokens(") == 1
+          '''
+          text += "\n".join(line[10:] if line.startswith("          ") else line for line in text.splitlines()[-40:]) if False else ""
+          # Dedent only the appended block, not the existing file.
+          marker = "\n\n          def test_fallback_error_does_not_expose_upstream_details"
+          if marker in text:
+              before, appended = text.split(marker, 1)
+              appended = "def test_fallback_error_does_not_expose_upstream_details" + appended.split("def test_fallback_error_does_not_expose_upstream_details", 1)[1]
+              appended = "\n".join(line[10:] if line.startswith("          ") else line for line in appended.splitlines())
+              text = before + "\n\n" + appended
+          tests.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Validate cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile main_review/llm_provider.py main_review/cloudflare_models.py main_review/cloudflare_cli.py tests/test_cloudflare_native_fallback.py
+          python -m pip install pytest
+          python -m pytest tests/test_cloudflare_native_fallback.py tests/test_cloudflare_provider.py tests/test_cloudflare_roster.py -q
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main_review/llm_provider.py main_review/cloudflare_models.py main_review/cloudflare_cli.py tests/test_cloudflare_native_fallback.py
+          git commit -m "Deduplicate and redact Cloudflare fallback"
+          git push origin HEAD:cloudflare-native-response-fallback
