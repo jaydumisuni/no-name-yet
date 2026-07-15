@@ -8,6 +8,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .cloudflare_models import (
+    DEFAULT_MODEL_PROOF_OUTPUT_TOKENS,
+    model_proof_output_tokens,
+)
 from .cloudflare_gateway import (
     CloudflareGatewayError,
     CloudflareGatewaySettings,
@@ -19,7 +23,7 @@ from .llm_provider import LLMProviderError, LLMRoute, LLMSettings, invoke_json
 
 REQUIRED_PROOF_CAPABILITIES = ["structured_json", "reasoning"]
 VALID_COUNCIL_VERDICTS = {"PASS", "NEEDS WORK", "BLOCK"}
-MODEL_PROOF_MAX_OUTPUT_TOKENS = 320
+MODEL_PROOF_MAX_OUTPUT_TOKENS = DEFAULT_MODEL_PROOF_OUTPUT_TOKENS
 COUNCIL_PROOF_MAX_OUTPUT_TOKENS = 1200
 
 
@@ -70,10 +74,11 @@ def test_models(settings: CloudflareGatewaySettings) -> dict[str, Any]:
     settings.validate()
     results: list[dict[str, Any]] = []
     for model in settings.models:
+        proof_tokens = model_proof_output_tokens(model)
         route = cloudflare_route(
             settings,
             model=model,
-            max_output_tokens=MODEL_PROOF_MAX_OUTPUT_TOKENS,
+            max_output_tokens=proof_tokens,
         )
         system_prompt, user_prompt = _proof_prompt(model)
         started = time.monotonic()
@@ -89,6 +94,7 @@ def test_models(settings: CloudflareGatewaySettings) -> dict[str, Any]:
                     "model": model,
                     "passed": passed,
                     "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                    "max_output_tokens": proof_tokens,
                     "response": payload,
                 }
             )
@@ -98,6 +104,7 @@ def test_models(settings: CloudflareGatewaySettings) -> dict[str, Any]:
                     "model": model,
                     "passed": False,
                     "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                    "max_output_tokens": proof_tokens,
                     "error": str(error),
                 }
             )
