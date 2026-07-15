@@ -1,0 +1,148 @@
+name: Run Certified-Roster Blind Benchmark Once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ops/certified-roster-benchmark.json
+      - ops/certified-roster-benchmark-summary.json
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+      SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+      SERGEANT_CPL_ENABLED: 'true'
+      SERGEANT_CPL_POLICY: required
+      SERGEANT_CPL_DEPTH: adaptive
+      SERGEANT_CPL_MAX_PASSES: '2'
+      SERGEANT_CPL_MAX_COUNCIL_MEMBERS: '2'
+      SERGEANT_CPL_MAX_ROUNDS: '2'
+      SERGEANT_CPL_MAX_INPUT_CHARS: '16000'
+      SERGEANT_CLOUDFLARE_TIMEOUT_SECONDS: '75'
+      SERGEANT_CPL_MODELS: '@cf/qwen/qwen3-30b-a3b-fp8,@cf/openai/gpt-oss-20b'
+      OBSERVER_BRANCH: certified-roster-benchmark-20260715
+    steps:
+      - name: Checkout exact main revision
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Sergeant
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Require exact live route
+        run: sergeant cpl-status --require
+
+      - name: Run ten-case certified-roster benchmark
+        shell: bash
+        run: |
+          set +e
+          mkdir -p build
+          started="$(date +%s)"
+          sergeant-bench review-benchmarks/blind \
+            --mode council \
+            --minimum-precision 0.90 \
+            --minimum-recall 0.90 \
+            --require-route \
+            --output build/certified-roster-benchmark.json \
+            --pretty
+          code=$?
+          finished="$(date +%s)"
+          set -e
+          echo "BENCHMARK_EXIT=$code" >> "$GITHUB_ENV"
+          echo "WALL_SECONDS=$((finished-started))" >> "$GITHUB_ENV"
+          test -s build/certified-roster-benchmark.json
+
+      - name: Build benchmark summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          source = json.loads(Path('build/certified-roster-benchmark.json').read_text(encoding='utf-8'))
+          keys = (
+              'passed', 'route_ready', 'case_count', 'precision', 'recall', 'f1',
+              'verdict_accuracy', 'false_positive_count', 'false_negative_count',
+              'duplicate_rate', 'finding_completeness', 'model_call_count',
+              'distinct_models', 'duration_ms',
+          )
+          summary = {key: source.get(key) for key in keys}
+          summary.update({
+              'schema_version': 'sergeant.private-certified-roster-benchmark.v1',
+              'head_sha': os.environ['GITHUB_SHA'],
+              'benchmark_exit': int(os.environ.get('BENCHMARK_EXIT', '1')),
+              'wall_seconds': int(os.environ.get('WALL_SECONDS', '0')),
+              'models': [
+                  '@cf/qwen/qwen3-30b-a3b-fp8',
+                  '@cf/openai/gpt-oss-20b',
+              ],
+              'max_passes': 2,
+              'max_members': 2,
+              'max_rounds': 2,
+          })
+          Path('build/certified-roster-benchmark-summary.json').write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Verify credentials are absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          values = [
+              os.getenv('SERGEANT_CLOUDFLARE_ACCOUNT_ID', ''),
+              os.getenv('SERGEANT_CLOUDFLARE_API_TOKEN', ''),
+          ]
+          for path in Path('build').glob('certified-roster-benchmark*.json'):
+              text = path.read_text(encoding='utf-8', errors='replace')
+              for value in values:
+                  if value:
+                      assert value not in text, f'Credential leaked into {path}'
+          PY
+
+      - name: Commit sanitized benchmark evidence to temporary branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          put_file() {
+            local source="$1"
+            local destination="$2"
+            local message="$3"
+            local encoded
+            encoded="$(base64 -w0 "$source")"
+            gh api --method PUT \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GH_REPOSITORY}/contents/${destination}" \
+              -f message="$message" \
+              -f content="$encoded" \
+              -f branch="$OBSERVER_BRANCH" >/dev/null
+          }
+          put_file build/certified-roster-benchmark.json ops/certified-roster-benchmark.json 'Record certified-roster blind benchmark'
+          put_file build/certified-roster-benchmark-summary.json ops/certified-roster-benchmark-summary.json 'Record certified-roster benchmark summary'
