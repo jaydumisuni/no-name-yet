@@ -14,6 +14,11 @@ from typing import Any
 
 IMPACT_ONLY_CAPABILITIES = {"call_graph", "cross_file"}
 EVALUATION_PREFIXES = ("review-benchmarks/", "battle-tests/")
+SECURITY_SOURCE_SUFFIXES = {
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+    ".go", ".rs", ".java", ".kt", ".kts", ".c", ".cc", ".cpp",
+    ".cs", ".php", ".rb", ".swift", ".sh", ".bash", ".ps1",
+}
 DEMONSTRATED_SECURITY_SINK_RE = re.compile(
     r"(?:\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\.|"
     r"\bchild_process\.exec\s*\(|\bcp\.exec\s*\(|\bquery\s*\(|\bexecute\s*\(|"
@@ -102,6 +107,19 @@ def _is_test_path(relative: str) -> bool:
     )
 
 
+def _is_security_source_path(relative: str) -> bool:
+    """Return whether source-to-sink rules can parse this file as executable code.
+
+    Workflow/configuration files can contain embedded shell or Python snippets,
+    but scanning their complete YAML/JSON text as one source program creates
+    false request-to-file paths across unrelated steps. Those files remain in
+    architecture and workflow assurance review; this rule only gates language-
+    specific taint augmentation and verdict promotion.
+    """
+
+    return Path(relative.replace("\\", "/")).suffix.lower() in SECURITY_SOURCE_SUFFIXES
+
+
 def _changed_test_covering_target(root: Path | None, changed_files: list[object], target: object) -> str:
     if root is None or not isinstance(target, str) or not target:
         return ""
@@ -147,7 +165,12 @@ def _augment_security_findings(
     if root is None:
         return
     for item in changed_files:
-        if not isinstance(item, str) or _is_test_path(item) or _is_evaluation_path(item):
+        if (
+            not isinstance(item, str)
+            or _is_test_path(item)
+            or _is_evaluation_path(item)
+            or not _is_security_source_path(item)
+        ):
             continue
         text = _safe_text(root, item)
         if not text:
@@ -208,7 +231,9 @@ def _annotate_location(finding: dict[str, Any], root: Path | None) -> str:
             finding["line_end"] = line
     if finding.get("path") and finding.get("line_start"):
         finding["evidence_ref"] = f"{finding['path']}:{finding['line_start']}"
-    finding["direct_evidence"] = bool(finding.get("evidence") and (finding.get("path") or capability == "test_impact"))
+    finding["direct_evidence"] = bool(
+        finding.get("evidence") and (finding.get("path") or capability == "test_impact")
+    )
     return text
 
 
@@ -229,6 +254,7 @@ def normalize_capability_review(packet: dict[str, Any], root: str | Path | None 
             continue
         capability = str(finding.get("capability", ""))
         severity = str(finding.get("severity", ""))
+        path = str(finding.get("path") or "")
         text = _annotate_location(finding, root_path)
 
         if capability in IMPACT_ONLY_CAPABILITIES and severity in {"blocker", "major"}:
@@ -262,8 +288,30 @@ def normalize_capability_review(packet: dict[str, Any], root: str | Path | None 
                 finding["severity"] = "minor"
                 finding["impact_signal"] = True
                 finding["test_coverage_path"] = coverage_path
-                finding["evidence"] = f"{finding.get('evidence', '')} Focused changed-test coverage: {coverage_path}.".strip()
+                finding["evidence"] = (
+                    f"{finding.get('evidence', '')} Focused changed-test coverage: {coverage_path}.".strip()
+                )
                 continue
+
+        if (
+            capability in {"data_flow", "security_taint"}
+            and severity in {"blocker", "major"}
+            and path
+            and not _is_security_source_path(path)
+        ):
+            adjustments.append({
+                "capability": capability,
+                "path": path,
+                "from": severity,
+                "to": "note",
+                "reason": "Source-to-sink evidence came from a workflow or configuration file that this language-specific taint rule cannot parse as one executable program.",
+            })
+            finding["severity"] = "note"
+            finding["configuration_signal"] = True
+            finding["direct_evidence"] = False
+            finding["message"] = "Workflow or configuration text contains source/sink terms; no executable data path was demonstrated."
+            finding["evidence"] = "The scanner observed lexical source and sink patterns across a non-source file; workflow assurance remains authoritative."
+            continue
 
         if capability in {"data_flow", "security_taint"} and severity in {"blocker", "major"}:
             if text and PARAMETERIZED_QUERY_RE.search(text) and not NON_QUERY_SENSITIVE_SINK_RE.search(text):
