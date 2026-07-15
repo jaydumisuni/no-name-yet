@@ -4,14 +4,15 @@ Assured path: `.github/workflows/cloudflare-live-certification.yml`
 
 ## Purpose
 
-The workflow answers four questions in a controlled order:
+The workflow answers five questions in a controlled order:
 
 1. Are the operator-owned Cloudflare credentials present and structurally valid?
-2. Which models in the selected public preset satisfy Sergeant's structured-output contract?
-3. Are at least two proven models available to form a genuinely independent council?
-4. Can that council inspect a focused fixture, return the expected verdict, and independently support the expected grounded defect?
+2. Which models in the selected public preset can satisfy a small structured-output handshake?
+3. Which of those routes can complete Sergeant's full evidence-grounded Medic security-officer mission?
+4. Are at least two mission-qualified models available to form a genuinely independent council?
+5. Can that council inspect the focused fixture, return the expected verdict, and independently support the expected grounded defect?
 
-It is deliberately separate from the ten-case blind review-quality benchmark. Route and council certification must finish first; only certified models should be measured for precision and recall across the full suite.
+It is deliberately separate from the ten-case blind review-quality benchmark. Route and council certification must finish first; only mission-qualified models should be measured for precision and recall across the full suite.
 
 ## Permissions
 
@@ -30,17 +31,33 @@ Neither value is printed by Sergeant. Every generated JSON artifact is scanned f
 
 The selected preset comes from the public `main_review.cloudflare_models` registry. The same registry powers the direct Cpl route and the loopback gateway, preventing those paths from silently testing different models.
 
-Ordinary model probes use a 384-token output ceiling. Known reasoning models use a bounded 900-token proof budget. The focused council uses a 1,200-token output ceiling, at most three members, three initial passes, and two council rounds. These limits reduce proof cost but are not billing guarantees; Cloudflare usage remains visible and chargeable to the operator's account under Cloudflare's current plan.
+Ordinary route handshakes use a 384-token output ceiling. Known reasoning models use a bounded 900-token handshake budget. Mission qualification uses a 1,200-token output ceiling and a bounded 45-second per-model timeout. The focused council uses a 1,200-token output ceiling, at most two members, two initial passes, and two council rounds. These limits reduce proof cost but are not billing guarantees; Cloudflare usage remains visible and chargeable to the operator's account under Cloudflare's current plan.
 
-Models that fail the structured contract are excluded from the focused council and reported as `probationary_models`.
+Models that pass only the lightweight handshake but fail the full officer mission are excluded from the focused council and reported as `probationary_models`.
 
 Preset states are explicit:
 
-- `fully_certified` — every configured model passed;
-- `partially_certified` — at least two models passed and formed a proven council;
-- `uncertified` — fewer than two models passed.
+- `fully_certified` — every configured model completed the mission qualification;
+- `partially_certified` — at least two models completed mission qualification and formed a proven council;
+- `uncertified` — fewer than two models completed mission qualification.
 
 Unsupported members remain visible and are never falsely advertised as certified.
+
+## Mission-capable model admission
+
+The lightweight model handshake proves only that a route can return a small JSON object. It does not admit a model to Cpl's live formation.
+
+The certification therefore performs a second, model-by-model qualification against the complete evidence-grounded Medic security-officer contract on the focused fixture. A model qualifies only when it:
+
+- returns the expected `BLOCK` verdict;
+- reports a verified `shell=True` finding;
+- supplies the required path, category, and severity;
+- explicitly reports the expected file in `coverage.files_reviewed`;
+- explicitly reports the expected review area in `coverage.areas`.
+
+Models that time out, return unparseable JSON, omit required coverage, or satisfy only the handshake remain probationary.
+
+The focused council uses two mission-qualified members and two initial passes: Cpl's general field pass and Medic's security support pass. The unrelated tests/contracts lens is intentionally not recruited for this one-file command-injection fixture; the general adaptive planner remains unchanged for ordinary repository reviews.
 
 ## Root-cause identity
 
@@ -60,7 +77,7 @@ The council must:
 - return `BLOCK`;
 - identify a `security` / `blocker` finding in `src/auth.py`;
 - ground the finding in verified `evidence` containing `shell=True`;
-- show support from at least two distinct certified models that actually returned matching findings in completed passes;
+- show support from at least two distinct mission-qualified models that actually returned matching findings in completed passes;
 - complete with true model independence;
 - return no provider errors or unresolved final gaps.
 
@@ -73,8 +90,9 @@ A correct `BLOCK` is proof of reviewer capability, not a certification failure.
 The workflow uploads:
 
 - credential-safe route status;
-- model-by-model structured proof with duration and errors;
-- the exact certified model list;
+- model-by-model handshake proof with duration and errors;
+- model-by-model mission-capability proof with coverage and grounded findings;
+- the exact mission-qualified model list;
 - probationary model results;
 - the focused council proof and expected-finding match;
 - a compact final certification verdict.
@@ -82,7 +100,7 @@ The workflow uploads:
 A pass requires:
 
 - a valid route;
-- at least two structured-contract-certified models;
+- at least two mission-qualified models;
 - the expected `BLOCK` verdict;
 - the expected independently supported blocker;
 - more than one distinct model used;
@@ -91,24 +109,15 @@ A pass requires:
 - no provider errors;
 - no unresolved final gaps.
 
-Every configured model passing upgrades the preset from partial to full certification, but it is not required for a smaller viable council to certify honestly.
+Every configured model completing mission qualification upgrades the preset from partial to full certification, but it is not required for a smaller viable council to certify honestly.
 
 ## Rollback
 
 Rollback removes:
 
-- the viable-council summary logic from `.github/workflows/cloudflare-live-certification.yml`;
-- expected-fixture arguments from `main_review/cloudflare_cli.py`;
-- deterministic root-cause matching from `main_review/cpl_council.py`;
-- shared finding matching from `main_review/cpl_runtime.py` and `main_review/llm_review.py`;
-- focused certification-semantics tests.
+- mission qualification and the `qualify-models` command from `main_review/cloudflare_cli.py`;
+- mission-qualified roster selection from `.github/workflows/cloudflare-live-certification.yml`;
+- focused mission-qualification tests;
+- the viable-council summary logic and mission-proof evidence fields.
 
-Deterministic Sergeant Core, local provider routes, the existing loopback gateway, and normal pull-request CI remain operational after rollback.
-
-## Mission-capable model admission
-
-The lightweight model handshake proves only that a route can return a small JSON object. It does not admit a model to Cpl's live formation. The certification therefore performs a second, model-by-model qualification against the complete evidence-grounded Medic security-officer contract on the focused fixture.
-
-Only models that return the expected `BLOCK` verdict, verified `shell=True` evidence, the required path/category/severity, and valid coverage are written to the certified council roster. Models that time out, return unparseable JSON, or satisfy only the toy handshake remain probationary.
-
-The focused council uses two mission-qualified members and two initial passes: Cpl's general field pass and Medic's security support pass. The unrelated tests/contracts lens is intentionally not recruited for this one-file command-injection fixture; the general adaptive planner remains unchanged for ordinary repository reviews.
+Deterministic Sergeant Core, local provider routes, the existing loopback gateway, normal pull-request CI, and the lightweight provider handshake remain operational after rollback.
