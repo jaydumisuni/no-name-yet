@@ -46,25 +46,34 @@ jobs:
             pytest -q
           } 2>&1 | tee build/cloudflare-mission-patch-proof.log
 
-      - name: Upload constructor proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudflare-mission-patch-proof
-          path: build/cloudflare-mission-patch-proof.log
-          if-no-files-found: error
-          retention-days: 3
+      - name: Stage and verify product diff
+        shell: bash
+        run: |
+          set -o pipefail
+          git add \
+            .github/workflows/cloudflare-live-certification.yml \
+            docs/27-cloudflare-live-certification.md \
+            main_review/cloudflare_cli.py \
+            tests/test_cloudflare_mission_qualification.py
+          git diff --cached > build/cloudflare-mission-product.patch
+          git diff --cached --check 2>&1 | tee build/cloudflare-mission-commit-proof.log
 
       - name: Commit proven product changes
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
-            .github/workflows/cloudflare-live-certification.yml \
-            docs/27-cloudflare-live-certification.md \
-            main_review/cloudflare_cli.py \
-            tests/test_cloudflare_mission_qualification.py
-          git diff --cached --check
           git commit -m 'Qualify Cloudflare models against full officer missions'
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
+
+      - name: Upload constructor proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-mission-patch-proof
+          path: |
+            build/cloudflare-mission-patch-proof.log
+            build/cloudflare-mission-commit-proof.log
+            build/cloudflare-mission-product.patch
+          if-no-files-found: warn
+          retention-days: 3
