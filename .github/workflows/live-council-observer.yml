@@ -76,3 +76,5 @@ jobs:
           path: live-council-run.json
           if-no-files-found: error
           retention-days: 1
+
+# Refreshed after the corrected Cloudflare Account ID secret was added.
