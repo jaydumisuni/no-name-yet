@@ -169,6 +169,87 @@ def test_model_route_failover_uses_next_council_member(monkeypatch: pytest.Monke
     assert attempts == ["model-a", "model-b"]
 
 
+def test_live_authorization_wording_confirms_existing_authorization_gap() -> None:
+    deterministic = {
+        "category": "security_taint",
+        "severity": "major",
+        "message": "Privileged route lacks a visible authorization guard.",
+        "evidence": "An admin route was detected without an authorization guard.",
+        "path": "src/admin_api.py",
+        "line_start": 4,
+        "line_end": 4,
+        "root_cause": "authorization-gap",
+    }
+    candidates = [
+        {
+            "category": "security",
+            "severity": "major",
+            "message": "Privileged route lacks a visible authorization guard",
+            "evidence": "app.delete('/admin/users/:id', delete_user)",
+            "evidence_verified": True,
+            "path": "src/admin_api.py",
+            "line_start": 4,
+            "line_end": 4,
+            "supporting_models": ["model-a"],
+        },
+        {
+            "category": "security_taint",
+            "severity": "major",
+            "message": "Privileged admin route defined without any authentication or authorization guard.",
+            "evidence": "app.delete('/admin/users/:id', delete_user)",
+            "evidence_verified": True,
+            "path": "src/admin_api.py",
+            "line_start": 4,
+            "line_end": 4,
+            "supporting_models": ["model-b"],
+        },
+    ]
+
+    result = reconcile_cpl_findings(
+        {"status": "completed", "verdict": "NEEDS WORK", "findings": candidates},
+        [deterministic],
+    )
+
+    assert len(result["confirmed_findings"]) == 2
+    assert result["actionable_findings"] == []
+    assert result["unconfirmed_findings"] == []
+    assert result["decision_verdict"] == "PASS"
+
+
+def test_live_sql_interpolation_wording_confirms_existing_unsafe_data_flow() -> None:
+    deterministic = {
+        "category": "data_flow",
+        "severity": "major",
+        "message": "User-controlled input appears near a risky sink.",
+        "evidence": "Input and sink patterns were both detected in the changed file.",
+        "path": "src/api.py",
+        "line_start": 3,
+        "line_end": 3,
+        "root_cause": "unsafe-data-flow",
+    }
+    candidate = {
+        "category": "correctness",
+        "severity": "major",
+        "message": "User-controlled input directly interpolated into SQL query without parameterization",
+        "evidence": 'return db.query(f"SELECT * FROM users WHERE id = {user_id}")',
+        "evidence_verified": True,
+        "path": "src/api.py",
+        "line_start": 3,
+        "line_end": 3,
+        "supporting_models": ["model-b"],
+    }
+
+    result = reconcile_cpl_findings(
+        {"status": "completed", "verdict": "NEEDS WORK", "findings": [candidate]},
+        [deterministic],
+    )
+
+    assert len(result["confirmed_findings"]) == 1
+    assert result["actionable_findings"] == []
+    assert result["unconfirmed_findings"] == []
+    assert result["decision_verdict"] == "PASS"
+
+
 def test_same_family_findings_remain_separate_when_far_apart() -> None:
     left = {**cpl_shell(), "line_start": 5, "line_end": 5}
     right = {**deterministic_shell(), "line_start": 50, "line_end": 50}

@@ -73,7 +73,11 @@ ROOT_CAUSE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     (
         "sql-injection",
-        re.compile(r"(?:sql\s+injection|unparameteri[sz]ed\s+quer|raw\s+sql|query\s+concatenation)", re.I),
+        re.compile(
+            r"(?:sql\s+injection|unparameteri[sz]ed\s+quer|raw\s+sql|query\s+concatenation|"
+            r"(?:interpolat|format|concatenat)[^\n]{0,80}sql\s+quer|sql\s+quer[^\n]{0,80}without\s+parameter)",
+            re.I,
+        ),
     ),
     (
         "unsafe-file-access",
@@ -81,7 +85,11 @@ ROOT_CAUSE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     (
         "authorization-gap",
-        re.compile(r"(?:missing\s+authorization|lacks?\s+(?:an?\s+)?authorization|privileged\s+route.*without)", re.I),
+        re.compile(
+            r"(?:missing\s+authorization|lacks?\s+(?:an?\s+)?(?:visible\s+)?authorization|"
+            r"privileged(?:\s+\w+){0,2}\s+route.*without)",
+            re.I,
+        ),
     ),
     (
         "secret-exposure",
