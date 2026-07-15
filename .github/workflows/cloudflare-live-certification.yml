@@ -98,7 +98,7 @@ jobs:
           set -e
           echo "MISSION_MODEL_PROOF_EXIT=$code" >> "$GITHUB_ENV"
 
-      - name: Select only models that passed the structured contract
+      - name: Select only mission-qualified models
         shell: bash
         run: |
           set -euo pipefail
@@ -151,7 +151,7 @@ jobs:
           {
             "schema_version": "sergeant.cloudflare-council-proof.v1",
             "passed": false,
-            "error": "Fewer than two Cloudflare models passed the structured model proof."
+            "error": "Fewer than two Cloudflare models passed the mission-capability proof."
           }
           JSON
 
