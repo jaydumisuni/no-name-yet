@@ -32,18 +32,24 @@ The selected preset comes from the public `main_review.cloudflare_models` regist
 
 Ordinary model probes use a 384-token output ceiling. Known reasoning models use a bounded 900-token proof budget. The focused council uses a 1,200-token output ceiling, at most three members, three initial passes, and two council rounds. These limits reduce proof cost but are not billing guarantees; Cloudflare usage remains visible and chargeable to the operator's account under Cloudflare's current plan.
 
-Models that fail the structured contract are excluded from the focused council and reported as `probationary_models`. A preset can therefore be `partially_certified` when at least two models form a proven council, while unsupported members remain visible and are never falsely advertised as certified.
+Models that fail the structured contract are excluded from the focused council and reported as `probationary_models`.
+
+Preset states are explicit:
+
+- `fully_certified` — every configured model passed;
+- `partially_certified` — at least two models passed and formed a proven council;
+- `uncertified` — fewer than two models passed.
+
+Unsupported members remain visible and are never falsely advertised as certified.
 
 ## Root-cause identity
 
-Independent models often describe one defect with different wording or line ranges. Cpl now groups recognized defect shapes by:
+Independent models often describe one defect with different wording, categories, or nearby line ranges. Cpl handles this in two stages:
 
-- normalized path;
-- category;
-- deterministic root-cause class;
-- nearby ten-line source window.
+1. A deterministic root-cause recognizer classifies well-known defect shapes such as explicit `shell=True` command execution.
+2. A distance-based matcher combines reports only when they share the same normalized path, the same precise root cause, and overlapping or nearby line ranges.
 
-This allows Analyst to combine support for one underlying defect without merging similar defects that occur far apart in the same file. Unknown defect shapes retain the stricter exact line-and-message identity.
+The matcher does not treat every `subprocess.run` call as command injection. Explicit shell execution or command-injection language is required. Once a precise root cause exists, model-specific category wording does not split the same defect. Similar defects far apart in the same file remain separate. Unknown defect shapes retain the stricter exact category, line range, and message identity.
 
 ## Focused proof contract
 
@@ -53,10 +59,12 @@ The council must:
 
 - return `BLOCK`;
 - identify a `security` / `blocker` finding in `src/auth.py`;
-- ground the finding in `shell=True` evidence;
-- show support from at least two distinct certified models;
+- ground the finding in verified `evidence` containing `shell=True`;
+- show support from at least two distinct certified models that actually returned matching findings in completed passes;
 - complete with true model independence;
 - return no provider errors or unresolved final gaps.
+
+Claims copied into `supporting_models`, `council_confirmed_by`, messages, safer alternatives, or other prose cannot satisfy the expected-evidence or independence requirements on their own.
 
 A correct `BLOCK` is proof of reviewer capability, not a certification failure.
 
@@ -83,7 +91,7 @@ A pass requires:
 - no provider errors;
 - no unresolved final gaps.
 
-Every configured model passing is reported as `fully_certified`, but it is not required for a smaller viable council to certify honestly.
+Every configured model passing upgrades the preset from partial to full certification, but it is not required for a smaller viable council to certify honestly.
 
 ## Rollback
 
@@ -91,8 +99,8 @@ Rollback removes:
 
 - the viable-council summary logic from `.github/workflows/cloudflare-live-certification.yml`;
 - expected-fixture arguments from `main_review/cloudflare_cli.py`;
-- deterministic root-cause identity from `main_review/cpl_council.py`;
-- shared finding identity use from `main_review/llm_review.py`;
+- deterministic root-cause matching from `main_review/cpl_council.py`;
+- shared finding matching from `main_review/cpl_runtime.py` and `main_review/llm_review.py`;
 - focused certification-semantics tests.
 
 Deterministic Sergeant Core, local provider routes, the existing loopback gateway, and normal pull-request CI remain operational after rollback.
