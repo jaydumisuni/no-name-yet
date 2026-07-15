@@ -17,6 +17,7 @@ from .cloudflare_gateway import (
     CloudflareGatewaySettings,
     build_server,
 )
+from .cpl_council import findings_match
 from .cpl_runtime import run_cpl_review
 from .diff_review import parse_changed_files_text
 from .llm_provider import LLMProviderError, LLMRoute, LLMSettings, invoke_json
@@ -123,16 +124,18 @@ def _changed_files(value: str, file_list: str | None) -> list[str]:
     return parse_changed_files_text(value)
 
 
-def _finding_supporting_models(finding: dict[str, Any]) -> list[str]:
-    values = [
-        *finding.get("supporting_models", []),
-        *finding.get("council_confirmed_by", []),
-    ]
-    return sorted({str(value) for value in values if str(value).strip()})
+def _completed_matching_models(finding: dict[str, Any], passes: list[dict[str, Any]]) -> list[str]:
+    return sorted({
+        str(report.get("model"))
+        for report in passes
+        if report.get("model")
+        and any(findings_match(finding, candidate) for candidate in report.get("findings", []))
+    })
 
 
 def _expected_finding_result(
     findings: list[dict[str, Any]],
+    passes: list[dict[str, Any]],
     *,
     expected_path: str,
     expected_category: str,
@@ -153,13 +156,13 @@ def _expected_finding_result(
             continue
         if expected_severity and str(finding.get("severity") or "").lower() != expected_severity:
             continue
-        searchable = " ".join(
-            str(finding.get(field, ""))
-            for field in ("message", "evidence", "why_it_matters", "safer_alternative", "root_cause")
-        ).lower()
-        if expected_evidence and expected_evidence not in searchable:
+        evidence = str(finding.get("evidence") or "").lower()
+        if expected_evidence and (
+            finding.get("evidence_verified") is not True
+            or expected_evidence not in evidence
+        ):
             continue
-        models = _finding_supporting_models(finding)
+        models = _completed_matching_models(finding, passes)
         matches.append({
             "path": finding.get("path"),
             "category": finding.get("category"),
@@ -236,6 +239,7 @@ def run_council_proof(
     ]
     expected_result = _expected_finding_result(
         effective_findings,
+        passes,
         expected_path=expected_path,
         expected_category=expected_category,
         expected_severity=expected_severity,

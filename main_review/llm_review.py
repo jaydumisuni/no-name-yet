@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .cpl_council import finding_key
+from .cpl_council import findings_match
 from .cpl_reasoning import (
     CplAssignment,
     cpl_depth,
@@ -340,24 +340,23 @@ def _validate_pass(
 
 
 def _merge_passes(passes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str, float]:
-    merged: dict[tuple[object, ...], dict[str, Any]] = {}
+    findings: list[dict[str, Any]] = []
     for item in passes:
         for finding in item.get("findings", []):
-            key = finding_key(finding)
-            if key not in merged:
-                merged[key] = {
+            merged = next((existing for existing in findings if findings_match(existing, finding)), None)
+            if merged is None:
+                findings.append({
                     **finding,
                     "supporting_models": [item.get("model")],
                     "supporting_specialists": [item.get("specialist")],
-                }
-            else:
-                models = merged[key].setdefault("supporting_models", [])
-                if item.get("model") not in models:
-                    models.append(item.get("model"))
-                specialists = merged[key].setdefault("supporting_specialists", [])
-                if item.get("specialist") not in specialists:
-                    specialists.append(item.get("specialist"))
-    findings = list(merged.values())
+                })
+                continue
+            models = merged.setdefault("supporting_models", [])
+            if item.get("model") not in models:
+                models.append(item.get("model"))
+            specialists = merged.setdefault("supporting_specialists", [])
+            if item.get("specialist") not in specialists:
+                specialists.append(item.get("specialist"))
     if any(item.get("severity") == "blocker" for item in findings):
         verdict = "BLOCK"
     elif any(item.get("severity") == "major" for item in findings):

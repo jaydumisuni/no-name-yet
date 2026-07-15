@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import main_review.cloudflare_cli as cloudflare_cli
-from main_review.cpl_council import finding_key, finding_root_cause
+from main_review.cpl_council import finding_key, finding_root_cause, findings_match
 from main_review.cloudflare_gateway import CloudflareGatewaySettings
 from main_review.llm_review import _merge_passes
 
@@ -40,14 +40,14 @@ def test_shell_command_variants_share_one_root_cause_identity() -> None:
     )
 
     assert finding_root_cause(first) == "unsafe-shell-execution"
-    assert finding_key(first) == finding_key(second)
+    assert findings_match(first, second) is True
 
 
 def test_same_root_cause_far_apart_remains_separate() -> None:
     first = _shell_finding(line=4, message="Command injection", evidence="shell=True")
     second = _shell_finding(line=44, message="Command injection", evidence="shell=True")
 
-    assert finding_key(first) != finding_key(second)
+    assert findings_match(first, second) is False
 
 
 def test_pass_merger_combines_independent_model_support_for_same_defect() -> None:
@@ -175,3 +175,59 @@ def test_expected_contract_rejects_single_model_support(tmp_path: Path, monkeypa
 
     assert result["passed"] is False
     assert result["expected_finding"]["passed"] is False
+
+
+def test_subprocess_without_shell_is_not_classified_as_shell_injection() -> None:
+    finding = _shell_finding(
+        line=4,
+        message="Subprocess environment inherits an unsafe PATH",
+        evidence="subprocess.run([tool, '--version'], shell=False)",
+    )
+    finding["why_it_matters"] = "Executable resolution may select an unintended binary."
+
+    assert finding_root_cause(finding) != "unsafe-shell-execution"
+
+
+def test_adjacent_lines_match_across_fixed_bucket_boundaries() -> None:
+    left = _shell_finding(line=10, message="Command injection", evidence="shell=True")
+    right = _shell_finding(line=11, message="Shell command execution", evidence="shell=True")
+    right["category"] = "correctness"
+
+    assert findings_match(left, right) is True
+
+
+def test_expected_contract_uses_verified_evidence_only() -> None:
+    finding = _shell_finding(line=4, message="Unsafe command", evidence="subprocess.run(command)")
+    finding["safer_alternative"] = "Avoid shell=True."
+    finding["supporting_models"] = [MODEL_A, MODEL_B]
+    result = cloudflare_cli._expected_finding_result(
+        [finding],
+        [
+            {"model": MODEL_A, "findings": [finding]},
+            {"model": MODEL_B, "findings": [finding]},
+        ],
+        expected_path="src/auth.py",
+        expected_category="security",
+        expected_severity="blocker",
+        expected_evidence="shell=true",
+        minimum_supporting_models=2,
+    )
+
+    assert result["passed"] is False
+
+
+def test_expected_contract_ignores_claimed_models_without_matching_passes() -> None:
+    finding = _shell_finding(line=4, message="Command injection", evidence="shell=True")
+    finding["supporting_models"] = [MODEL_A, MODEL_B, "invented-model"]
+    result = cloudflare_cli._expected_finding_result(
+        [finding],
+        [{"model": MODEL_A, "findings": [finding]}, {"model": MODEL_B, "findings": []}],
+        expected_path="src/auth.py",
+        expected_category="security",
+        expected_severity="blocker",
+        expected_evidence="shell=true",
+        minimum_supporting_models=2,
+    )
+
+    assert result["passed"] is False
+    assert result["matches"][0]["supporting_models"] == [MODEL_A]

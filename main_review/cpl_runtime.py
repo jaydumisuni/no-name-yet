@@ -12,6 +12,7 @@ from .cpl_council import (
     available_models,
     finding_key,
     finding_reference,
+    findings_match,
     gap_signature,
     instruction,
     max_members,
@@ -106,7 +107,7 @@ def _normalize_resolution(payload: dict[str, Any], command: dict[str, Any], repo
 
 
 def _effective_passes(passes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    rejected: set[tuple[object, ...]] = set()
+    rejected: list[dict[str, Any]] = []
     for report in passes:
         resolution = report.get("council_resolution")
         if not isinstance(resolution, dict) or resolution.get("status") != "answered":
@@ -115,18 +116,21 @@ def _effective_passes(passes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         target = resolution.get("target_finding")
         if isinstance(target, dict):
-            rejected.add(finding_key(target))
+            rejected.append(target)
 
     effective: list[dict[str, Any]] = []
     for report in passes:
         clone = dict(report)
-        clone["findings"] = [finding for finding in report.get("findings", []) if finding_key(finding) not in rejected]
+        clone["findings"] = [
+            finding
+            for finding in report.get("findings", [])
+            if not any(findings_match(finding, target) for target in rejected)
+        ]
         effective.append(clone)
     return effective
 
 
 def _annotate_confirmations(findings: list[dict[str, Any]], passes: list[dict[str, Any]]) -> None:
-    by_key = {finding_key(finding): finding for finding in findings}
     for report in passes:
         resolution = report.get("council_resolution")
         if not isinstance(resolution, dict) or resolution.get("status") != "answered" or resolution.get("disposition") != "confirmed":
@@ -134,7 +138,7 @@ def _annotate_confirmations(findings: list[dict[str, Any]], passes: list[dict[st
         target = resolution.get("target_finding")
         if not isinstance(target, dict):
             continue
-        finding = by_key.get(finding_key(target))
+        finding = next((item for item in findings if findings_match(item, target)), None)
         if finding is None:
             continue
         confirmations = finding.setdefault("council_confirmed_by", [])
