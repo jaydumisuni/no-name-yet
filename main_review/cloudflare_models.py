@@ -57,6 +57,15 @@ CLOUDFLARE_REASONING_MODELS = {
 DEFAULT_MODEL_PROOF_OUTPUT_TOKENS = 384
 REASONING_MODEL_PROOF_OUTPUT_TOKENS = 900
 
+CLOUDFLARE_REASONING_MODELS = {
+    "@cf/qwen/qwen3-30b-a3b-fp8",
+    "@cf/zai-org/glm-4.7-flash",
+    "@cf/openai/gpt-oss-20b",
+    "@cf/openai/gpt-oss-120b",
+}
+DEFAULT_MODEL_PROOF_OUTPUT_TOKENS = 384
+REASONING_MODEL_PROOF_OUTPUT_TOKENS = 900
+
 
 @dataclass(frozen=True)
 class CloudflareModelProfile:
@@ -118,6 +127,16 @@ MODEL_PROFILES: dict[str, CloudflareModelProfile] = {
         None,
     ),
 }
+
+
+def model_proof_output_tokens(model: str) -> int:
+    """Return a small but viable structured-proof budget for a model."""
+
+    return (
+        REASONING_MODEL_PROOF_OUTPUT_TOKENS
+        if model in CLOUDFLARE_REASONING_MODELS
+        else DEFAULT_MODEL_PROOF_OUTPUT_TOKENS
+    )
 
 
 def model_proof_output_tokens(model: str) -> int:
