@@ -1,0 +1,36 @@
+name: Apply Cpl Quality Adjudication
+
+on:
+  push:
+    branches:
+      - cpl-quality-adjudication
+    paths:
+      - .github/workflows/apply-cpl-quality-adjudication.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cpl-quality-adjudication
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply reviewed patch
+        run: python tools/apply_cpl_quality_adjudication.py
+      - name: Compile changed modules
+        run: python -m py_compile main_review/finding_adjudication.py main_review/cpl_runtime.py
+      - name: Commit product changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add main_review/cpl_runtime.py
+          git diff --cached --check
+          git commit -m "Adjudicate Cpl findings against deterministic evidence"
+          git push origin HEAD:cpl-quality-adjudication
