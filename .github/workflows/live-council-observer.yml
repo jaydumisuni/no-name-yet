@@ -16,7 +16,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Locate latest manual council proof
+      - name: Locate latest manual Cloudflare certification
         shell: bash
         run: |
           set -euo pipefail
@@ -28,7 +28,7 @@ jobs:
 
           url = (
               "https://api.github.com/repos/jaydumisuni/Sergeant/actions/workflows/"
-              "review-intelligence-proof.yml/runs?event=workflow_dispatch&branch=main&per_page=10"
+              "cloudflare-live-certification.yml/runs?event=workflow_dispatch&branch=main&per_page=10"
           )
           request = urllib.request.Request(
               url,
@@ -42,9 +42,8 @@ jobs:
           with urllib.request.urlopen(request, timeout=30) as response:
               payload = json.load(response)
 
-          runs = payload.get("workflow_runs", [])
           selected = None
-          for run in runs:
+          for run in payload.get("workflow_runs", []):
               if run.get("event") != "workflow_dispatch" or run.get("head_branch") != "main":
                   continue
               selected = {
@@ -62,7 +61,7 @@ jobs:
               break
 
           if not selected or not selected.get("id"):
-              raise SystemExit("No manual Review Intelligence Proof run found on main")
+              raise SystemExit("No manual Cloudflare Live Council Certification run found on main")
           Path("live-council-run.json").write_text(
               json.dumps(selected, indent=2, sort_keys=True), encoding="utf-8"
           )
@@ -76,5 +75,3 @@ jobs:
           path: live-council-run.json
           if-no-files-found: error
           retention-days: 1
-
-# Refreshed after the corrected Cloudflare Account ID secret was added.
