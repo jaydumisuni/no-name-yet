@@ -1,0 +1,30 @@
+{
+  "benchmark_exit": 2,
+  "case_count": 10,
+  "distinct_models": [
+    "@cf/openai/gpt-oss-20b",
+    "@cf/qwen/qwen3-30b-a3b-fp8"
+  ],
+  "duplicate_rate": 0.087,
+  "duration_ms": 257411.19,
+  "f1": 0.596,
+  "false_negative_count": 0,
+  "false_positive_count": 19,
+  "finding_completeness": 1.0,
+  "head_sha": "c894e9b90c59e01ca2371ac0accfccd963136b62",
+  "max_members": 2,
+  "max_passes": 2,
+  "max_rounds": 2,
+  "model_call_count": 30,
+  "models": [
+    "@cf/qwen/qwen3-30b-a3b-fp8",
+    "@cf/openai/gpt-oss-20b"
+  ],
+  "passed": false,
+  "precision": 0.424,
+  "recall": 1.0,
+  "route_ready": true,
+  "schema_version": "sergeant.private-certified-roster-benchmark.v1",
+  "verdict_accuracy": 0.6,
+  "wall_seconds": 258
+}
