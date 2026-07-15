@@ -1,8 +1,8 @@
 name: Apply Cloudflare Fallback Patch
 
 on:
-  push:
-    branches: [cloudflare-native-response-fallback]
+  pull_request:
+    branches: [main]
     paths:
       - ".github/workflows/apply-cloudflare-fallback-patch.yml"
 
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   apply:
+    if: github.head_ref == 'cloudflare-native-response-fallback'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
