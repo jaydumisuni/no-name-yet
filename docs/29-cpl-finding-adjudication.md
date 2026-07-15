@@ -37,15 +37,16 @@ Unresolved council state is preserved, but not every gap controls the merge verd
 
 - a planned required report is still missing;
 - a high-impact finding still lacks required independent confirmation;
-- a verified recurrence remains unresolved.
+- a verified recurrence remains unresolved;
+- an unanswered question explicitly identifies missing required evidence, runtime proof, verification, tests, security, authorization, permission, credential, or equivalent assurance.
 
 ### Confidence-only gaps
 
 - one optional provider/member failed while the formation continued;
 - council wording or non-gating verdicts disagree;
-- a low-risk question remains unanswered.
+- a low-risk contextual or preference question remains unanswered.
 
-Confidence-only gaps reduce confidence and keep the council visibly incomplete, but they do not convert a clean `PASS` into `NEEDS WORK` by themselves.
+Confidence-only gaps reduce confidence and keep the council visibly incomplete, but they do not convert a clean `PASS` into `NEEDS WORK` by themselves. Required assurance questions remain verdict-affecting even when they are represented as unanswered questions.
 
 ## Public result fields
 
