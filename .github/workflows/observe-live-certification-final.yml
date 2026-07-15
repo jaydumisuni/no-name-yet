@@ -1,0 +1,97 @@
+name: Observe Mission-Qualified Certification Once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ops/live-certification-final.json
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPOSITORY: ${{ github.repository }}
+      TARGET_SHA: 5ebc2f090f4d96161ecc213f28ae6da7dce25eef
+      OBSERVER_BRANCH: live-certification-final-run-20260715
+    steps:
+      - name: Dispatch exact main certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GH_REPOSITORY}/actions/workflows/cloudflare-live-certification.yml/dispatches" \
+            -f ref=main \
+            -f 'inputs[preset]=cloudflare-free-balanced'
+
+          run_id=''
+          for _ in $(seq 1 30); do
+            sleep 4
+            run_id="$(gh api "/repos/${GH_REPOSITORY}/actions/workflows/cloudflare-live-certification.yml/runs?event=workflow_dispatch&branch=main&per_page=20" \
+              --jq ".workflow_runs | map(select(.head_sha == \"${TARGET_SHA}\")) | sort_by(.created_at) | reverse | .[0].id // empty")"
+            [ -n "$run_id" ] && break
+          done
+          test -n "$run_id"
+          echo "RUN_ID=$run_id" >> "$GITHUB_ENV"
+
+      - name: Wait and recover credential-scanned artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 150); do
+            gh api "/repos/${GH_REPOSITORY}/actions/runs/${RUN_ID}" > run.json
+            [ "$(jq -r '.status' run.json)" = completed ] && break
+            sleep 10
+          done
+          test "$(jq -r '.status' run.json)" = completed
+
+          artifact_id=''
+          for _ in $(seq 1 20); do
+            artifact_id="$(gh api "/repos/${GH_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+              --jq '.artifacts | map(select(.name == "cloudflare-live-certification-cloudflare-free-balanced")) | .[0].id // empty')"
+            [ -n "$artifact_id" ] && break
+            sleep 5
+          done
+          test -n "$artifact_id"
+
+          mkdir evidence
+          curl -L --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GH_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+            -o artifact.zip
+          unzip -q artifact.zip -d evidence
+
+          jq -n \
+            --argjson run "$(cat run.json)" \
+            --slurpfile certification "$(find evidence -name cloudflare-live-certification.json -print -quit)" \
+            --slurpfile handshake "$(find evidence -name cloudflare-model-proof.json -print -quit)" \
+            --slurpfile mission "$(find evidence -name cloudflare-mission-model-proof.json -print -quit)" \
+            --slurpfile council "$(find evidence -name cloudflare-council-proof.json -print -quit)" \
+            '{
+              schema_version: "sergeant.private-live-certification-final.v1",
+              run: {id: $run.id, html_url: $run.html_url, head_sha: $run.head_sha, status: $run.status, conclusion: $run.conclusion, created_at: $run.created_at, updated_at: $run.updated_at},
+              certification: $certification[0],
+              handshake_proof: $handshake[0],
+              mission_proof: $mission[0],
+              council_proof: $council[0]
+            }' > observed.json
+
+      - name: Commit sanitized result to temporary branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          encoded="$(base64 -w0 observed.json)"
+          gh api --method PUT \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GH_REPOSITORY}/contents/ops/live-certification-final.json" \
+            -f message='Record mission-qualified certification result' \
+            -f content="$encoded" \
+            -f branch="$OBSERVER_BRANCH" >/dev/null
