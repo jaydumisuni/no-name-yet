@@ -1,0 +1,55 @@
+name: Apply Mission Qualification Coverage Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout correction branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply correction
+        run: python tools/apply_mission_coverage_fix.py
+
+      - name: Prove correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+          python -m py_compile main_review/cloudflare_cli.py
+          pytest -q \
+            tests/test_cloudflare_mission_qualification.py \
+            tests/test_cloudflare_gateway.py \
+            tests/test_cloudflare_certification_semantics.py
+          pytest -q
+
+      - name: Commit proven correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            main_review/cloudflare_cli.py \
+            tests/test_cloudflare_mission_qualification.py
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Require mission qualification coverage'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
