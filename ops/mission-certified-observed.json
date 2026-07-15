@@ -1,0 +1,349 @@
+{
+  "schema_version": "sergeant.private-mission-certification-observer.v1",
+  "run": {
+    "id": 29418996870,
+    "html_url": "https://github.com/jaydumisuni/Sergeant/actions/runs/29418996870",
+    "head_sha": "2a5f799591ebcc9071202b5576cd8ddcf39762df",
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-07-15T13:23:47Z",
+    "updated_at": "2026-07-15T13:25:28Z"
+  },
+  "certification": {
+    "all_configured_models_passed": false,
+    "certified_models": [
+      "@cf/qwen/qwen3-30b-a3b-fp8",
+      "@cf/openai/gpt-oss-20b"
+    ],
+    "configured_model_count": 4,
+    "council_complete": true,
+    "council_passed": true,
+    "distinct_models": [
+      "@cf/openai/gpt-oss-20b",
+      "@cf/qwen/qwen3-30b-a3b-fp8"
+    ],
+    "errors": [],
+    "expected_finding_passed": true,
+    "final_gaps": [],
+    "minimum_certified_models": 2,
+    "mission_model_pass_count": 2,
+    "model_call_count": 2,
+    "passed": true,
+    "preset": "cloudflare-free-balanced",
+    "preset_status": "partially_certified",
+    "probationary_models": [
+      {
+        "error": "Cloudflare OpenAI-compatible and native model routes both failed without a parseable JSON response.",
+        "model": "@cf/zai-org/glm-4.7-flash",
+        "response": null
+      },
+      {
+        "error": "Cloudflare OpenAI-compatible and native model routes both failed without a parseable JSON response.",
+        "model": "@cf/qwen/qwen2.5-coder-32b-instruct",
+        "response": null
+      }
+    ],
+    "provider": "cloudflare-workers-ai",
+    "route_valid": true,
+    "schema_version": "sergeant.cloudflare-live-certification.v3",
+    "structured_model_pass_count": 2,
+    "sufficient_certified_models": true,
+    "true_model_independence": true,
+    "verdict_matches": true
+  },
+  "mission_model_proof": {
+    "all_passed": false,
+    "expected_category": "security",
+    "expected_evidence": "shell=true",
+    "expected_path": "src/auth.py",
+    "expected_severity": "blocker",
+    "expected_verdict": "BLOCK",
+    "model_count": 4,
+    "models": [
+      {
+        "duration_ms": 3705.01,
+        "max_output_tokens": 1200,
+        "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+        "passed": true,
+        "response": {
+          "coverage": {
+            "areas": [
+              "security"
+            ],
+            "files_reviewed": [
+              "src/auth.py"
+            ]
+          },
+          "coverage_matches": true,
+          "finding_count": 1,
+          "matching_findings": [
+            {
+              "category": "security",
+              "evidence": "subprocess.run(command, shell=True)",
+              "evidence_verified": true,
+              "line_end": 5,
+              "line_start": 4,
+              "message": "Direct use of user input in subprocess command without validation",
+              "path": "src/auth.py",
+              "safer_alternative": "Validate/whitelist allowed commands, or use non-shell execution with explicit arguments",
+              "severity": "blocker",
+              "why_it_matters": "Allows arbitrary command execution through command injection attacks"
+            }
+          ],
+          "verdict": "BLOCK"
+        },
+        "timeout_seconds": 45.0
+      },
+      {
+        "duration_ms": 39847.75,
+        "error": "Cloudflare OpenAI-compatible and native model routes both failed without a parseable JSON response.",
+        "max_output_tokens": 1200,
+        "model": "@cf/zai-org/glm-4.7-flash",
+        "passed": false,
+        "timeout_seconds": 45.0
+      },
+      {
+        "duration_ms": 3352.7,
+        "max_output_tokens": 1200,
+        "model": "@cf/openai/gpt-oss-20b",
+        "passed": true,
+        "response": {
+          "coverage": {
+            "areas": [
+              "command execution",
+              "input validation",
+              "security"
+            ],
+            "files_reviewed": [
+              "src/auth.py"
+            ]
+          },
+          "coverage_matches": true,
+          "finding_count": 1,
+          "matching_findings": [
+            {
+              "category": "security",
+              "evidence": "def run_user_command(request):\n    command = request.args.get(\"command\")\n    return subprocess.run(command, shell=True)",
+              "evidence_verified": true,
+              "line_end": 5,
+              "line_start": 3,
+              "message": "Unrestricted execution of user-supplied command via subprocess.run with shell=True.",
+              "path": "src/auth.py",
+              "safer_alternative": "Remove this endpoint or enforce strict validation. If command execution is required, use subprocess.run with shell=False and a whitelist of allowed commands, and capture output securely.",
+              "severity": "blocker",
+              "why_it_matters": "Allows any authenticated or unauthenticated user to execute arbitrary shell commands on the host, leading to privilege escalation, data loss, or system compromise."
+            }
+          ],
+          "verdict": "BLOCK"
+        },
+        "timeout_seconds": 45.0
+      },
+      {
+        "duration_ms": 14830.98,
+        "error": "Cloudflare OpenAI-compatible and native model routes both failed without a parseable JSON response.",
+        "max_output_tokens": 1200,
+        "model": "@cf/qwen/qwen2.5-coder-32b-instruct",
+        "passed": false,
+        "timeout_seconds": 45.0
+      }
+    ],
+    "passed_count": 2,
+    "proof_type": "mission_capability",
+    "provider": "cloudflare-workers-ai",
+    "qualified_models": [
+      "@cf/qwen/qwen3-30b-a3b-fp8",
+      "@cf/openai/gpt-oss-20b"
+    ]
+  },
+  "council_proof": {
+    "configured_models": [
+      "@cf/qwen/qwen3-30b-a3b-fp8",
+      "@cf/openai/gpt-oss-20b"
+    ],
+    "council": {
+      "agreement": 1.0,
+      "complete": true,
+      "core_round": 1,
+      "effective_findings": [
+        {
+          "category": "security",
+          "evidence": "return subprocess.run(command, shell=True)",
+          "evidence_verified": true,
+          "line_end": 5,
+          "line_start": 4,
+          "message": "Use of subprocess.run with shell=True and unvalidated user input",
+          "path": "src/auth.py",
+          "safer_alternative": "Use non-shell mode with explicit argument list and validate/sanitize input",
+          "severity": "blocker",
+          "supporting_models": [
+            "@cf/qwen/qwen3-30b-a3b-fp8",
+            "@cf/openai/gpt-oss-20b"
+          ],
+          "supporting_specialists": [
+            "generalist",
+            "security"
+          ],
+          "why_it_matters": "Allows arbitrary command execution if command parameter is manipulated"
+        }
+      ],
+      "final_gaps": [],
+      "limitations": [],
+      "max_members": 2,
+      "max_rounds": 2,
+      "member_count": 2,
+      "members": [
+        {
+          "experience_profile": {},
+          "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+          "provider": "cloudflare-workers-ai",
+          "reports": 1,
+          "roles": [
+            "generalist"
+          ],
+          "rounds": [
+            1
+          ],
+          "selection_score": 0.5
+        },
+        {
+          "experience_profile": {},
+          "model": "@cf/openai/gpt-oss-20b",
+          "provider": "cloudflare-workers-ai",
+          "reports": 1,
+          "roles": [
+            "security"
+          ],
+          "rounds": [
+            1
+          ],
+          "selection_score": 0.5
+        }
+      ],
+      "mode": "elastic_multi_model",
+      "model_independence": 1.0,
+      "officer_instructions": [],
+      "recruitment": [],
+      "round_count": 1,
+      "rounds": [],
+      "true_model_independence": true
+    },
+    "council_complete": true,
+    "distinct_models": [
+      "@cf/openai/gpt-oss-20b",
+      "@cf/qwen/qwen3-30b-a3b-fp8"
+    ],
+    "errors": [],
+    "expected_finding": {
+      "expected_category": "security",
+      "expected_evidence": "shell=true",
+      "expected_path": "src/auth.py",
+      "expected_severity": "blocker",
+      "matches": [
+        {
+          "category": "security",
+          "message": "Use of subprocess.run with shell=True and unvalidated user input",
+          "path": "src/auth.py",
+          "severity": "blocker",
+          "support_count": 2,
+          "supporting_models": [
+            "@cf/openai/gpt-oss-20b",
+            "@cf/qwen/qwen3-30b-a3b-fp8"
+          ]
+        }
+      ],
+      "minimum_supporting_models": 2,
+      "passed": true,
+      "required": true
+    },
+    "expected_verdict": "BLOCK",
+    "final_gaps": [],
+    "model_call_count": 2,
+    "passed": true,
+    "provider": "cloudflare-workers-ai",
+    "schema_version": "sergeant.cloudflare-council-proof.v1",
+    "status": "completed",
+    "true_model_independence": true,
+    "verdict": "BLOCK",
+    "verdict_matches": true
+  },
+  "route_status": {
+    "account_id_present": true,
+    "api_token_present": true,
+    "base_url": "http://127.0.0.1:8082/v1",
+    "configured": true,
+    "host": "127.0.0.1",
+    "loopback_only": true,
+    "max_request_bytes": 1500000,
+    "models": [
+      "@cf/qwen/qwen3-30b-a3b-fp8",
+      "@cf/zai-org/glm-4.7-flash",
+      "@cf/openai/gpt-oss-20b",
+      "@cf/qwen/qwen2.5-coder-32b-instruct"
+    ],
+    "port": 8082,
+    "provider": "cloudflare-workers-ai",
+    "timeout_seconds": 75.0,
+    "valid": true
+  },
+  "handshake_proof": {
+    "all_passed": false,
+    "model_count": 4,
+    "models": [
+      {
+        "duration_ms": 3940.24,
+        "max_output_tokens": 900,
+        "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+        "passed": true,
+        "response": {
+          "capabilities": [
+            "structured_json",
+            "reasoning"
+          ],
+          "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+          "status": "ready"
+        }
+      },
+      {
+        "duration_ms": 5085.69,
+        "max_output_tokens": 900,
+        "model": "@cf/zai-org/glm-4.7-flash",
+        "passed": false,
+        "response": {
+          "instruction": "Return the exact requested JSON fields without Markdown.",
+          "model": "@cf/zai-org/glm-4.7-flash",
+          "required": {
+            "capabilities": [
+              "structured_json",
+              "reasoning"
+            ],
+            "model": "@cf/zai-org/glm-4.7-flash",
+            "status": "ready"
+          }
+        }
+      },
+      {
+        "duration_ms": 992.88,
+        "max_output_tokens": 900,
+        "model": "@cf/openai/gpt-oss-20b",
+        "passed": true,
+        "response": {
+          "capabilities": [
+            "structured_json",
+            "reasoning"
+          ],
+          "model": "@cf/openai/gpt-oss-20b",
+          "status": "ready"
+        }
+      },
+      {
+        "duration_ms": 4584.14,
+        "error": "Cloudflare OpenAI-compatible and native model routes both failed without a parseable JSON response.",
+        "max_output_tokens": 384,
+        "model": "@cf/qwen/qwen2.5-coder-32b-instruct",
+        "passed": false
+      }
+    ],
+    "passed_count": 2,
+    "provider": "cloudflare-workers-ai"
+  }
+}
