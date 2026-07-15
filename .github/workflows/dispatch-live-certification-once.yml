@@ -6,6 +6,11 @@ on:
       - live-certification-run-20260715
     paths-ignore:
       - ops/live-certification-observed.json
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ops/live-certification-observed.json
 
 permissions:
   actions: write
