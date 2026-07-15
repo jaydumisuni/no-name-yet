@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import socket
 import urllib.error
 import urllib.request
@@ -24,16 +23,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address
 from typing import Any, Iterable
 
+from .cloudflare_models import (
+    CLOUDFLARE_FREE_BALANCED_MODELS,
+    CLOUDFLARE_PROVIDER,
+    configured_model_roster,
+)
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8082
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_REQUEST_BYTES = 1_500_000
-DEFAULT_MODELS = (
-    "@cf/zai-org/glm-4.7-flash",
-    "@cf/openai/gpt-oss-120b",
-    "@cf/moonshotai/kimi-k2.7-code",
-)
-ACCOUNT_ID_RE = re.compile(r"^[A-Fa-f0-9]{32}$")
+DEFAULT_MODELS = CLOUDFLARE_FREE_BALANCED_MODELS
+ACCOUNT_ID_RE = __import__("re").compile(r"^[A-Fa-f0-9]{32}$")
 
 
 class CloudflareGatewayError(RuntimeError):
@@ -97,7 +98,8 @@ class CloudflareGatewaySettings:
     ) -> "CloudflareGatewaySettings":
         account_id = os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", os.getenv("CLOUDFLARE_ACCOUNT_ID", "")).strip()
         api_token = os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", os.getenv("CLOUDFLARE_API_TOKEN", "")).strip()
-        models = _csv(os.getenv("SERGEANT_CLOUDFLARE_MODELS", ",".join(DEFAULT_MODELS)))
+        explicit_models = os.getenv("SERGEANT_CLOUDFLARE_MODELS", "")
+        models = configured_model_roster(CLOUDFLARE_PROVIDER, explicit_models)
         return cls(
             account_id=account_id,
             api_token=api_token,
