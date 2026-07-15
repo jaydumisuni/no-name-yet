@@ -1,0 +1,141 @@
+name: Observe Mission-Qualified Certification Once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - ops/mission-certified-observed.json
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPOSITORY: ${{ github.repository }}
+      TARGET_SHA: 2a5f799591ebcc9071202b5576cd8ddcf39762df
+      WORKFLOW_ID: cloudflare-live-certification.yml
+      OBSERVER_BRANCH: observe-mission-certified-run-20260715
+    steps:
+      - name: Reuse or dispatch exact main certification
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_run_id() {
+            gh api "/repos/${GH_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?event=workflow_dispatch&branch=main&per_page=30" \
+              --jq ".workflow_runs | map(select(.head_sha == \"${TARGET_SHA}\")) | sort_by(.created_at) | reverse | .[0].id // empty"
+          }
+
+          run_id="$(latest_run_id)"
+          if [ -z "$run_id" ]; then
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GH_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/dispatches" \
+              -f ref=main \
+              -f 'inputs[preset]=cloudflare-free-balanced'
+
+            for _ in $(seq 1 24); do
+              sleep 5
+              run_id="$(latest_run_id)"
+              [ -n "$run_id" ] && break
+            done
+          fi
+
+          test -n "$run_id"
+          echo "RUN_ID=$run_id" >> "$GITHUB_ENV"
+
+      - name: Wait for exact certification and recover scanned artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for _ in $(seq 1 150); do
+            gh api "/repos/${GH_REPOSITORY}/actions/runs/${RUN_ID}" > run.json
+            status="$(jq -r '.status' run.json)"
+            [ "$status" = "completed" ] && break
+            sleep 10
+          done
+
+          test "$(jq -r '.status' run.json)" = "completed"
+          test "$(jq -r '.head_sha' run.json)" = "$TARGET_SHA"
+
+          artifact_id=""
+          for _ in $(seq 1 18); do
+            artifact_id="$(gh api "/repos/${GH_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+              --jq '.artifacts | map(select(.name == "cloudflare-live-certification-cloudflare-free-balanced")) | .[0].id // empty')"
+            [ -n "$artifact_id" ] && break
+            sleep 5
+          done
+
+          test -n "$artifact_id"
+          mkdir -p evidence
+          curl -L --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GH_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+            -o artifact.zip
+          unzip -q artifact.zip -d evidence
+
+          summary="$(find evidence -name cloudflare-live-certification.json -print -quit)"
+          mission="$(find evidence -name cloudflare-mission-model-proof.json -print -quit)"
+          council="$(find evidence -name cloudflare-council-proof.json -print -quit)"
+          route="$(find evidence -name cloudflare-status.json -print -quit)"
+          handshake="$(find evidence -name cloudflare-model-proof.json -print -quit)"
+
+          test -n "$summary"
+          test -n "$mission"
+          test -n "$council"
+          test -n "$route"
+          test -n "$handshake"
+
+          jq -n \
+            --arg schema_version "sergeant.private-mission-certification-observer.v1" \
+            --argjson run "$(cat run.json)" \
+            --slurpfile certification "$summary" \
+            --slurpfile mission "$mission" \
+            --slurpfile council "$council" \
+            --slurpfile route "$route" \
+            --slurpfile handshake "$handshake" \
+            '{
+              schema_version: $schema_version,
+              run: {
+                id: $run.id,
+                html_url: $run.html_url,
+                head_sha: $run.head_sha,
+                status: $run.status,
+                conclusion: $run.conclusion,
+                created_at: $run.created_at,
+                updated_at: $run.updated_at
+              },
+              certification: $certification[0],
+              mission_model_proof: $mission[0],
+              council_proof: $council[0],
+              route_status: $route[0],
+              handshake_proof: $handshake[0]
+            }' > observed.json
+
+      - name: Commit sanitized observation to temporary branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          encoded="$(base64 -w0 observed.json)"
+          existing_sha="$(gh api "/repos/${GH_REPOSITORY}/contents/ops/mission-certified-observed.json?ref=${OBSERVER_BRANCH}" --jq '.sha' 2>/dev/null || true)"
+          args=(
+            --method PUT
+            -H "Accept: application/vnd.github+json"
+            "/repos/${GH_REPOSITORY}/contents/ops/mission-certified-observed.json"
+            -f message="Record mission-qualified certification result"
+            -f content="$encoded"
+            -f branch="$OBSERVER_BRANCH"
+          )
+          if [ -n "$existing_sha" ]; then
+            args+=( -f sha="$existing_sha" )
+          fi
+          gh api "${args[@]}" >/dev/null
