@@ -23,7 +23,10 @@ jobs:
           persist-credentials: true
 
       - name: Apply full council compatibility correction
-        run: python scripts/construct_full_council_compat.py
+        run: |
+          python scripts/construct_full_council_compat.py
+          git checkout -- .github/workflows/cloudflare-full-council-certification.yml
+          git checkout -- .github/workflows/build-full-council-compatibility.yml || true
 
       - name: Compile constructed modules
         run: |
@@ -34,7 +37,7 @@ jobs:
             main_review/llm_provider.py \
             tests/test_cloudflare_full_roster_qualification.py
 
-      - name: Commit constructed product and restore live proof
+      - name: Commit constructed product
         shell: bash
         run: |
           set -euo pipefail
