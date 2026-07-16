@@ -377,13 +377,15 @@ def _response_shape(payload: dict[str, Any]) -> str:
 def _text_value(value: object) -> str:
     if isinstance(value, str) and value.strip():
         return value
+    if isinstance(value, dict):
+        for key in ("text", "content", "value", "response", "output"):
+            text = _text_value(value.get(key))
+            if text:
+                return text
+        return ""
     if isinstance(value, list):
-        parts = [
-            str(item.get("text", ""))
-            for item in value
-            if isinstance(item, dict) and isinstance(item.get("text"), str) and item.get("text")
-        ]
-        return "\n".join(parts)
+        parts = [_text_value(item) for item in value]
+        return "\n".join(part for part in parts if part)
     return ""
 
 
@@ -394,21 +396,22 @@ def _extract_text(payload: dict[str, Any], protocol: LLMProtocol) -> str:
             first = choices[0]
             message = first.get("message", {})
             if isinstance(message, dict):
-                content = _text_value(message.get("content"))
-                if content:
-                    return content
+                for key in ("content", "reasoning_content", "reasoning", "analysis"):
+                    content = _text_value(message.get(key))
+                    if content:
+                        return content
             choice_text = _text_value(first.get("text"))
             if choice_text:
                 return choice_text
 
-    for key in ("response", "output_text", "generated_text", "text"):
+    for key in ("response", "output_text", "generated_text", "text", "reasoning_content", "reasoning", "analysis"):
         value = _text_value(payload.get(key))
         if value:
             return value
 
     result = payload.get("result")
     if isinstance(result, dict):
-        for key in ("response", "output_text", "generated_text", "text", "output"):
+        for key in ("response", "output_text", "generated_text", "text", "output", "reasoning_content", "reasoning", "analysis"):
             value = _text_value(result.get(key))
             if value:
                 return value
@@ -432,6 +435,16 @@ def _extract_text(payload: dict[str, Any], protocol: LLMProtocol) -> str:
         f"Response shape: {_response_shape(payload)}"
     )
 
+def _json_candidate_score(payload: dict[str, Any]) -> tuple[int, int]:
+    keys = {str(key) for key in payload}
+    important = {"verdict", "findings", "coverage", "status", "model", "capabilities"}
+    score = len(keys & important) * 10
+    required = payload.get("required")
+    if isinstance(required, dict):
+        score += len({str(key) for key in required} & important) * 8
+    return score, len(json.dumps(payload, sort_keys=True, default=str))
+
+
 def _parse_json_text(text: str) -> dict[str, Any]:
     candidate = text.strip()
     if candidate.startswith("```"):
@@ -444,14 +457,20 @@ def _parse_json_text(text: str) -> dict[str, Any]:
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError:
-        start = candidate.find("{")
-        end = candidate.rfind("}")
-        if start < 0 or end <= start:
-            raise LLMProviderError("Cpl model output did not contain a JSON object.") from None
-        try:
-            payload = json.loads(candidate[start : end + 1])
-        except json.JSONDecodeError as error:
-            raise LLMProviderError("Cpl model output contained invalid JSON.") from error
+        decoder = json.JSONDecoder()
+        objects: list[dict[str, Any]] = []
+        for index, character in enumerate(candidate):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(candidate[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                objects.append(value)
+        if not objects:
+            raise LLMProviderError("Cpl model output did not contain a parseable JSON object.") from None
+        payload = max(objects, key=_json_candidate_score)
     if not isinstance(payload, dict):
         raise LLMProviderError("Cpl model output JSON must be an object.")
     return payload

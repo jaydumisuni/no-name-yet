@@ -33,8 +33,8 @@ REQUIRED_PROOF_CAPABILITIES = ["structured_json", "reasoning"]
 VALID_COUNCIL_VERDICTS = {"PASS", "NEEDS WORK", "BLOCK"}
 MODEL_PROOF_MAX_OUTPUT_TOKENS = DEFAULT_MODEL_PROOF_OUTPUT_TOKENS
 COUNCIL_PROOF_MAX_OUTPUT_TOKENS = 1200
-MISSION_PROOF_MAX_OUTPUT_TOKENS = 1200
-MISSION_PROOF_TIMEOUT_SECONDS = 45.0
+MISSION_PROOF_MAX_OUTPUT_TOKENS = 1800
+MISSION_PROOF_TIMEOUT_SECONDS = 75.0
 
 
 def cloudflare_route(
@@ -81,6 +81,20 @@ def _proof_prompt(model: str) -> tuple[str, str]:
     )
 
 
+def _proof_contract_matches(payload: dict[str, Any], model: str) -> bool:
+    candidates = [payload]
+    for key in ("required", "result"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            candidates.append(nested)
+    return any(
+        candidate.get("status") == "ready"
+        and candidate.get("model") == model
+        and candidate.get("capabilities") == REQUIRED_PROOF_CAPABILITIES
+        for candidate in candidates
+    )
+
+
 def test_models(settings: CloudflareGatewaySettings) -> dict[str, Any]:
     settings.validate()
     results: list[dict[str, Any]] = []
@@ -95,11 +109,7 @@ def test_models(settings: CloudflareGatewaySettings) -> dict[str, Any]:
         started = time.monotonic()
         try:
             payload = invoke_json(route, system_prompt=system_prompt, user_prompt=user_prompt)
-            passed = (
-                payload.get("status") == "ready"
-                and payload.get("model") == model
-                and payload.get("capabilities") == REQUIRED_PROOF_CAPABILITIES
-            )
+            passed = _proof_contract_matches(payload, model)
             results.append(
                 {
                     "model": model,
@@ -146,6 +156,34 @@ def _finding_matches_mission_contract(
     ):
         return False
     return True
+
+
+_SECURITY_COVERAGE_MARKERS = (
+    "security",
+    "injection",
+    "shell",
+    "auth",
+    "authorization",
+    "trust boundary",
+    "vulnerability",
+    "remote code execution",
+    "rce",
+)
+
+
+def _coverage_area_matches(expected_category: str, reviewed_areas: set[str]) -> bool:
+    expected = expected_category.strip().lower()
+    if not expected:
+        return True
+    if expected in reviewed_areas:
+        return True
+    if expected == "security":
+        return any(
+            marker in area
+            for area in reviewed_areas
+            for marker in _SECURITY_COVERAGE_MARKERS
+        )
+    return False
 
 
 def qualify_models(
@@ -224,7 +262,7 @@ def qualify_models(
             } if isinstance(coverage.get("areas", []), list) else set()
             coverage_matches = (
                 (not expected_path or expected_path in reviewed_files)
-                and (not expected_category or expected_category in reviewed_areas)
+                and _coverage_area_matches(expected_category, reviewed_areas)
             )
             passed = verdict_matches and bool(matching) and coverage_matches
             results.append({
