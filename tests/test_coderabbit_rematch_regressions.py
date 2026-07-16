@@ -252,6 +252,29 @@ jobs:
     assert not any(item["root_cause"] == "workflow-proof-contract" for item in clean["findings"])
 
 
+def test_workflow_proof_does_not_treat_echoed_test_path_as_execution(tmp_path: Path) -> None:
+    workflow = ".github/workflows/proof.yml"
+    test_path = "tests/test_required.py"
+    _write(tmp_path, "docs/proof.md", f"Assured workflow `{workflow}` must run `{test_path}`.\n")
+    _write(
+        tmp_path,
+        workflow,
+        f"""on:
+  pull_request:
+    paths: ['{test_path}']
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo pytest {test_path}
+""",
+    )
+
+    result = run_offline_investigations(tmp_path, ["docs/proof.md", workflow])
+
+    assert any(item["root_cause"] == "workflow-proof-contract" for item in result["findings"])
+
+
 def test_single_quoted_security_marker_keeps_grounded_line(tmp_path: Path) -> None:
     _write(
         tmp_path,

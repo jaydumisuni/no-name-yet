@@ -36,10 +36,47 @@ PY_CALL_RE = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(")
 JS_EXPORT_RE = re.compile(r"\bexport\s+(?:async\s+)?(?:function|const|class)\s+([A-Za-z_$][\w$]*)")
 JS_FUNCTION_RE = re.compile(r"\b(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(")
 HTTP_ROUTE_RE = re.compile(r"\b(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)['\"]")
-INPUT_RE = re.compile(r"\b(req\.(?:body|query|params)|request\.(?:json|args|form)|input\(|process\.env)\b")
-SINK_RE = re.compile(r"\b(eval|exec|subprocess|os\.system|innerHTML|dangerouslySetInnerHTML|raw\(|query\()\b")
+INPUT_RE = re.compile(
+    r"(?:\breq\.(?:body|query|params)\b|\brequest\.(?:json|args|form|params)\b|"
+    r"\binput\s*\(|\bprocess\.env\b|\b(?:r|request)\.URL\.Query\(\)\.Get\s*\(|"
+    r"\b(?:r|request)\.FormValue\s*\(|\b(?:c|ctx|context)\.(?:Query|Param|FormValue)\s*\(|"
+    r"@(?:RequestParam|PathVariable)\b|\b(?:request|req)\.getParameter\s*\(|"
+    r"\bparams\s*\[|\brequested\s*:\s*&(?:'\w+\s+)?str\b)",
+    re.I,
+)
+SINK_RE = re.compile(
+    r"(?:\beval\s*\(|\bexec\s*\(|\bsubprocess\.|\bos\.system\s*\(|"
+    r"\bchild_process\.exec\s*\(|\bcp\.exec\s*\(|\binnerHTML\b|"
+    r"\bdangerouslySetInnerHTML\b|\braw\s*\(|"
+    r"\b(?:db|database|conn|connection|tx|stmt)\.(?:query|queryContext|execute|execContext)\s*\(|"
+    r"(?<![.\w])(?:query|queryContext|execute|execContext)\s*\(|"
+    r"\bRuntime\.getRuntime\(\)\.exec\s*\(|\bProcessBuilder\s*\(|\bProcess\.Start\s*\()",
+    re.I,
+)
 N2_LOOP_RE = re.compile(r"\bfor\b[\s\S]{0,160}\bfor\b")
-ASYNC_SHARED_RE = re.compile(r"\b(global|threading|asyncio\.create_task|Promise\.all|setTimeout|setInterval)\b")
+RUBY_N2_LOOP_RE = re.compile(r"\.each\s+do\s+\|[^|]+\|[\s\S]{0,200}\.each\s+do\s+\|", re.I)
+ASYNC_SHARED_RE = re.compile(
+    r"(?:\bglobal\b|\bthreading\b|\basyncio\.create_task\b|\bPromise\.all\b|"
+    r"\bsetTimeout\b|\bsetInterval\b|\basync\s+Task\b|\bTask\.(?:Run|Yield|WhenAll)\b|"
+    r"\bgo\s+func\b|\btokio::spawn\b|\bThread\.new\b)",
+    re.I,
+)
+SHARED_STATE_RE = re.compile(
+    r"\b(?:global[A-Za-z0-9_]*|shared[A-Za-z0-9_]*|[A-Za-z0-9_]*(?:counter|cache|state))\b",
+    re.I,
+)
+SHARED_MUTATION_RE = re.compile(
+    r"\b(?:global[A-Za-z0-9_]*|shared[A-Za-z0-9_]*|[A-Za-z0-9_]*(?:counter|cache|state))"
+    r"\s*(?:\+\+|--|[+\-*/]=)",
+    re.I,
+)
+CONCURRENCY_GUARD_RE = re.compile(
+    r"(?:\bInterlocked\.(?:Increment|Decrement|Exchange|CompareExchange|Add)\s*\(|"
+    r"\batomic\.(?:Add|Store|Swap|CompareAndSwap|Load)\w*\s*\(|"
+    r"\b[A-Za-z0-9_]*(?:mutex|lock|semaphore)\.(?:lock|Lock|Wait|WaitAsync)\s*\(|"
+    r"\block\s*\(|\bsynchronized\s*(?:\(|\{)|\bMonitor\.(?:Enter|TryEnter)\s*\()",
+    re.I,
+)
 API_KEYWORD_RE = re.compile(r"\b(api|route|client|server|handler|schema|contract|types?)\b", re.I)
 EVALUATION_PREFIXES = ("review-benchmarks/", "battle-tests/")
 
@@ -223,15 +260,32 @@ def _call_graph_findings(indexes: dict[str, Any], changed: set[str]) -> list[Cap
 
 
 def _security_taint_findings(indexes: dict[str, Any], changed: set[str]) -> list[CapabilityFinding]:
-    return [CapabilityFinding("security_taint", "major", "Potential tainted input path needs validation review.", path, "Input source and security-sensitive operation are both present.", 0.7) for path in sorted(changed) if INPUT_RE.search(indexes["texts"].get(path, "")) and re.search(r"\b(sql|query|exec|eval|shell|command)\b", indexes["texts"].get(path, ""), re.I)]
+    return [CapabilityFinding("security_taint", "major", "Potential tainted input path needs validation review.", path, "Input source and security-sensitive operation are both present.", 0.7) for path in sorted(changed) if INPUT_RE.search(indexes["texts"].get(path, "")) and (SINK_RE.search(indexes["texts"].get(path, "")) or re.search(r"\b(sql|query|exec|eval|shell|command)\b", indexes["texts"].get(path, ""), re.I))]
 
 
 def _performance_findings(indexes: dict[str, Any], changed: set[str]) -> list[CapabilityFinding]:
-    return [CapabilityFinding("performance", "minor", "Nested iteration pattern may create scaling risk.", path, "Nested loop/map pattern detected in changed file.", 0.62) for path in sorted(changed) if N2_LOOP_RE.search(indexes["texts"].get(path, "")) or re.search(r"\.map\([^\)]*=>[\s\S]{0,120}\.map\(", indexes["texts"].get(path, ""))]
+    return [CapabilityFinding("performance", "minor", "Nested iteration pattern may create scaling risk.", path, "Nested loop/map/each pattern detected in changed file.", 0.62) for path in sorted(changed) if N2_LOOP_RE.search(indexes["texts"].get(path, "")) or RUBY_N2_LOOP_RE.search(indexes["texts"].get(path, "")) or re.search(r"\.map\([^\)]*=>[\s\S]{0,120}\.map\(", indexes["texts"].get(path, ""))]
 
 
 def _concurrency_findings(indexes: dict[str, Any], changed: set[str]) -> list[CapabilityFinding]:
-    return [CapabilityFinding("concurrency", "minor", "Async or shared-state pattern may need race-condition review.", path, "Concurrent execution signal and shared state naming were both detected.", 0.6) for path in sorted(changed) if ASYNC_SHARED_RE.search(indexes["texts"].get(path, "")) and re.search(r"\b(cache|state|global|shared|counter)\b", indexes["texts"].get(path, ""), re.I)]
+    findings: list[CapabilityFinding] = []
+    for path in sorted(changed):
+        text = indexes["texts"].get(path, "")
+        if (
+            ASYNC_SHARED_RE.search(text)
+            and SHARED_STATE_RE.search(text)
+            and SHARED_MUTATION_RE.search(text)
+            and not CONCURRENCY_GUARD_RE.search(text)
+        ):
+            findings.append(CapabilityFinding(
+                "concurrency",
+                "minor",
+                "Concurrent work mutates shared state without a visible synchronization guard.",
+                path,
+                "Concurrent execution, a shared-state mutation, and no atomic/lock guard were detected.",
+                0.72,
+            ))
+    return findings
 
 
 def _api_contract_findings(indexes: dict[str, Any], changed: set[str]) -> list[CapabilityFinding]:

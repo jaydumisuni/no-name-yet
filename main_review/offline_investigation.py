@@ -74,6 +74,12 @@ class CoverageRecord:
 
 _MODEL_ID_RE = re.compile(r"@cf/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _TEST_PATH_RE = re.compile(r"tests/test_[A-Za-z0-9_./-]+\.py")
+_PYTHON_TEST_RUNNER_RE = re.compile(
+    r"(?:^|[;&|]\s*)(?:[A-Za-z_][A-Za-z0-9_]*=[^\s]+\s+)*"
+    r"(?:(?:uv|poetry|pipenv)\s+run\s+)?"
+    r"(?:python(?:3(?:\.\d+)?)?\s+-m\s+)?(?:pytest|unittest|tox|nox)\b",
+    re.I,
+)
 _WORKFLOW_PATH_RE = re.compile(r"\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml")
 _QUOTA_FUNCTION_RE = re.compile(
     r"^def\s+[A-Za-z0-9_]*quota[A-Za-z0-9_]*\s*\([^)]*(?:error|exception)[^)]*\)"
@@ -219,7 +225,8 @@ def _executed_test_paths(text: str) -> set[str]:
                     break
                 if candidate_code.strip():
                     command_lines.append(candidate_code.strip())
-        for command in command_lines:
+        command = "\n".join(command_lines)
+        if _PYTHON_TEST_RUNNER_RE.search(command):
             paths.update(_TEST_PATH_RE.findall(command))
     return paths
 

@@ -1,0 +1,36 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "typescript-command-injection",
+  "title": "TypeScript request input reaches a shell",
+  "expected_verdict": "REQUEST_CHANGES",
+  "changed_files": ["src/jobs.ts", "tests/jobs.test.ts"],
+  "expected_findings": [
+    {
+      "id": "typescript-command-data-flow",
+      "category": "data_flow",
+      "severity": "major",
+      "paths": ["src/jobs.ts"],
+      "line_start": 6,
+      "line_end": 6,
+      "root_cause": "unsafe-data-flow",
+      "keywords": ["request", "shell", "command", "input"]
+    },
+    {
+      "id": "typescript-command-security",
+      "category": "security_taint",
+      "severity": "major",
+      "paths": ["src/jobs.ts"],
+      "line_start": 6,
+      "line_end": 6,
+      "root_cause": "unsafe-data-flow",
+      "keywords": ["input", "command", "execution", "sensitive"]
+    }
+  ],
+  "files": [
+    {"path": "package.json", "content": "{\"name\":\"typescript-service\",\"scripts\":{\"test\":\"vitest\"}}\n"},
+    {"path": "README.md", "content": "# TypeScript service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n"},
+    {"path": "src/jobs.ts", "content": "import { exec } from 'node:child_process';\n\nexport function runJob(req: { body: { command: string } }) {\n  const command = req.body.command;\n  console.info('running job');\n  return exec(command);\n}\n"},
+    {"path": "tests/jobs.test.ts", "content": "import { runJob } from '../src/jobs';\ntest('exports job runner', () => expect(runJob).toBeDefined());\n"}
+  ]
+}
