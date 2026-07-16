@@ -1,0 +1,62 @@
+name: Build Workspace-Ready Cpl Command Fabric
+
+on:
+  push:
+    branches:
+      - certify-full-cloudflare-council-20260716
+    paths:
+      - scripts/apply_workspace_ready_command_fabric.py
+      - .github/workflows/build-workspace-ready-command-fabric.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-command-fabric:
+    if: ${{ !contains(github.event.head_commit.message, '[workspace-fabric-built]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: certify-full-cloudflare-council-20260716
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply workspace-ready fabric
+        run: python scripts/apply_workspace_ready_command_fabric.py
+
+      - name: Install Sergeant
+        run: python -m pip install -e . pytest
+
+      - name: Run focused command-fabric proof
+        run: >-
+          python -m pytest -q
+          tests/test_workspace_ready_campaign.py
+          tests/test_offline_officer_council.py
+          tests/test_pr_reviewer.py
+          tests/test_cpl_council_runtime.py
+
+      - name: Run full suite
+        run: python -m pytest -q
+
+      - name: Validate patch
+        run: git diff --check
+
+      - name: Publish exact product commit
+        run: |
+          git config user.name "Sergeant Constructor"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No product changes were produced."
+            exit 0
+          fi
+          git commit -m "Add workspace-ready Cpl command fabric [workspace-fabric-built]"
+          git push origin HEAD:certify-full-cloudflare-council-20260716
