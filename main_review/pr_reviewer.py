@@ -304,6 +304,14 @@ def render_pr_review_markdown(packet: dict[str, Any]) -> str:
     lines.append(f"- Permanent officer reports: {len(formation.get('reports', []))}")
     lines.append(f"- Admitted officer findings: {len(formation.get('admitted_findings', []))}")
     lines.append(f"- Unresolved explicit assurances: {len(formation.get('unresolved_assurances', []))}")
+    campaign = formation.get("campaign", {}) if isinstance(formation, dict) else {}
+    private_force = campaign.get("private_force", {}) if isinstance(campaign, dict) else {}
+    adapter_status = campaign.get("adapter_status", {}) if isinstance(campaign, dict) else {}
+    lines.append(f"- Cpl campaign status: {campaign.get('status', 'not prepared')}")
+    lines.append(f"- Authorized operational tasks: {len(campaign.get('tasks', []))}")
+    lines.append(f"- Planned private force: {private_force.get('planned_private_count', 0)}")
+    lines.append(f"- Workspace adapter: {adapter_status.get('workspace', 'not prepared')}")
+    lines.append(f"- Research adapter: {adapter_status.get('research', 'not prepared')}")
     lines.append(f"- Semantic files supplied: {len(packet.get('semantic_files', []))}")
     lines.append(f"- High-risk assurance adjustments: {len(packet.get('diff_review_policy', []))}")
     lines.append(f"- Standard passed: {packet.get('standard', {}).get('passed')}")

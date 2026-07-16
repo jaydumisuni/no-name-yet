@@ -12,6 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+from .cpl_campaign import build_cpl_campaign
 from .offline_investigation import run_offline_investigations
 
 
@@ -408,7 +409,19 @@ def run_officer_council(
     else:
         verdict = "PASS"
     reports = _officer_reports(candidates, admitted, advisory, rejected, assurances, offline, cpl)
+    campaign = build_cpl_campaign(
+        root,
+        changed,
+        officer_reports=reports,
+        admitted=admitted,
+        advisory=advisory,
+        rejected=rejected,
+        assurances=assurances,
+        cpl=cpl,
+        offline=offline,
+    )
     transactions = _transactions(changed, candidates, admitted, advisory, rejected, assurances)
+    transactions.extend(campaign.get("transactions", []))
     transactions.append({
         "transaction": "ground_report_delivered",
         "sender": "Cpl",
@@ -434,6 +447,11 @@ def run_officer_council(
         "reports": reports,
         "transactions": transactions,
         "offline_investigation": offline,
+        "campaign": campaign,
+        "workspace_ready": True,
+        "private_force": campaign.get("private_force", {}),
+        "workspace_adapter_status": campaign.get("adapter_status", {}).get("workspace"),
+        "research_adapter_status": campaign.get("adapter_status", {}).get("research"),
         "required_actions": [
             f"Resolve {item.get('officer')} {item.get('severity')} finding at {item.get('evidence_ref')}: {item.get('message')}"
             for item in admitted
