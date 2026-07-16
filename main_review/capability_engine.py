@@ -78,12 +78,12 @@ SHARED_MUTATION_RE = re.compile(
 LOCK_BLOCK_RE = re.compile(r"\block\s*\([^)]*\)\s*$|\bsynchronized\b[^{}]*\)?\s*$", re.I)
 CONTROL_BLOCK_RE = re.compile(r"^(?:if|for|foreach|while|switch|catch|using|lock|synchronized)\b", re.I)
 LOCK_ACQUIRE_RE = re.compile(
-    r"\b[A-Za-z0-9_]*(?:mutex|lock|semaphore)\.(?:lock|Lock|Wait|WaitAsync)\s*\(|"
+    r"\b[A-Za-z_][A-Za-z0-9_]*\.(?:lock|wait|waitasync)\s*\(|"
     r"\bMonitor\.(?:Enter|TryEnter)\s*\(",
     re.I,
 )
 LOCK_RELEASE_RE = re.compile(
-    r"\b[A-Za-z0-9_]*(?:mutex|lock|semaphore)\.(?:unlock|Unlock|Release)\s*\(|"
+    r"\b[A-Za-z_][A-Za-z0-9_]*\.(?:unlock|release)\s*\(|"
     r"\bMonitor\.Exit\s*\(",
     re.I,
 )

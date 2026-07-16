@@ -303,3 +303,22 @@ def test_generic_verification_recognizes_cross_language_manifests(tmp_path: Path
     checks = {item.name: item.passed for item in report.checks}
     assert checks["project_manifest"] is True
     assert checks["tests_present"] is True
+
+
+def test_go_short_lock_receiver_guards_shared_mutation(tmp_path: Path) -> None:
+    guarded = _review(
+        tmp_path,
+        "internal/counter.go",
+        """package internal
+func update() {
+    go func() {
+        mu.Lock()
+        sharedCounter++
+        mu.Unlock()
+    }()
+}
+""",
+        "internal/counter_test.go",
+        "package internal\nfunc TestCounter() {}\n",
+    )
+    assert not any(item.get("capability") == "concurrency" for item in _actionable(guarded))

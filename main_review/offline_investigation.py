@@ -255,8 +255,17 @@ def _pull_request_trigger_paths(text: str) -> set[str]:
 
 
 def _workflow_run_commands(text: str) -> list[WorkflowCommand]:
+    """Return executable workflow commands with YAML block-scalar semantics.
+
+    Literal ``|`` blocks retain newlines.  Folded ``>`` blocks become one shell
+    line, preventing an apparent runner on a later YAML row from being treated as
+    an independent command when YAML actually folds it into preceding text.
+    """
+
     lines = text.splitlines()
     commands: list[WorkflowCommand] = []
+    literal_markers = {"|", "|-", "|+"}
+    folded_markers = {">", ">-", ">+"}
     for index, row in enumerate(lines):
         match = re.match(r"^(\s*)(?:-\s*)?run\s*:\s*(.*?)\s*$", _yaml_code(row))
         if not match:
@@ -265,7 +274,7 @@ def _workflow_run_commands(text: str) -> list[WorkflowCommand]:
         inline = match.group(2).strip()
         command_lines: list[str] = []
         command_line = index + 1
-        if inline and inline not in {"|", ">", "|-", ">-", "|+", ">+"}:
+        if inline and inline not in literal_markers | folded_markers:
             command_lines.append(inline)
         else:
             for candidate_index, candidate in enumerate(lines[index + 1:], start=index + 1):
@@ -276,18 +285,40 @@ def _workflow_run_commands(text: str) -> list[WorkflowCommand]:
                     if not command_lines:
                         command_line = candidate_index + 1
                     command_lines.append(candidate_code.strip())
-        if command_lines:
-            commands.append(WorkflowCommand("\n".join(command_lines), command_line))
+        if not command_lines:
+            continue
+        separator = " " if inline in folded_markers else "\n"
+        commands.append(WorkflowCommand(separator.join(command_lines), command_line))
     return commands
 
-
 def _executed_test_paths(text: str) -> set[str]:
+    """Return test paths appearing in actual runner invocations only."""
+
     paths: set[str] = set()
     for command in _workflow_run_commands(text):
-        if _PYTHON_TEST_RUNNER_RE.search(command.text):
-            paths.update(_TEST_PATH_RE.findall(command.text))
+        logical_lines: list[str] = []
+        pending = ""
+        for raw in command.text.splitlines() or [command.text]:
+            stripped = raw.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.endswith("\\"):
+                pending += stripped[:-1].rstrip() + " "
+                continue
+            logical_lines.append((pending + stripped).strip())
+            pending = ""
+        if pending.strip():
+            logical_lines.append(pending.strip())
+        for logical in logical_lines:
+            for segment in re.split(r"\s*(?:&&|\|\||;|\|)\s*", logical):
+                candidate = segment.strip()
+                if not candidate or candidate.startswith("#"):
+                    continue
+                runner = _PYTHON_TEST_RUNNER_RE.search(candidate)
+                if runner is None:
+                    continue
+                paths.update(_TEST_PATH_RE.findall(candidate[runner.start():]))
     return paths
-
 
 def _workflow_shell_operator_expansion(path: str, text: str) -> list[FieldFinding]:
     pattern = re.compile(
@@ -397,9 +428,9 @@ def _workflow_contracts(root: Path, changed: list[str], texts: dict[str, str]) -
         for workflow_path, documented_tests in _documented_workflow_tests(doc).items():
             workflow = workflows.get(workflow_path)
             if workflow is None:
-                _, workflow = _safe_source(root, workflow_path)
-            if not workflow:
-                continue
+                workflow_source, workflow = _safe_source(root, workflow_path)
+                if workflow_source is None:
+                    continue
             required_tests = sorted(documented_tests)
             trigger_paths = _pull_request_trigger_paths(workflow)
             executed_tests = _executed_test_paths(workflow)
@@ -706,21 +737,96 @@ def _atomic_replace_without_fsync(path: str, text: str) -> list[FieldFinding]:
     findings: list[FieldFinding] = []
     for function in _python_functions(text):
         body = function.body
-        creates_temporary = bool(re.search(r"NamedTemporaryFile|mkstemp", body))
-        write_matches = list(re.finditer(r"\.write\s*\(|write_text\s*\(|json\.dump", body))
-        flush_matches = list(re.finditer(r"\.flush\s*\(", body))
-        fsync_matches = list(re.finditer(r"\bos\.fsync\s*\(|\bfsync\s*\(", body))
-        replace_matches = list(re.finditer(r"(?:os\.)?replace\s*\(|\.replace\s*\(", body))
-        if not (creates_temporary and write_matches and replace_matches):
+        handles = {
+            match.group("handle")
+            for match in re.finditer(
+                r"NamedTemporaryFile[^\n]*\bas\s+(?P<handle>[A-Za-z_][A-Za-z0-9_]*)",
+                body,
+            )
+        }
+        aliases: dict[str, str] = {}
+        for match in re.finditer(
+            r"(?m)^\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^\n]*?"
+            r"(?P<handle>[A-Za-z_][A-Za-z0-9_]*)\.name\b",
+            body,
+        ):
+            if match.group("handle") in handles:
+                aliases[match.group("alias")] = match.group("handle")
+
+        fd_paths: dict[str, str] = {}
+        for match in re.finditer(
+            r"(?m)^\s*(?P<fd>[A-Za-z_][A-Za-z0-9_]*)\s*,\s*"
+            r"(?P<path>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:tempfile\.)?mkstemp\s*\(",
+            body,
+        ):
+            fd_paths[match.group("path")] = match.group("fd")
+
+        replacements: list[tuple[int, str]] = []
+        for match in re.finditer(r"(?:os\.)?replace\s*\(\s*([^,\n]+)\s*,", body):
+            replacements.append((match.start(), match.group(1).strip()))
+        for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)\.replace\s*\(", body):
+            replacements.append((match.start(), match.group(1)))
+        if not replacements:
             continue
-        durable = any(
-            write.start() < flush.start() < fsync.start() < replace.start()
-            for write in write_matches
-            for flush in flush_matches
-            for fsync in fsync_matches
-            for replace in replace_matches
-        )
-        if durable:
+
+        non_durable: list[str] = []
+        for replace_pos, source in sorted(replacements):
+            normalized = source.strip()
+            handle: str | None = None
+            if normalized in aliases:
+                handle = aliases[normalized]
+            elif normalized.endswith(".name") and normalized[:-5] in handles:
+                handle = normalized[:-5]
+            elif normalized in handles:
+                handle = normalized
+
+            if handle is not None:
+                write_positions = [
+                    match.start()
+                    for match in re.finditer(rf"\b{re.escape(handle)}\.write\s*\(", body)
+                ]
+                write_positions.extend(
+                    match.start()
+                    for match in re.finditer(
+                        rf"\bjson\.dump\s*\([^\n]*,\s*{re.escape(handle)}\s*\)",
+                        body,
+                    )
+                )
+                flush_positions = [
+                    match.start()
+                    for match in re.finditer(rf"\b{re.escape(handle)}\.flush\s*\(", body)
+                ]
+                fsync_positions = [
+                    match.start()
+                    for match in re.finditer(
+                        rf"\bos\.fsync\s*\(\s*{re.escape(handle)}\.fileno\s*\(\s*\)\s*\)",
+                        body,
+                    )
+                ]
+                durable = any(
+                    write < flush < fsync < replace_pos
+                    for write in write_positions
+                    for flush in flush_positions
+                    for fsync in fsync_positions
+                )
+            elif normalized in fd_paths:
+                fd = fd_paths[normalized]
+                writes = [
+                    match.start()
+                    for match in re.finditer(rf"\bos\.write\s*\(\s*{re.escape(fd)}\s*,", body)
+                ]
+                fsyncs = [
+                    match.start()
+                    for match in re.finditer(rf"\bos\.fsync\s*\(\s*{re.escape(fd)}\s*\)", body)
+                ]
+                durable = any(write < fsync < replace_pos for write in writes for fsync in fsyncs)
+            else:
+                durable = False
+
+            if not durable:
+                non_durable.append(source)
+
+        if not non_durable:
             continue
         findings.append(
             FieldFinding(
@@ -730,15 +836,17 @@ def _atomic_replace_without_fsync(path: str, text: str) -> list[FieldFinding]:
                 "Atomic file replacement is not durably flushed before publication.",
                 path,
                 function.line_start,
-                f"Function {function.name} does not preserve write -> flush -> fsync -> replace ordering, so a crash can publish an empty or incomplete ledger.",
+                f"Function {function.name} has replacement source(s) without their own ordered write -> flush -> fsync -> replace proof: {', '.join(non_durable)}.",
                 "atomic-replace-durability",
-                0.86,
-                ["Checked for handle.flush().", "Checked for os.fsync() before replace."],
-                "Flush the file object and fsync its descriptor before atomically replacing the destination.",
+                0.9,
+                [
+                    "Associated each replacement with its own temporary handle or file descriptor.",
+                    "Required every replacement to preserve its own durability sequence.",
+                ],
+                "For every temporary artifact, write and flush the matching handle, fsync its descriptor, then atomically replace the destination.",
             )
         )
     return findings
-
 
 def _uncanonicalized_severity(path: str, text: str) -> list[FieldFinding]:
     downstream_lowercase = bool(

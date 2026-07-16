@@ -300,15 +300,16 @@ EXPECTED_ROOTS = {
     "cross-process-state-race",
     "quota-error-classification",
     "structured-response-selection",
+    "atomic-replace-durability",
 }
 
 
-def test_offline_permanent_officers_detect_all_ten_coderabbit_roots(tmp_path: Path) -> None:
+def test_offline_permanent_officers_detect_all_recovery_roots(tmp_path: Path) -> None:
     changed = _defective_formation(tmp_path)
 
     result = run_offline_investigations(tmp_path, changed)
 
-    assert result["finding_count"] == 10
+    assert result["finding_count"] == 11
     assert {item["root_cause"] for item in result["findings"]} == EXPECTED_ROOTS
     assert {item["officer"] for item in result["findings"]} == {"Engineer", "Medic", "Mechanic"}
     assert all(item["direct_evidence"] is True for item in result["findings"])

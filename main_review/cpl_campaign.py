@@ -248,12 +248,12 @@ def _workspace_requests(mission_id: str, tasks: list[dict[str, Any]]) -> list[di
         facility = "repository"
         action = "inspect_authorized_scope"
         artifacts = ["structured evidence packet", "tool provenance"]
-        if "test_runner" in capabilities:
-            facility, action = "test", "run_bounded_regression_or_reproduction"
-            artifacts.extend(["test log", "exit status"])
-        elif "runtime_tracer" in capabilities or "runtime_reproducer" in capabilities:
+        if "runtime_tracer" in capabilities or "runtime_reproducer" in capabilities:
             facility, action = "runtime", "reproduce_bounded_execution_world"
             artifacts.extend(["runtime trace", "environment manifest"])
+        elif "test_runner" in capabilities:
+            facility, action = "test", "run_bounded_regression_or_reproduction"
+            artifacts.extend(["test log", "exit status"])
         elif task.get("execution_mode") == "officer":
             continue
         rows.append(workspace_request(
@@ -403,6 +403,7 @@ def build_cpl_campaign(
         "council_rounds": [council_round],
         "pending_authorizations": [],
         "evidence_packets": [],
+        "assurance_gates": [dict(item) for item in assurances],
         "private_force": {
             "multiplier": 10,
             "minimum_private_count": 20,
@@ -425,7 +426,12 @@ def build_cpl_campaign(
 
 
 def advance_campaign(campaign: dict[str, Any], evidence_packets: Iterable[dict[str, Any]]) -> dict[str, Any]:
-    """Create the next council round from validated evidence without auto-spawning work."""
+    """Create the next council round from validated evidence without auto-spawning work.
+
+    New evidence cannot silently clear a prior required-assurance gate.  A gate
+    must be explicitly adjudicated to ``satisfied`` in ``assurance_gates`` before
+    the campaign becomes report-ready.
+    """
 
     updated = dict(campaign)
     tasks = {item["task_id"]: dict(item) for item in campaign.get("tasks", [])}
@@ -442,7 +448,12 @@ def advance_campaign(campaign: dict[str, Any], evidence_packets: Iterable[dict[s
         evidence_refs.extend(str(item) for item in packet.get("evidence_refs", []))
         for question in packet.get("questions_for_officer", []):
             request = {
-                "authorization_id": stable_id("authorization", campaign.get("mission", {}).get("mission_id"), task["task_id"], question),
+                "authorization_id": stable_id(
+                    "authorization",
+                    campaign.get("mission", {}).get("mission_id"),
+                    task["task_id"],
+                    question,
+                ),
                 "mission_id": campaign.get("mission", {}).get("mission_id"),
                 "parent_task_id": task["task_id"],
                 "requested_by": packet.get("worker_id"),
@@ -455,6 +466,13 @@ def advance_campaign(campaign: dict[str, Any], evidence_packets: Iterable[dict[s
             if request["authorization_id"] not in {item.get("authorization_id") for item in pending}:
                 pending.append(request)
                 questions.append(str(question))
+
+    unresolved_assurances = [
+        item
+        for item in campaign.get("assurance_gates", [])
+        if item.get("gates_verdict") and item.get("status") != "satisfied"
+    ]
+    report_ready = not pending and not unresolved_assurances
     rounds = list(campaign.get("council_rounds", []))
     rounds.append({
         "round_number": len(rounds) + 1,
@@ -462,19 +480,22 @@ def advance_campaign(campaign: dict[str, Any], evidence_packets: Iterable[dict[s
             "new_evidence_packets": len(accepted) - len(campaign.get("evidence_packets", [])),
             "new_evidence_refs": sorted(set(evidence_refs)),
             "new_questions": questions,
+            "unresolved_required_assurances": len(unresolved_assurances),
         },
         "decisions": [
             "Route validated evidence to the responsible officers.",
             "Keep discovered questions pending until officer relevance and Cpl priority are authorized.",
+            "Preserve prior required-assurance gates until explicit adjudication marks them satisfied.",
         ],
         "authorized_tasks": [],
         "pending_authorizations": [item["authorization_id"] for item in pending],
-        "evidence_saturation": not pending,
-        "report_ready_for_sergeant": not pending,
+        "evidence_saturation": report_ready,
+        "report_ready_for_sergeant": report_ready,
     })
     updated["evidence_packets"] = accepted
     updated["pending_authorizations"] = pending
     updated["council_rounds"] = rounds
-    updated["report_ready_for_sergeant"] = not pending
+    updated["report_ready_for_sergeant"] = report_ready
     updated["status"] = "evidence_received" if accepted else campaign.get("status", "prepared")
     return updated
+

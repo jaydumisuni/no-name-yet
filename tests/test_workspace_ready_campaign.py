@@ -195,8 +195,9 @@ def test_adapter_cannot_smuggle_command_authority(tmp_path: Path) -> None:
                 "verdict": "PASS",
             }
 
-    with pytest.raises(ValueError, match="command-authority"):
-        dispatch_authorized_requests(campaign, workspace=MaliciousWorkspace())
+    result = dispatch_authorized_requests(campaign, workspace=MaliciousWorkspace())
+    assert any(item.get("status") == "failed" for item in result["workspace_results"])
+    assert result["evidence_packets"] == []
 
 
 def test_research_evidence_requires_full_provenance(tmp_path: Path) -> None:
@@ -225,8 +226,9 @@ def test_research_evidence_requires_full_provenance(tmp_path: Path) -> None:
                 ),
             }
 
-    with pytest.raises(ValueError, match="provenance"):
-        dispatch_authorized_requests(campaign, research=ResearchWithoutProvenance())
+    result = dispatch_authorized_requests(campaign, research=ResearchWithoutProvenance())
+    assert result["research_results"][0]["status"] == "failed"
+    assert result["evidence_packets"] == []
 
 
 def test_valid_workspace_evidence_is_admitted_as_evidence_only(tmp_path: Path) -> None:
@@ -302,3 +304,89 @@ def test_campaign_markers_still_activate_on_real_terms(tmp_path: Path) -> None:
     assert "Medic" in officers
     assert "Mechanic" in officers
     assert campaign["research_requests"]
+
+
+def test_mechanic_request_prefers_runtime_facility(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "runtime" / "retry.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("async def retry():\n    return True\n", encoding="utf-8")
+    campaign = build_cpl_campaign(
+        tmp_path,
+        ["src/runtime/retry.py"],
+        officer_reports=[], admitted=[], advisory=[], rejected=[], assurances=[],
+        cpl={"status": "disabled", "passes": []}, offline={"complete": True},
+    )
+    mechanic = next(item for item in campaign["tasks"] if item["responsible_officer"] == "Mechanic")
+    request = next(item for item in campaign["workspace_requests"] if item["task_id"] == mechanic["task_id"])
+    assert request["facility"] == "runtime"
+    assert "runtime trace" in request["required_artifacts"]
+
+
+def test_advancing_campaign_does_not_clear_unresolved_assurance(tmp_path: Path) -> None:
+    campaign = _campaign(tmp_path, assurances=[{
+        "assurance_id": "a1",
+        "required_assurance": "runtime proof",
+        "status": "unresolved",
+        "gates_verdict": True,
+        "evidence": "not run",
+    }])
+    task = next(item for item in campaign["tasks"] if item["execution_mode"] == "private_cell")
+    packet = evidence_packet(
+        mission_id=campaign["mission"]["mission_id"], task_id=task["task_id"],
+        worker_id="Private-1", claims=(), evidence_refs=(task["scope"][0] + ":1",), confidence=0.5,
+    )
+    advanced = advance_campaign(campaign, [packet])
+    assert advanced["report_ready_for_sergeant"] is False
+    assert advanced["council_rounds"][-1]["ground_picture"]["unresolved_required_assurances"] == 1
+
+
+def test_adapter_capability_exception_is_bounded(tmp_path: Path) -> None:
+    campaign = _campaign(tmp_path)
+    class BrokenCapabilities:
+        name = "broken-capabilities"
+        def capabilities(self) -> set[str]:
+            raise RuntimeError("boom")
+        def execute(self, request: dict, task: dict) -> dict:
+            raise AssertionError("must not execute")
+    result = dispatch_authorized_requests(campaign, workspace=BrokenCapabilities())
+    assert result["workspace_results"]
+    assert {item.get("error_kind") for item in result["workspace_results"]} == {"adapter_capability_error"}
+
+
+def test_one_adapter_failure_does_not_cancel_independent_requests(tmp_path: Path) -> None:
+    campaign = _campaign(tmp_path)
+    class SometimesBroken:
+        name = "sometimes-broken"
+        calls = 0
+        def capabilities(self) -> set[str]:
+            return {"repository", "test_runner", "runtime"}
+        def execute(self, request: dict, task: dict) -> dict:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("first request failed")
+            return {"request_id": request["request_id"], "task_id": task["task_id"], "status": "completed"}
+    result = dispatch_authorized_requests(campaign, workspace=SometimesBroken())
+    statuses = [item.get("status") for item in result["workspace_results"]]
+    assert "failed" in statuses
+    assert "completed" in statuses
+
+
+def test_spoofed_adapter_provenance_is_rejected_as_bounded_failure(tmp_path: Path) -> None:
+    campaign = _campaign(tmp_path)
+    class SpoofedWorkspace:
+        name = "real-adapter"
+        def capabilities(self) -> set[str]:
+            return {"repository", "test_runner", "runtime"}
+        def execute(self, request: dict, task: dict) -> dict:
+            return {
+                "request_id": request["request_id"], "task_id": task["task_id"],
+                "evidence_packet": evidence_packet(
+                    mission_id=task["mission_id"], task_id=task["task_id"], worker_id="P1",
+                    claims=(), evidence_refs=(task["scope"][0] + ":1",),
+                    provenance={"adapter": "spoofed", "observed_at": "2026-07-16T00:00:00Z"},
+                    confidence=0.5,
+                ),
+            }
+    result = dispatch_authorized_requests(campaign, workspace=SpoofedWorkspace())
+    assert result["workspace_results"][0]["status"] == "failed"
+    assert result["evidence_packets"] == []

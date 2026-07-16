@@ -597,3 +597,98 @@ def test_canonical_formation_enriches_archivist_and_judge() -> None:
 def test_coverage_helper_is_defensively_case_insensitive() -> None:
     assert _coverage_area_matches("security", {"Security"}) is True
     assert _coverage_area_matches("SECURITY", {"Injection"}) is True
+
+
+def test_empty_workflow_still_fails_documented_proof_contract(tmp_path: Path) -> None:
+    workflow = ".github/workflows/empty.yml"
+    test_path = "tests/test_required.py"
+    _write(tmp_path, "docs/proof.md", f"`{workflow}` assures `{test_path}`.\n")
+    _write(tmp_path, workflow, "")
+    _write(tmp_path, test_path, "def test_required():\n    assert True\n")
+    result = run_offline_investigations(tmp_path, ["docs/proof.md", workflow, test_path])
+    assert any(item["root_cause"] == "workflow-proof-contract" for item in result["findings"])
+
+
+def test_runner_path_must_be_in_runner_invocation_not_comment_or_echo(tmp_path: Path) -> None:
+    workflow = ".github/workflows/tests.yml"
+    required = "tests/test_required.py"
+    other = "tests/test_other.py"
+    _write(tmp_path, "docs/proof.md", f"`{workflow}` assures `{required}`.\n")
+    _write(tmp_path, workflow, f"""on:
+  pull_request:
+    paths: ['{required}']
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo {required}
+          # pytest {required}
+          python -m pytest {other}
+""")
+    _write(tmp_path, required, "def test_required():\n    assert True\n")
+    _write(tmp_path, other, "def test_other():\n    assert True\n")
+    result = run_offline_investigations(tmp_path, ["docs/proof.md", workflow, required, other])
+    assert any(item["root_cause"] == "workflow-proof-contract" for item in result["findings"])
+
+
+def test_folded_run_scalar_does_not_create_fake_runner_command(tmp_path: Path) -> None:
+    workflow = ".github/workflows/folded.yml"
+    required = "tests/test_required.py"
+    _write(tmp_path, "docs/proof.md", f"`{workflow}` assures `{required}`.\n")
+    _write(tmp_path, workflow, f"""on:
+  pull_request:
+    paths: ['{required}']
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - run: >
+          echo preparing
+          pytest {required}
+""")
+    _write(tmp_path, required, "def test_required():\n    assert True\n")
+    result = run_offline_investigations(tmp_path, ["docs/proof.md", workflow, required])
+    assert any(item["root_cause"] == "workflow-proof-contract" for item in result["findings"])
+
+
+def test_every_atomic_replacement_requires_its_own_durability_chain(tmp_path: Path) -> None:
+    _write(tmp_path, "src/two_ledgers.py", """import os
+import tempfile
+
+def save(a, b, first, second):
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as one:
+        one.write(first)
+        one.flush()
+        os.fsync(one.fileno())
+        one_path = a.__class__(one.name)
+    one_path.replace(a)
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as two:
+        two.write(second)
+        two_path = b.__class__(two.name)
+    two_path.replace(b)
+""")
+    result = run_offline_investigations(tmp_path, ["src/two_ledgers.py"])
+    assert any(item["root_cause"] == "atomic-replace-durability" for item in result["findings"])
+
+
+def test_multiple_atomic_replacements_pass_when_each_is_durable(tmp_path: Path) -> None:
+    _write(tmp_path, "src/two_ledgers.py", """import os
+import tempfile
+
+def save(a, b, first, second):
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as one:
+        one.write(first)
+        one.flush()
+        os.fsync(one.fileno())
+        one_path = a.__class__(one.name)
+    one_path.replace(a)
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as two:
+        two.write(second)
+        two.flush()
+        os.fsync(two.fileno())
+        two_path = b.__class__(two.name)
+    two_path.replace(b)
+""")
+    result = run_offline_investigations(tmp_path, ["src/two_ledgers.py"])
+    assert not any(item["root_cause"] == "atomic-replace-durability" for item in result["findings"])
