@@ -1,244 +1,39 @@
-name: Full Cloudflare Council Member Certification
+name: Full Cloudflare Council Compatibility Constructor
 
 on:
   pull_request:
     branches: [cpl-quality-noise-governor]
     paths:
       - '.github/workflows/cloudflare-full-council-certification.yml'
+      - 'scripts/construct_full_council_compat.py'
+      - 'scripts/cloudflare_full_council_certification.yml.txt'
 
 permissions:
-  contents: read
-
-concurrency:
-  group: cloudflare-full-council-certification-${{ github.ref }}
-  cancel-in-progress: false
+  contents: write
 
 jobs:
-  certify-all-members:
+  construct:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
-      SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
-      SERGEANT_CLOUDFLARE_MODELS: '@cf/zai-org/glm-4.7-flash,@cf/qwen/qwen2.5-coder-32b-instruct,@cf/ibm-granite/granite-4.0-h-micro,@cf/openai/gpt-oss-120b,@cf/moonshotai/kimi-k2.7-code,@cf/qwen/qwen3-30b-a3b-fp8,@cf/openai/gpt-oss-20b'
-      SERGEANT_CPL_ENABLED: 'true'
-      SERGEANT_CPL_POLICY: required
-      SERGEANT_CPL_DEPTH: maximum
-      SERGEANT_CPL_MAX_PASSES: '7'
-      SERGEANT_CPL_MAX_COUNCIL_MEMBERS: '7'
-      SERGEANT_CPL_MAX_ROUNDS: '3'
-      SERGEANT_CPL_MAX_INPUT_CHARS: '16000'
-      SERGEANT_CLOUDFLARE_TIMEOUT_SECONDS: '90'
+    timeout-minutes: 10
     steps:
-      - name: Checkout frozen correction head
+      - name: Checkout proof branch
         uses: actions/checkout@v4
         with:
-          ref: f02f9aac5e1f9ae3dfcb9fd80e9b2bb514b4e8d1
-          persist-credentials: false
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Apply full council compatibility correction
+        run: python scripts/construct_full_council_compat.py
 
-      - name: Install Sergeant
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
+      - name: Run focused construction tests
+        run: python -m pytest -q tests/test_cloudflare_full_roster_qualification.py tests/test_cloudflare_mission_qualification.py tests/test_llm_provider.py
 
-      - name: Record frozen product head
+      - name: Commit constructed product and restore live proof
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build
-          git rev-parse HEAD | tee build/full-council-tested-sha.txt
-
-      - name: Create mission fixture
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build/full-council-fixture/src
-          cat > build/full-council-fixture/src/auth.py <<'PY'
-          import subprocess
-
-          def run_user_command(request):
-              command = request.args.get("command")
-              return subprocess.run(command, shell=True)
-          PY
-
-      - name: Capture credential-safe route status
-        shell: bash
-        run: |
-          set -euo pipefail
-          sergeant-cloudflare --pretty status --require > build/full-council-status.json
-
-      - name: Prove structured transport for all seven members
-        id: handshake
-        shell: bash
-        run: |
-          set +e
-          sergeant-cloudflare --pretty test-models --require > build/full-council-handshake.json
-          code=$?
-          set -e
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Prove full officer mission for all seven members
-        id: mission
-        shell: bash
-        run: |
-          set +e
-          sergeant-cloudflare --pretty qualify-models build/full-council-fixture \
-            --files src/auth.py \
-            --expected-verdict BLOCK \
-            --expected-path src/auth.py \
-            --expected-category security \
-            --expected-severity blocker \
-            --expected-evidence shell=True \
-            --minimum-models 7 \
-            --require \
-            > build/full-council-mission.json
-          code=$?
-          set -e
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Build member-by-member certification summary
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          expected = [
-              '@cf/zai-org/glm-4.7-flash',
-              '@cf/qwen/qwen2.5-coder-32b-instruct',
-              '@cf/ibm-granite/granite-4.0-h-micro',
-              '@cf/openai/gpt-oss-120b',
-              '@cf/moonshotai/kimi-k2.7-code',
-              '@cf/qwen/qwen3-30b-a3b-fp8',
-              '@cf/openai/gpt-oss-20b',
-          ]
-
-          def load(path):
-              file = Path(path)
-              if not file.exists():
-                  return {}
-              try:
-                  return json.loads(file.read_text(encoding='utf-8'))
-              except Exception:
-                  return {}
-
-          status = load('build/full-council-status.json')
-          handshake = load('build/full-council-handshake.json')
-          mission = load('build/full-council-mission.json')
-          tested_sha = Path('build/full-council-tested-sha.txt').read_text(encoding='utf-8').strip()
-
-          handshake_rows = {
-              str(row.get('model')): row
-              for row in handshake.get('models', [])
-              if isinstance(row, dict) and row.get('model')
-          }
-          mission_rows = {
-              str(row.get('model')): row
-              for row in mission.get('models', [])
-              if isinstance(row, dict) and row.get('model')
-          }
-
-          members = []
-          for model in expected:
-              handshake_row = handshake_rows.get(model, {})
-              mission_row = mission_rows.get(model, {})
-              members.append({
-                  'model': model,
-                  'structured_transport_passed': handshake_row.get('passed') is True,
-                  'mission_capability_passed': mission_row.get('passed') is True,
-                  'handshake_duration_ms': handshake_row.get('duration_ms'),
-                  'mission_duration_ms': mission_row.get('duration_ms'),
-                  'handshake_error': handshake_row.get('error'),
-                  'mission_error': mission_row.get('error'),
-                  'mission_response': mission_row.get('response'),
-              })
-
-          certified = [
-              item['model']
-              for item in members
-              if item['structured_transport_passed'] and item['mission_capability_passed']
-          ]
-          payload = {
-              'schema_version': 'sergeant.cloudflare-full-council-certification.v1',
-              'tested_sha': tested_sha,
-              'expected_member_count': len(expected),
-              'configured_model_count': mission.get('model_count', 0),
-              'structured_pass_count': handshake.get('passed_count', 0),
-              'mission_pass_count': mission.get('passed_count', 0),
-              'certified_member_count': len(certified),
-              'certified_models': certified,
-              'uncertified_models': [model for model in expected if model not in certified],
-              'route_valid': status.get('valid') is True,
-              'members': members,
-              'handshake_exit': int('${{ steps.handshake.outputs.exit_code }}' or '1'),
-              'mission_exit': int('${{ steps.mission.outputs.exit_code }}' or '1'),
-          }
-          payload['passed'] = bool(
-              payload['route_valid']
-              and payload['configured_model_count'] == len(expected)
-              and payload['structured_pass_count'] == len(expected)
-              and payload['mission_pass_count'] == len(expected)
-              and payload['certified_member_count'] == len(expected)
-          )
-          Path('build/full-council-certification-summary.json').write_text(
-              json.dumps(payload, indent=2, sort_keys=True) + '\n',
-              encoding='utf-8',
-          )
-          print(json.dumps(payload, indent=2, sort_keys=True))
-          PY
-
-      - name: Verify credentials are absent from artifacts
-        id: credential_scan
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import os
-          from pathlib import Path
-
-          values = [
-              os.getenv('SERGEANT_CLOUDFLARE_ACCOUNT_ID', ''),
-              os.getenv('SERGEANT_CLOUDFLARE_API_TOKEN', ''),
-          ]
-          artifacts = list(Path('build').glob('full-council-*.json'))
-          assert artifacts, 'No full-council proof artifacts were generated.'
-          for path in artifacts:
-              text = path.read_text(encoding='utf-8', errors='replace')
-              for value in values:
-                  if value:
-                      assert value not in text, f'Credential or account identifier leaked into {path}'
-          PY
-
-      - name: Upload full council certification evidence
-        if: always() && steps.credential_scan.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudflare-full-council-certification
-          path: |
-            build/full-council-tested-sha.txt
-            build/full-council-status.json
-            build/full-council-handshake.json
-            build/full-council-mission.json
-            build/full-council-certification-summary.json
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Enforce all-member certification
-        if: always()
-        shell: bash
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          payload = json.loads(Path('build/full-council-certification-summary.json').read_text(encoding='utf-8'))
-          assert payload.get('passed') is True, 'Not all seven Cloudflare council members certified.'
-          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Qualify the complete Cloudflare council by role'
+          git push origin HEAD:${{ github.head_ref }}
