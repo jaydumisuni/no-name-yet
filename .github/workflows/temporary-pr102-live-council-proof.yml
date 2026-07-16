@@ -3,6 +3,8 @@ name: Temporary PR 102 Live Council Proof
 on:
   push:
     branches: [cpl-quality-noise-governor]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
