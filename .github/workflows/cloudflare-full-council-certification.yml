@@ -6,12 +6,16 @@ on:
     paths:
       - '.github/workflows/cloudflare-full-council-certification.yml'
       - 'main_review/cloudflare_cli.py'
+      - 'main_review/cloudflare_incremental_certification.py'
       - 'main_review/cloudflare_models.py'
       - 'main_review/cloudflare_scout_qualification.py'
+      - 'main_review/cloudflare_usage.py'
       - 'main_review/llm_provider.py'
       - 'tests/test_cloudflare_full_roster_qualification.py'
+      - 'tests/test_cloudflare_usage_governor.py'
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -23,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
+      GH_TOKEN: ${{ github.token }}
       SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
       SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
       SERGEANT_CLOUDFLARE_MODELS: '@cf/zai-org/glm-4.7-flash,@cf/qwen/qwen2.5-coder-32b-instruct,@cf/ibm-granite/granite-4.0-h-micro,@cf/openai/gpt-oss-120b,@cf/moonshotai/kimi-k2.7-code,@cf/qwen/qwen3-30b-a3b-fp8,@cf/openai/gpt-oss-20b'
@@ -34,6 +39,10 @@ jobs:
       SERGEANT_CPL_MAX_ROUNDS: '3'
       SERGEANT_CPL_MAX_INPUT_CHARS: '16000'
       SERGEANT_CLOUDFLARE_TIMEOUT_SECONDS: '90'
+      SERGEANT_CLOUDFLARE_USAGE_STATE: build/cloudflare-usage-state.json
+      SERGEANT_CLOUDFLARE_DAILY_BUDGET_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_DAILY_BUDGET_NEURONS || '10000' }}
+      SERGEANT_CLOUDFLARE_SAFETY_RESERVE_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_SAFETY_RESERVE_NEURONS || '2500' }}
+      SERGEANT_CLOUDFLARE_UNKNOWN_MODEL_RESERVATION_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_UNKNOWN_MODEL_RESERVATION_NEURONS || '2500' }}
     steps:
       - name: Checkout exact candidate head
         uses: actions/checkout@v4
@@ -52,13 +61,36 @@ jobs:
           python -m pip install -e .
           python -m pip install pytest
 
-      - name: Run focused compatibility tests
-        run: python -m pytest -q tests/test_cloudflare_full_roster_qualification.py tests/test_cloudflare_mission_qualification.py
+      - name: Run focused compatibility and quota tests
+        run: |
+          python -m pytest -q \
+            tests/test_cloudflare_full_roster_qualification.py \
+            tests/test_cloudflare_mission_qualification.py \
+            tests/test_cloudflare_usage_governor.py
 
       - name: Record candidate head
         run: |
           mkdir -p build
           git rev-parse HEAD | tee build/full-council-tested-sha.txt
+
+      - name: Restore latest certification and quota ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build /tmp/full-council-ledger
+          artifact_id="$(
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-full-council-ledger&per_page=100" \
+              --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty' \
+              2>/dev/null || true
+          )"
+          if [ -n "$artifact_id" ]; then
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/full-council-ledger.zip
+            unzip -o /tmp/full-council-ledger.zip -d /tmp/full-council-ledger >/dev/null
+            [ ! -f /tmp/full-council-ledger/full-council-ledger.json ] || \
+              cp /tmp/full-council-ledger/full-council-ledger.json build/full-council-ledger.json
+            [ ! -f /tmp/full-council-ledger/cloudflare-usage-state.json ] || \
+              cp /tmp/full-council-ledger/cloudflare-usage-state.json build/cloudflare-usage-state.json
+          fi
 
       - name: Create role-specific mission fixtures
         run: |
@@ -79,139 +111,23 @@ jobs:
       - name: Capture credential-safe route status
         run: sergeant-cloudflare --pretty status --require > build/full-council-status.json
 
-      - name: Prove structured transport for all seven members
-        id: handshake
+      - name: Resume only missing council-member proofs
+        id: incremental
         shell: bash
         run: |
           set +e
-          sergeant-cloudflare --pretty test-models --require > build/full-council-handshake.json
+          python -m main_review.cloudflare_incremental_certification \
+            build/full-council-fixture \
+            --auth-file src/auth.py \
+            --scout-file src/scout.py \
+            --tested-sha "$(cat build/full-council-tested-sha.txt)" \
+            --ledger build/full-council-ledger.json \
+            --output build/full-council-certification-summary.json \
+            --pretty \
+            --require
           code=$?
           set -e
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Prove officer missions for six reasoning members
-        id: officer
-        env:
-          SERGEANT_CLOUDFLARE_MODELS: '@cf/zai-org/glm-4.7-flash,@cf/qwen/qwen2.5-coder-32b-instruct,@cf/openai/gpt-oss-120b,@cf/moonshotai/kimi-k2.7-code,@cf/qwen/qwen3-30b-a3b-fp8,@cf/openai/gpt-oss-20b'
-        shell: bash
-        run: |
-          set +e
-          sergeant-cloudflare --pretty qualify-models build/full-council-fixture \
-            --files src/auth.py \
-            --expected-verdict BLOCK \
-            --expected-path src/auth.py \
-            --expected-category security \
-            --expected-severity blocker \
-            --expected-evidence shell=True \
-            --minimum-models 6 \
-            --require > build/full-council-officer-mission.json
-          code=$?
-          set -e
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Prove Granite Scout evidence extraction mission
-        id: scout
-        env:
-          SERGEANT_CLOUDFLARE_MODELS: '@cf/ibm-granite/granite-4.0-h-micro'
-        shell: bash
-        run: |
-          set +e
-          python -m main_review.cloudflare_scout_qualification build/full-council-fixture \
-            --file src/scout.py --pretty --require > build/full-council-scout-mission.json
-          code=$?
-          set -e
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Build member-by-member certification summary
-        if: always()
-        shell: bash
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          expected = [
-              '@cf/zai-org/glm-4.7-flash',
-              '@cf/qwen/qwen2.5-coder-32b-instruct',
-              '@cf/ibm-granite/granite-4.0-h-micro',
-              '@cf/openai/gpt-oss-120b',
-              '@cf/moonshotai/kimi-k2.7-code',
-              '@cf/qwen/qwen3-30b-a3b-fp8',
-              '@cf/openai/gpt-oss-20b',
-          ]
-
-          def load(path):
-              file = Path(path)
-              try:
-                  return json.loads(file.read_text(encoding='utf-8'))
-              except Exception:
-                  return {}
-
-          status = load('build/full-council-status.json')
-          handshake = load('build/full-council-handshake.json')
-          officer = load('build/full-council-officer-mission.json')
-          scout = load('build/full-council-scout-mission.json')
-          handshake_rows = {
-              str(row.get('model')): row
-              for row in handshake.get('models', [])
-              if isinstance(row, dict) and row.get('model')
-          }
-          mission_rows = {
-              str(row.get('model')): row
-              for row in officer.get('models', [])
-              if isinstance(row, dict) and row.get('model')
-          }
-          mission_rows.update({
-              str(row.get('model')): row
-              for row in scout.get('models', [])
-              if isinstance(row, dict) and row.get('model')
-          })
-          members = []
-          for model in expected:
-              transport = handshake_rows.get(model, {})
-              mission = mission_rows.get(model, {})
-              members.append({
-                  'model': model,
-                  'structured_transport_passed': transport.get('passed') is True,
-                  'role_mission_passed': mission.get('passed') is True,
-                  'transport_error': transport.get('error'),
-                  'mission_error': mission.get('error'),
-                  'mission_response': mission.get('response'),
-              })
-          certified = [
-              item['model']
-              for item in members
-              if item['structured_transport_passed'] and item['role_mission_passed']
-          ]
-          payload = {
-              'schema_version': 'sergeant.cloudflare-full-council-certification.v2',
-              'tested_sha': Path('build/full-council-tested-sha.txt').read_text(encoding='utf-8').strip(),
-              'expected_member_count': len(expected),
-              'structured_pass_count': handshake.get('passed_count', 0),
-              'officer_mission_pass_count': officer.get('passed_count', 0),
-              'scout_mission_pass_count': scout.get('passed_count', 0),
-              'certified_member_count': len(certified),
-              'certified_models': certified,
-              'uncertified_models': [model for model in expected if model not in certified],
-              'route_valid': status.get('valid') is True,
-              'members': members,
-              'handshake_exit': int('${{ steps.handshake.outputs.exit_code }}' or '1'),
-              'officer_exit': int('${{ steps.officer.outputs.exit_code }}' or '1'),
-              'scout_exit': int('${{ steps.scout.outputs.exit_code }}' or '1'),
-          }
-          payload['passed'] = bool(
-              payload['route_valid']
-              and payload['structured_pass_count'] == 7
-              and payload['officer_mission_pass_count'] == 6
-              and payload['scout_mission_pass_count'] == 1
-              and payload['certified_member_count'] == 7
-          )
-          Path('build/full-council-certification-summary.json').write_text(
-              json.dumps(payload, indent=2, sort_keys=True) + '\n',
-              encoding='utf-8',
-          )
-          print(json.dumps(payload, indent=2, sort_keys=True))
-          PY
 
       - name: Verify credentials are absent from artifacts
         id: credential_scan
@@ -226,6 +142,7 @@ jobs:
               os.getenv('SERGEANT_CLOUDFLARE_API_TOKEN', ''),
           ]
           artifacts = list(Path('build').glob('full-council-*.json'))
+          artifacts.extend(Path('build').glob('cloudflare-usage-state.json'))
           assert artifacts
           for path in artifacts:
               text = path.read_text(encoding='utf-8', errors='replace')
@@ -233,6 +150,17 @@ jobs:
                   if value:
                       assert value not in text, f'Credential or account identifier leaked into {path}'
           PY
+
+      - name: Upload resumable council ledger
+        if: always() && steps.credential_scan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-full-council-ledger
+          path: |
+            build/full-council-ledger.json
+            build/cloudflare-usage-state.json
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Upload full council certification evidence
         if: always() && steps.credential_scan.outcome == 'success'
@@ -242,12 +170,11 @@ jobs:
           path: |
             build/full-council-tested-sha.txt
             build/full-council-status.json
-            build/full-council-handshake.json
-            build/full-council-officer-mission.json
-            build/full-council-scout-mission.json
             build/full-council-certification-summary.json
+            build/full-council-ledger.json
+            build/cloudflare-usage-state.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
       - name: Enforce all-member certification
         if: always()
@@ -257,5 +184,9 @@ jobs:
           from pathlib import Path
 
           payload = json.loads(Path('build/full-council-certification-summary.json').read_text(encoding='utf-8'))
+          if payload.get('quota_blocked'):
+              raise SystemExit('Certification paused after the first provider quota signal; completed evidence was preserved.')
+          if payload.get('budget_blocked'):
+              raise SystemExit('Certification paused before inference by Sergeant local budget governance.')
           assert payload.get('passed') is True, 'Not all seven Cloudflare council members certified.'
           PY
