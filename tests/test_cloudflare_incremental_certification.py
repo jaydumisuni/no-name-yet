@@ -120,6 +120,65 @@ def test_same_day_quota_ledger_makes_no_calls(monkeypatch, tmp_path) -> None:
     assert result["stopped_reason"] == "quota_blocked_until_next_utc_day"
 
 
+def test_same_day_budget_ledger_makes_no_calls(monkeypatch, tmp_path) -> None:
+    ledger_path = tmp_path / "ledger.json"
+    ledger = incremental._fresh_ledger("abc123")
+    ledger["budget_blocked"] = True
+    ledger["budget_blocked_day"] = incremental._utc_day()
+    incremental.save_ledger(ledger_path, ledger)
+    called: list[str] = []
+
+    monkeypatch.setattr(
+        incremental,
+        "_run_member",
+        lambda *args, **kwargs: called.append(str(kwargs.get("model"))) or {},
+    )
+    monkeypatch.setattr(incremental, "cloudflare_usage_status", lambda: {})
+
+    result = incremental.certify_incrementally(
+        _settings(),
+        root=tmp_path,
+        auth_file="src/auth.py",
+        scout_file="src/scout.py",
+        tested_sha="abc123",
+        ledger_path=ledger_path,
+    )
+
+    assert called == []
+    assert result["stopped_reason"] == "local_budget_blocked"
+
+
+def test_previous_day_budget_block_expires_and_resumes(monkeypatch, tmp_path) -> None:
+    ledger_path = tmp_path / "ledger.json"
+    ledger = incremental._fresh_ledger("abc123")
+    ledger["budget_blocked"] = True
+    ledger["budget_blocked_day"] = "2000-01-01"
+    incremental.save_ledger(ledger_path, ledger)
+    called: list[str] = []
+
+    def fake_run(settings, *, model, root, auth_file, scout_file):
+        called.append(model)
+        return _certified(model)
+
+    monkeypatch.setattr(incremental, "_run_member", fake_run)
+    monkeypatch.setattr(incremental, "cloudflare_usage_status", lambda: {})
+
+    result = incremental.certify_incrementally(
+        _settings(),
+        root=tmp_path,
+        auth_file="src/auth.py",
+        scout_file="src/scout.py",
+        tested_sha="abc123",
+        ledger_path=ledger_path,
+    )
+
+    assert called == list(MODELS)
+    assert result["passed"] is True
+    current = incremental.load_ledger(ledger_path, "abc123")
+    assert current["budget_blocked"] is False
+    assert current["budget_blocked_day"] == ""
+
+
 def test_new_exact_head_discards_old_member_passes(tmp_path) -> None:
     ledger_path = tmp_path / "ledger.json"
     old = incremental._fresh_ledger("old-head")
