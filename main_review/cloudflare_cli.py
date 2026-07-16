@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 import time
 from pathlib import Path
@@ -83,10 +84,9 @@ def _proof_prompt(model: str) -> tuple[str, str]:
 
 def _proof_contract_matches(payload: dict[str, Any], model: str) -> bool:
     candidates = [payload]
-    for key in ("required", "result"):
-        nested = payload.get(key)
-        if isinstance(nested, dict):
-            candidates.append(nested)
+    result = payload.get("result")
+    if isinstance(result, dict):
+        candidates.append(result)
     return any(
         candidate.get("status") == "ready"
         and candidate.get("model") == model
@@ -158,16 +158,19 @@ def _finding_matches_mission_contract(
     return True
 
 
-_SECURITY_COVERAGE_MARKERS = (
-    "security",
-    "injection",
-    "shell",
-    "auth",
-    "authorization",
-    "trust boundary",
-    "vulnerability",
-    "remote code execution",
-    "rce",
+_SECURITY_COVERAGE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"\bsecurity\b",
+        r"\binjection\b",
+        r"\bshell(?:[ _-]+execution)?\b",
+        r"\bauthentication\b",
+        r"\bauthorization\b",
+        r"\btrust[ _-]+boundar(?:y|ies)\b",
+        r"\bvulnerabilit(?:y|ies)\b",
+        r"\bremote[ _-]+code[ _-]+execution\b",
+        r"\brce\b",
+    )
 )
 
 
@@ -179,9 +182,9 @@ def _coverage_area_matches(expected_category: str, reviewed_areas: set[str]) -> 
         return True
     if expected == "security":
         return any(
-            marker in area
+            pattern.search(area)
             for area in reviewed_areas
-            for marker in _SECURITY_COVERAGE_MARKERS
+            for pattern in _SECURITY_COVERAGE_PATTERNS
         )
     return False
 

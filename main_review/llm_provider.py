@@ -250,10 +250,10 @@ def is_cloudflare_quota_error(error: BaseException) -> bool:
 
     message = str(error).lower()
     return bool(
-        "http 429" in message
-        or "code 4006" in message
+        "code 4006" in message
         or '"code":4006' in message
         or "daily free allocation" in message
+        or "daily allocation is exhausted" in message
         or "quota circuit is open" in message
     )
 
@@ -485,14 +485,10 @@ def _extract_text(payload: dict[str, Any], protocol: LLMProtocol) -> str:
     )
 
 
-def _json_candidate_score(payload: dict[str, Any]) -> tuple[int, int]:
+def _json_candidate_score(payload: dict[str, Any]) -> int:
     keys = {str(key) for key in payload}
     important = {"verdict", "findings", "coverage", "status", "model", "capabilities"}
-    score = len(keys & important) * 10
-    required = payload.get("required")
-    if isinstance(required, dict):
-        score += len({str(key) for key in required} & important) * 8
-    return score, len(json.dumps(payload, sort_keys=True, default=str))
+    return len(keys & important) * 10
 
 
 def _parse_json_text(text: str) -> dict[str, Any]:
@@ -508,7 +504,7 @@ def _parse_json_text(text: str) -> dict[str, Any]:
         payload = json.loads(candidate)
     except json.JSONDecodeError:
         decoder = json.JSONDecoder()
-        objects: list[dict[str, Any]] = []
+        objects: list[tuple[int, dict[str, Any]]] = []
         for index, character in enumerate(candidate):
             if character != "{":
                 continue
@@ -517,10 +513,13 @@ def _parse_json_text(text: str) -> dict[str, Any]:
             except json.JSONDecodeError:
                 continue
             if isinstance(value, dict):
-                objects.append(value)
+                objects.append((index, value))
         if not objects:
             raise LLMProviderError("Cpl model output did not contain a parseable JSON object.") from None
-        payload = max(objects, key=_json_candidate_score)
+        payload = max(
+            objects,
+            key=lambda item: (_json_candidate_score(item[1]), item[0]),
+        )[1]
     if not isinstance(payload, dict):
         raise LLMProviderError("Cpl model output JSON must be an object.")
     return payload
