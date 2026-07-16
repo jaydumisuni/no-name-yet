@@ -3,18 +3,21 @@
 The governor protects Cpl from spending an account's daily allocation blindly. It
 uses conservative reservations because Cloudflare response usage telemetry is not
 available on every route. A reservation is made before each inference request,
-and an observed daily-allocation 429 opens a circuit until the next UTC day.
+and an observed daily-allocation error opens a circuit until the next UTC day.
 """
 from __future__ import annotations
 
 import json
 import math
 import os
+import tempfile
 import threading
+import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .cloudflare_models import MODEL_PROFILES
 
@@ -23,6 +26,8 @@ _DEFAULT_DAILY_LIMIT = 10_000
 _DEFAULT_SAFETY_RESERVE = 1_000
 _DEFAULT_UNKNOWN_MODEL_RESERVATION = 2_500
 _DEFAULT_CHARS_PER_TOKEN = 3
+_DEFAULT_LOCK_TIMEOUT_SECONDS = 10
+_DEFAULT_STALE_LOCK_SECONDS = 120
 _STATE_LOCK = threading.Lock()
 
 
@@ -35,7 +40,11 @@ class CloudflareBudgetExceeded(CloudflareUsageError):
 
 
 class CloudflareQuotaBlocked(CloudflareUsageError):
-    """Raised when a previous provider 429 opened the daily quota circuit."""
+    """Raised when a previous provider allocation error opened the daily circuit."""
+
+
+class CloudflareUsageLockTimeout(CloudflareUsageError):
+    """Raised when another process holds the usage-state lock too long."""
 
 
 def _bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -73,6 +82,79 @@ def _next_reset(now: datetime) -> datetime:
         datetime.min.time(),
         tzinfo=timezone.utc,
     )
+
+
+def _lock_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.lock")
+
+
+@contextmanager
+def _interprocess_lock(path: Path) -> Iterator[None]:
+    """Serialize state changes with a portable atomic lock file."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = _lock_path(path)
+    timeout = _bounded_int(
+        "SERGEANT_CLOUDFLARE_LOCK_TIMEOUT_SECONDS",
+        _DEFAULT_LOCK_TIMEOUT_SECONDS,
+        1,
+        300,
+    )
+    stale_after = _bounded_int(
+        "SERGEANT_CLOUDFLARE_STALE_LOCK_SECONDS",
+        _DEFAULT_STALE_LOCK_SECONDS,
+        timeout + 1,
+        3600,
+    )
+    deadline = time.monotonic() + timeout
+    descriptor: int | None = None
+    while descriptor is None:
+        try:
+            descriptor = os.open(
+                lock_path,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+            os.write(
+                descriptor,
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "created_at": _utc_now().isoformat(),
+                    },
+                    sort_keys=True,
+                ).encode("utf-8"),
+            )
+            os.fsync(descriptor)
+        except FileExistsError:
+            try:
+                age = time.time() - lock_path.stat().st_mtime
+                if age > stale_after:
+                    lock_path.unlink()
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() >= deadline:
+                raise CloudflareUsageLockTimeout(
+                    f"Cloudflare usage state is locked by another process: {lock_path}"
+                )
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+@contextmanager
+def _state_transaction(path: Path) -> Iterator[None]:
+    with _STATE_LOCK:
+        with _interprocess_lock(path):
+            yield
 
 
 @dataclass
@@ -126,12 +208,19 @@ def _load_state(path: Path, now: datetime) -> CloudflareUsageState:
 
 def _save_state(path: Path, state: CloudflareUsageState) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f"{path.name}.tmp")
-    temporary.write_text(
-        json.dumps(state.public_dict(), indent=2, sort_keys=True) + "\n",
+    with tempfile.NamedTemporaryFile(
+        mode="w",
         encoding="utf-8",
-    )
-    temporary.replace(path)
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        handle.write(json.dumps(state.public_dict(), indent=2, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+        temporary = Path(handle.name)
+    os.replace(temporary, path)
 
 
 def estimate_input_tokens(character_count: int) -> int:
@@ -199,7 +288,7 @@ class CloudflareUsageGovernor:
 
     def status(self, *, now: datetime | None = None) -> dict[str, Any]:
         current = now or _utc_now()
-        with _STATE_LOCK:
+        with _state_transaction(self.path):
             state = _load_state(self.path, current)
             payload = state.public_dict()
         payload.update(
@@ -239,7 +328,7 @@ class CloudflareUsageGovernor:
             input_chars=input_chars,
             max_output_tokens=max_output_tokens,
         )
-        with _STATE_LOCK:
+        with _state_transaction(self.path):
             state = _load_state(self.path, current)
             if state.quota_blocked:
                 raise CloudflareQuotaBlocked(
@@ -274,7 +363,7 @@ class CloudflareUsageGovernor:
 
     def mark_quota_blocked(self, *, now: datetime | None = None) -> dict[str, Any]:
         current = now or _utc_now()
-        with _STATE_LOCK:
+        with _state_transaction(self.path):
             state = _load_state(self.path, current)
             state.quota_blocked = True
             state.quota_blocked_at = current.isoformat()
