@@ -16,14 +16,18 @@ officers, private cells, Hermes, or Sergeant's final authority.
 - pending authorization for newly discovered questions;
 - replayable Hermes transactions and provenance requirements;
 - replaceable workspace and research adapter protocols;
+- adapter capability checks before any execution;
+- rejection of adapter output that attempts to create command authority;
+- required source, time, freshness, and supported-claim provenance for live research;
 - model support recorded beneath permanent officers.
 
 ## What is intentionally not claimed
 
 No terminal, browser, device, sandbox, or general-web facility is represented
-as connected merely because these contracts exist.  Until a real adapter is
-supplied, authorized requests remain `awaiting_adapter` and produce no
-evidence.  Existing deterministic review remains usable and authoritative.
+as connected merely because these contracts exist. Until a real adapter is
+supplied, authorized requests remain `awaiting_adapter` or
+`awaiting_capability` and produce no evidence. Existing deterministic review
+remains usable and authoritative.
 
 ## Connection model
 
@@ -40,9 +44,9 @@ Sergeant mission and proof boundary
     -> Sergeant verdict
 ```
 
-Models and facilities are capabilities, not ranks.  A model can strengthen an
+Models and facilities are capabilities, not ranks. A model can strengthen an
 Engineer, Medic, Mechanic, Scout, Challenger, or Judge-support assignment, but
-cannot become that officer or issue Sergeant's verdict.  Workspace facilities
+cannot become that officer or issue Sergeant's verdict. Workspace facilities
 can execute approved tasks, but cannot create authority, expand scope, or
 promote their own output into memory.
 
@@ -58,7 +62,13 @@ A Ptah adapter should implement the existing workspace interface and report:
 - privacy and permission enforcement;
 - no final verdict.
 
+Sergeant checks the adapter's declared capabilities before dispatch, verifies
+that request scope remains inside the authorized officer task, and rejects any
+result containing mission, task-authorization, or verdict fields.
+
 A governed research adapter should accept only bounded questions, apply source
 and domain policy, remove private context, cache results, preserve retrieval
 time and source provenance, disclose conflicts, and return evidence to Scout
 and the responsible officer rather than directly controlling the gate.
+Research evidence is not accepted without the adapter identity, observation
+and retrieval times, source, freshness, and the exact supported claim.
