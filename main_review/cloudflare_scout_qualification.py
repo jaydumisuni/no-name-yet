@@ -29,6 +29,25 @@ def _expected_facts(path: Path) -> dict[str, tuple[object, int]]:
     return expected
 
 
+def _contained_source(root: str | Path, file: str) -> Path:
+    """Resolve a Scout fixture while preventing absolute or parent-path escape."""
+
+    root_path = Path(root).resolve()
+    requested = Path(file)
+    if requested.is_absolute():
+        raise CloudflareGatewayError(
+            f"Scout qualification file must remain inside the repository: {file}"
+        )
+    source = (root_path / requested).resolve()
+    try:
+        source.relative_to(root_path)
+    except ValueError as error:
+        raise CloudflareGatewayError(
+            f"Scout qualification file must remain inside the repository: {file}"
+        ) from error
+    return source
+
+
 def qualify_scouts(
     settings: CloudflareGatewaySettings,
     *,
@@ -36,7 +55,7 @@ def qualify_scouts(
     file: str,
 ) -> dict[str, Any]:
     settings.validate()
-    source = Path(root) / file
+    source = _contained_source(root, file)
     if not source.is_file():
         raise CloudflareGatewayError(f"Scout qualification file is not readable: {file}")
     expected = _expected_facts(source)
