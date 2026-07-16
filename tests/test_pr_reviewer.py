@@ -40,6 +40,7 @@ def test_independent_pr_review_approves_verified_repo_without_external_reviewer(
     assert "External reviewer comments are optional" in rendered
     assert "Cpl status: disabled" in rendered
     assert "Cpl role: Corporal Specialist" in rendered
+    assert packet["officer_council"]["model_required"] is False
 
 
 def test_not_deployed_cpl_does_not_claim_unresolved_council_gaps() -> None:
@@ -61,7 +62,7 @@ def test_not_deployed_cpl_does_not_claim_unresolved_council_gaps() -> None:
     )
 
     assert verdict.verdict == "APPROVE"
-    assert any("Cpl reasoning was not available" in note for note in verdict.notes)
+    assert any("model amplification was unavailable" in note for note in verdict.notes)
     assert not any("unresolved council gaps" in note for note in verdict.notes)
 
 
