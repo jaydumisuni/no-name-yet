@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import tempfile
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,7 @@ from typing import Any
 from .cloudflare_cli import qualify_models
 from .cloudflare_gateway import CloudflareGatewayError, CloudflareGatewaySettings
 from .cloudflare_scout_qualification import qualify_scouts
-from .cloudflare_usage import USAGE_SCHEMA, cloudflare_usage_status
+from .cloudflare_usage import cloudflare_usage_status
 from .llm_provider import is_cloudflare_quota_error
 
 CERTIFICATION_SCHEMA = "sergeant.cloudflare-incremental-certification.v1"
@@ -44,6 +45,7 @@ def _fresh_ledger(tested_sha: str) -> dict[str, Any]:
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "quota_blocked_day": "",
         "budget_blocked": False,
+        "budget_blocked_day": "",
         "members": {},
     }
 
@@ -64,20 +66,29 @@ def load_ledger(path: Path, tested_sha: str) -> dict[str, Any]:
     members = payload.get("members")
     if not isinstance(members, dict):
         payload["members"] = {}
-    if payload.get("quota_blocked_day") and payload.get("quota_blocked_day") != _utc_day():
+    today = _utc_day()
+    if payload.get("quota_blocked_day") and payload.get("quota_blocked_day") != today:
         payload["quota_blocked_day"] = ""
+    budget_day = str(payload.get("budget_blocked_day") or "")
+    if payload.get("budget_blocked") is True and budget_day != today:
         payload["budget_blocked"] = False
+        payload["budget_blocked_day"] = ""
     return payload
 
 
 def save_ledger(path: Path, ledger: dict[str, Any]) -> None:
     ledger["updated_at"] = datetime.now(timezone.utc).isoformat()
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f"{path.name}.tmp")
-    temporary.write_text(
-        json.dumps(ledger, indent=2, sort_keys=True) + "\n",
+    with tempfile.NamedTemporaryFile(
+        mode="w",
         encoding="utf-8",
-    )
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        handle.write(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+        temporary = Path(handle.name)
     temporary.replace(path)
 
 
@@ -174,10 +185,11 @@ def certify_incrementally(
     called_models: list[str] = []
     skipped_models: list[str] = []
     stopped_reason = ""
+    today = _utc_day()
 
-    if ledger.get("quota_blocked_day") == _utc_day():
+    if ledger.get("quota_blocked_day") == today:
         stopped_reason = "quota_blocked_until_next_utc_day"
-    elif ledger.get("budget_blocked") is True:
+    elif ledger.get("budget_blocked") is True and ledger.get("budget_blocked_day") == today:
         stopped_reason = "local_budget_blocked"
     else:
         for model in expected:
@@ -195,13 +207,14 @@ def certify_incrementally(
             members[model] = result
             called_models.append(model)
             if result.get("error_kind") == "http_429_code_4006_daily_allocation":
-                ledger["quota_blocked_day"] = _utc_day()
+                ledger["quota_blocked_day"] = today
                 result["status"] = "quota_blocked"
                 stopped_reason = "quota_blocked_until_next_utc_day"
                 save_ledger(ledger_path, ledger)
                 break
             if result.get("error_kind") == "local_budget_blocked":
                 ledger["budget_blocked"] = True
+                ledger["budget_blocked_day"] = today
                 result["status"] = "budget_blocked"
                 stopped_reason = "local_budget_blocked"
                 save_ledger(ledger_path, ledger)
@@ -227,8 +240,11 @@ def certify_incrementally(
         "called_models": called_models,
         "skipped_models": skipped_models,
         "stopped_reason": stopped_reason,
-        "quota_blocked": ledger.get("quota_blocked_day") == _utc_day(),
-        "budget_blocked": ledger.get("budget_blocked") is True,
+        "quota_blocked": ledger.get("quota_blocked_day") == today,
+        "budget_blocked": (
+            ledger.get("budget_blocked") is True
+            and ledger.get("budget_blocked_day") == today
+        ),
         "passed": bool(expected) and len(certified) == len(expected),
         "members": [members.get(model, {"model": model, "status": "pending"}) for model in expected],
         "usage": {
