@@ -1,0 +1,104 @@
+name: Observe PR103 Reviewer Comparison
+
+on:
+  pull_request:
+    branches: [certify-full-cloudflare-council-20260716]
+    paths:
+      - '.github/workflows/observe-pr103-reviewer-comparison.yml'
+      - 'ops/pr103-adjudication.json'
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TARGET_SHA: 96196c63b2eb09f9036af63ed36c47d21ea70efd
+      TARGET_PR: '103'
+      SERGEANT_ARTIFACT_ID: '8373132388'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout exact Sergeant target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Sergeant
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Recover frozen Sergeant report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/sergeant
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SERGEANT_ARTIFACT_ID}/zip" > build/sergeant.zip
+          unzip -o build/sergeant.zip -d build/sergeant >/dev/null
+          test -s build/sergeant/main-review-result.json
+
+      - name: Verify frozen head still matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(gh api "/repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR}" --jq '.head.sha')"
+          test "$actual" = "$TARGET_SHA"
+
+      - name: Build side-by-side comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/comparison
+          args=(
+            --sergeant-packet build/sergeant/main-review-result.json
+            --live-repository "$GITHUB_REPOSITORY"
+            --live-pr "$TARGET_PR"
+            --reference-name CodeRabbit
+            --reference-author coderabbitai
+            --expected-head-sha "$TARGET_SHA"
+            --output build/comparison/pr103-comparison.json
+            --markdown-output build/comparison/pr103-comparison.md
+            --pretty
+          )
+          if [ -s ops/pr103-adjudication.json ]; then
+            args+=(--adjudication ops/pr103-adjudication.json)
+          fi
+          sergeant-compare "${args[@]}"
+
+      - name: Record exact evidence metadata
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('build/comparison/pr103-comparison.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          payload['frozen_evidence'] = {
+              'target_sha': '96196c63b2eb09f9036af63ed36c47d21ea70efd',
+              'sergeant_workflow_run': 29492842816,
+              'sergeant_artifact_id': 8373132388,
+              'sergeant_artifact_digest': 'sha256:6d10200a68094cc53a69b4617826441f389f015b921fe7df36265c1b7566d0c8',
+              'coderabbit_run_id': 'b183eac3-c938-4ef0-943a-a250e80592fa',
+              'cpl_live_models_used_for_pr': False,
+          }
+          path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+
+      - name: Upload comparison evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr103-sergeant-vs-coderabbit
+          path: build/comparison/
+          if-no-files-found: error
+          retention-days: 90
