@@ -263,3 +263,42 @@ def test_valid_workspace_evidence_is_admitted_as_evidence_only(tmp_path: Path) -
     assert result["evidence_packets"]
     assert all(packet["may_issue_verdict"] is False for packet in result["evidence_packets"])
     assert result["authority_preserved"] is True
+
+
+def test_campaign_markers_do_not_match_unrelated_substrings(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "authority.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def grant():\n    return True\n", encoding="utf-8")
+    campaign = build_cpl_campaign(
+        tmp_path,
+        ["src/authority.py", "src/streamlined.py", "src/rapid.py"],
+        officer_reports=[],
+        admitted=[],
+        advisory=[],
+        rejected=[],
+        assurances=[],
+        cpl={"status": "disabled", "passes": []},
+        offline={"complete": True},
+    )
+    officers = {item["responsible_officer"] for item in campaign["tasks"]}
+    assert "Medic" not in officers
+    assert "Mechanic" not in officers
+    assert campaign["research_requests"] == []
+
+
+def test_campaign_markers_still_activate_on_real_terms(tmp_path: Path) -> None:
+    campaign = build_cpl_campaign(
+        tmp_path,
+        ["src/auth/token.py", "src/runtime/retry.py", "docs/api-contract.md"],
+        officer_reports=[],
+        admitted=[],
+        advisory=[],
+        rejected=[],
+        assurances=[],
+        cpl={"status": "disabled", "passes": []},
+        offline={"complete": True},
+    )
+    officers = {item["responsible_officer"] for item in campaign["tasks"]}
+    assert "Medic" in officers
+    assert "Mechanic" in officers
+    assert campaign["research_requests"]

@@ -9,6 +9,7 @@ awaiting_adapter until a real adapter returns validated evidence.
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -41,6 +42,17 @@ _MANIFEST_NAMES = {
 
 def _text(value: object) -> str:
     return str(value or "").strip()
+
+
+def _contains_marker(text: str, marker: str) -> bool:
+    normalized = marker.lower()
+    if any(not char.isalnum() and char != "_" for char in normalized):
+        return normalized in text
+    return re.search(rf"(?<![a-z0-9_]){re.escape(normalized)}(?![a-z0-9_])", text) is not None
+
+
+def _contains_any_marker(text: str, markers: Iterable[str]) -> bool:
+    return any(_contains_marker(text, marker) for marker in markers)
 
 
 def _work_size(changed_files: list[str], *, risk_boost: int = 0) -> int:
@@ -150,7 +162,7 @@ def _field_tasks(
         dependencies=(scout["task_id"],),
     ))
 
-    if any(marker in text for marker in _SECURITY_MARKERS) or any(item.get("gates_verdict") for item in assurances):
+    if _contains_any_marker(text, _SECURITY_MARKERS) or any(item.get("gates_verdict") for item in assurances):
         tasks.append(task_packet(
             mission_id=mission_id,
             officer="Medic",
@@ -163,7 +175,7 @@ def _field_tasks(
             dependencies=(scout["task_id"],),
         ))
 
-    if any(marker in text for marker in _RUNTIME_MARKERS):
+    if _contains_any_marker(text, _RUNTIME_MARKERS):
         tasks.append(task_packet(
             mission_id=mission_id,
             officer="Mechanic",
@@ -258,7 +270,7 @@ def _workspace_requests(mission_id: str, tasks: list[dict[str, Any]]) -> list[di
 def _research_requests(mission_id: str, tasks: list[dict[str, Any]], changed_files: list[str], cpl: dict[str, Any]) -> list[dict[str, Any]]:
     text = "\n".join(changed_files).lower()
     requires_current_lookup = any(Path(path).name.lower() in _MANIFEST_NAMES for path in changed_files)
-    requires_current_lookup = requires_current_lookup or any(marker in text for marker in _CONTRACT_MARKERS)
+    requires_current_lookup = requires_current_lookup or _contains_any_marker(text, _CONTRACT_MARKERS)
     requires_current_lookup = requires_current_lookup or bool(cpl.get("final_gaps") or cpl.get("council", {}).get("final_gaps"))
     if not requires_current_lookup:
         return []
