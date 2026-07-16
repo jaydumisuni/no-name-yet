@@ -11,6 +11,19 @@ from typing import Any
 
 AGENT_ORDER = ["quartermaster", "scout", "engineer", "medic", "mechanic", "analyst", "challenger", "archivist", "judge", "hermes"]
 
+OFFICER_ROLES = {
+    "quartermaster": "capacity, budget, provider and loadout control",
+    "scout": "repository mapping, scope and evidence inventory",
+    "engineer": "correctness, architecture, contracts and test impact",
+    "medic": "security, privacy, trust boundaries and safe recovery",
+    "mechanic": "runtime, concurrency, performance and state lifecycle",
+    "analyst": "root-cause reconciliation and alternative hypotheses",
+    "challenger": "falsification, bypasses and negative controls",
+    "archivist": "verified experience and recurrence provenance",
+    "judge": "finding admission, assurance and verdict recommendation",
+    "hermes": "traceable evidence and command transactions",
+}
+
 
 @dataclass(frozen=True)
 class AgentReport:
@@ -193,6 +206,18 @@ def _officer_report(agent: str, role: str, summary: str, findings: list[dict[str
 
 
 def build_squad_reports(review_packet: dict[str, Any], evidence_consensus: dict[str, Any], learning: dict[str, Any] | None = None, graduation: dict[str, Any] | None = None) -> list[dict[str, object]]:
+    formation = _safe_dict(review_packet.get("officer_council"))
+    formation_reports = _safe_list(formation.get("reports"))
+    if formation_reports:
+        return [
+            {
+                **item,
+                "role": item.get("role") or OFFICER_ROLES.get(str(item.get("agent") or ""), "permanent officer"),
+            }
+            for item in formation_reports
+            if isinstance(item, dict)
+        ]
+
     capability = _capability_findings(review_packet)
     ranked = _ranked_findings(review_packet)
     classified = _classified_findings(evidence_consensus)
