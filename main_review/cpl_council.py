@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 from collections import Counter
@@ -179,10 +180,14 @@ def _question_record(raw: object) -> tuple[str, bool] | None:
     if isinstance(raw, str):
         text = raw.strip()
         if text.startswith("{") and text.endswith("}"):
+            decoded: object | None = None
             try:
-                decoded = ast.literal_eval(text)
-            except (SyntaxError, ValueError):
-                decoded = None
+                decoded = json.loads(text)
+            except ValueError:
+                try:
+                    decoded = ast.literal_eval(text)
+                except (SyntaxError, ValueError):
+                    decoded = None
             if isinstance(decoded, dict):
                 raw = decoded
 
@@ -211,13 +216,14 @@ def assess(passes: list[dict[str, Any]], plan: list[dict[str, Any]], errors: lis
     if len(verdicts) > 1:
         gaps.append({"type": "disagreement", "specialist": "tests_contracts", "officer": "Engineer", "reason": f"Council verdicts disagree: {', '.join(sorted(verdicts))}."})
 
-    questions: dict[tuple[str, bool], None] = {}
+    questions: dict[str, bool] = {}
     for report in passes:
         for raw_question in report.get("unanswered_questions", []):
             record = _question_record(raw_question)
             if record is not None:
-                questions.setdefault(record, None)
-    for question, required_assurance in sorted(questions)[:4]:
+                reason, required_assurance = record
+                questions[reason] = questions.get(reason, False) or required_assurance
+    for question, required_assurance in sorted(questions.items())[:4]:
         specialist = specialist_for_text(question)
         gaps.append({
             "type": "unanswered_question",
