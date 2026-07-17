@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: python -m pip install -e '.[dev]'
+        run: python -m pip install -e '.[dev]' pytest
       - name: Apply product and regression corrections
         run: python scripts/apply_pr102_final_review_fixes.py
       - name: Run focused proof
