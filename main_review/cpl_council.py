@@ -87,7 +87,8 @@ ROOT_CAUSE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "authorization-gap",
         re.compile(
             r"(?:missing\s+authorization|lacks?\s+(?:an?\s+)?(?:visible\s+)?authorization|"
-            r"privileged(?:\s+\w+){0,2}\s+route.*without)",
+            r"privileged(?:\s+\w+){0,2}\s+route[^\n]{0,80}"
+            r"without[^\n]{0,40}(?:authentication|authorization|access\s+control|guard))",
             re.I,
         ),
     ),

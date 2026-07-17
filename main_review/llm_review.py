@@ -131,7 +131,8 @@ def _invoke_json_with_failover(
     suffix = f" ({summary})" if summary else ""
     raise LLMProviderError(
         "No configured Cpl council model completed the required structured officer pass"
-        f"{suffix}."
+        f"{suffix}.",
+        failed_models=failed_models,
     )
 
 
@@ -515,6 +516,13 @@ def run_cpl_review(
         passes.append(primary)
     except LLMProviderError as error:
         errors.append(str(error))
+        exhausted_models = list(error.failed_models)
+        if exhausted_models:
+            route_failovers.append({
+                "pass": "generalist",
+                "failed_models": exhausted_models,
+                "completed_by": None,
+            })
         return {
             **identity,
             "enabled": True,
@@ -529,6 +537,7 @@ def run_cpl_review(
             "reasoning_plan": [],
             "reason": "Cpl could not complete its primary reasoning pass.",
             "errors": errors,
+            "route_failovers": route_failovers,
         }
 
     assignments = plan_cpl_assignments(
@@ -540,13 +549,15 @@ def run_cpl_review(
     completed_plan: list[dict[str, object]] = []
     for assignment in assignments:
         specialist_route = route_for_assignment(route, assignment, used_models=used_models)
-        completed_plan.append({**assignment.to_dict(), "model": specialist_route.model})
+        plan_entry = {**assignment.to_dict(), "model": specialist_route.model}
+        completed_plan.append(plan_entry)
         try:
             payload, completed_route, failed_models = _invoke_json_with_failover(
                 specialist_route,
                 system_prompt=specialist_system_prompt(SYSTEM_PROMPT, assignment),
                 user_prompt=user_prompt,
             )
+            plan_entry["model"] = completed_route.model
             if failed_models:
                 route_failovers.append({
                     "pass": assignment.specialist,
@@ -556,6 +567,13 @@ def run_cpl_review(
             passes.append(_validate_pass(payload, files, route=completed_route, assignment=assignment))
             used_models.add(completed_route.model)
         except LLMProviderError as error:
+            exhausted_models = list(error.failed_models)
+            if exhausted_models:
+                route_failovers.append({
+                    "pass": assignment.specialist,
+                    "failed_models": exhausted_models,
+                    "completed_by": None,
+                })
             errors.append(f"{assignment.specialist}: {error}")
 
     findings, verdict, confidence = _merge_passes(passes)

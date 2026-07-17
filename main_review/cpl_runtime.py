@@ -92,7 +92,8 @@ def _invoke_follow_up_with_failover(
     suffix = f" ({summary})" if summary else ""
     raise LLMProviderError(
         "No configured Cpl council model completed the follow-up officer pass"
-        f"{suffix}."
+        f"{suffix}.",
+        failed_models=failed_models,
     )
 
 
@@ -298,7 +299,14 @@ def run_cpl_review(
                 user_prompt=follow_up_prompt(base_prompt, table, command, experience, round_number),
             )
             selected_model = completed_route.model
+            actual_admission = (
+                "new_member"
+                if selected_model not in used and len(used) < member_limit
+                else "role_separated_reuse"
+            )
             recruited["model"] = selected_model
+            recruited["admission"] = actual_admission
+            recruited["selection_score"] = model_score(selected_model, experience, specialist)
             if failed_models:
                 recruited["failover_from"] = failed_models
             officer_report = _validate_pass(payload, files, route=completed_route, assignment=assignment)
@@ -308,7 +316,7 @@ def run_cpl_review(
                 "council_member_role": "recruited_gap_specialist",
                 "supported_officer": assignment.officer,
                 "instruction_received": command,
-                "admission": admission,
+                "admission": recruited["admission"],
                 "selection_score": recruited["selection_score"],
                 "council_resolution": resolution,
                 "resolved_gap_signature": resolution.get("gap_signature", []),
@@ -317,6 +325,9 @@ def run_cpl_review(
             passes.append(officer_report)
             used.add(selected_model)
         except LLMProviderError as error:
+            exhausted_models = list(error.failed_models)
+            if exhausted_models:
+                recruited["failover_from"] = exhausted_models
             errors.append(f"council round {round_number} / {specialist}: {error}")
         rounds.append({
             "round": round_number,

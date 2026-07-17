@@ -17,7 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
 from .cloudflare_models import (
     CLOUDFLARE_PROVIDER,
@@ -60,7 +60,16 @@ PREFERRED_MODEL_NEEDLES = (
 
 
 class LLMProviderError(RuntimeError):
-    """Raised when a configured Cpl model endpoint cannot satisfy a request."""
+    """Raised when a configured Cpl model endpoint cannot satisfy a request.
+
+    ``failed_models`` preserves credential-safe route-attempt provenance when
+    every configured model fails. Callers can therefore audit and resume the
+    council formation without copying provider response bodies into evidence.
+    """
+
+    def __init__(self, message: str, *, failed_models: Iterable[str] = ()) -> None:
+        super().__init__(message)
+        self.failed_models = tuple(dict.fromkeys(str(model) for model in failed_models if str(model)))
 
 
 @dataclass(frozen=True)
