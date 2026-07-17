@@ -33,6 +33,39 @@ jobs:
         run: python -m pip install -e '.[dev]' pytest
       - name: Apply product and regression corrections
         run: python scripts/apply_pr102_final_review_fixes.py
+      - name: Make synthetic-route regression explicit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/test_pr102_final_review_regressions.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'from main_review.llm_provider import LLMProviderError, LLMRoute',
+              'from main_review.llm_provider import LLMProviderError, LLMRoute, LLMSettings',
+          )
+          text = text.replace(
+              '    result = llm_review.run_cpl_review(tmp_path, [], {}, route=route())',
+              '''    synthetic_settings = LLMSettings(
+              enabled=True,
+              policy="preferred",
+              provider="configured",
+              base_url="http://127.0.0.1:8082/v1",
+              model="model-a",
+              protocol="chat_completions",
+              api_key="",
+              timeout_seconds=1.0,
+              max_output_tokens=256,
+          )
+          result = llm_review.run_cpl_review(
+              tmp_path,
+              [],
+              {},
+              settings=synthetic_settings,
+              route=route(),
+          )''',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
       - name: Run focused proof
         shell: bash
         run: |
