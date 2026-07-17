@@ -19,7 +19,6 @@ jobs:
       SERGEANT_LLM_ENABLED: "false"
       SERGEANT_CPL_ENABLED: "false"
       SERGEANT_CPL_POLICY: "disabled"
-      SERGEANT_CLOUDFLARE_USAGE_STATE: ${{ runner.temp }}/sergeant-training-usage.json
 
     steps:
       - name: Checkout Sergeant exact head
@@ -78,6 +77,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Configure isolated Cloudflare usage state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-training-usage.json" >> "$GITHUB_ENV"
 
       - name: Install frozen Sergeant package
         run: python -m pip install .
