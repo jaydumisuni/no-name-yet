@@ -1,7 +1,8 @@
-"""Cross-file static invariants for authorization and policy consistency."""
+"""Cross-file static invariants for authorization, state ownership, and data contracts."""
 
 from __future__ import annotations
 
+import ast
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -54,8 +55,6 @@ def _finding(
 
 
 def _policy_callback_postcondition(path: str, text: str) -> list[dict[str, Any]]:
-    """Detect policy objects replaced after their earlier validation point."""
-
     findings: list[dict[str, Any]] = []
     assignment_re = re.compile(
         r"(?P<policy>perms|permissions|policy)\s*,\s*(?P<err>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
@@ -95,6 +94,43 @@ def _policy_callback_postcondition(path: str, text: str) -> list[dict[str, Any]]
                 ),
                 verification="Re-run every critical policy constraint after the final callback that can replace permissions, before the successful authorization path is reachable.",
                 confidence=0.95,
+            )
+        )
+    return findings
+
+
+def _go_permissive_config_validation(path: str, text: str) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for match in re.finditer(r"func\s+(?P<name>Validate[A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:\([^)]*\)|[^\{]+)?\{", text):
+        opening = match.end() - 1
+        body = text[opening + 1 : opening + 5000]
+        decode = re.search(r"json\.Unmarshal\s*\([^,]+,\s*&(?P<target>[A-Za-z_][A-Za-z0-9_]*)\s*\)", body)
+        if decode is None:
+            continue
+        strict = re.search(
+            r"DisallowUnknownFields|unknownField|KnownFields\s*\(|validateUnknown|checkUnknown|map\[string\](?:json\.RawMessage|any)",
+            body,
+            re.I,
+        )
+        if strict is not None:
+            continue
+        findings.append(
+            _finding(
+                officer="Engineer",
+                capability="api_contract",
+                severity="major",
+                root_cause="permissive-config-validation",
+                path=path,
+                line_start=_line(text, opening + 1 + decode.start()),
+                message="A configuration validation entry point silently accepts unknown fields.",
+                evidence=f"{match.group('name')} decodes typed configuration with json.Unmarshal into {decode.group('target')} but performs no unknown-field scan or strict decoder pass before reporting validation issues.",
+                falsifiers=(
+                    "Checked for Decoder.DisallowUnknownFields or an equivalent recursive unknown-field scan.",
+                    "Checked for raw-object/schema comparison before semantic validation succeeds.",
+                    "Checked that the function is a validation entry point rather than ordinary tolerant ingestion.",
+                ),
+                verification="Preserve intended compatibility aliases, but surface unknown keys recursively with their full paths before claiming configuration validation succeeded.",
+                confidence=0.94,
             )
         )
     return findings
@@ -146,6 +182,49 @@ def _transport_authorization_gap(files: dict[str, str]) -> list[dict[str, Any]]:
             supporting_refs=core_refs,
         )
     ]
+
+
+def _go_shared_status_overwrite(files: dict[str, str]) -> list[dict[str, Any]]:
+    writers: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for path, text in files.items():
+        if Path(path).suffix.lower() != ".go":
+            continue
+        for update in re.finditer(r"\.Status\(\)\.Update\s*\(\s*[^,]+,\s*(?P<var>[A-Za-z_][A-Za-z0-9_]*)\s*\)", text):
+            variable = update.group("var")
+            before = text[max(0, update.start() - 12000) : update.start()]
+            declarations = list(re.finditer(rf"\b{re.escape(variable)}\s*:=\s*&(?P<type>[A-Za-z0-9_.]+)\s*\{{", before))
+            if not declarations:
+                continue
+            resource_type = declarations[-1].group("type")
+            writers[resource_type].append((path, _line(text, update.start())))
+    findings: list[dict[str, Any]] = []
+    for resource_type, rows in writers.items():
+        distinct_paths = sorted({path for path, _ in rows})
+        if len(distinct_paths) < 2:
+            continue
+        first_path, first_line = rows[0]
+        refs = [f"{path}:{line}" for path, line in rows]
+        findings.append(
+            _finding(
+                officer="Mechanic",
+                capability="concurrency",
+                severity="major",
+                root_cause="shared-status-full-replacement",
+                path=first_path,
+                line_start=first_line,
+                message="Multiple controllers fully replace the same status object and can overwrite fields owned by one another.",
+                evidence=f"{len(distinct_paths)} controller files call Status().Update on {resource_type}; full-object replacement races across independently reconciled field owners.",
+                falsifiers=(
+                    "Checked that the same resource type is written from more than one controller file.",
+                    "Checked for Status().Patch with MergeFrom on the shared writers.",
+                    "Checked that this is status-subresource replacement rather than a sole-writer resource update.",
+                ),
+                verification="Fetch the latest object, patch only fields owned by each controller with MergeFrom, and retry conflicts so unrelated status fields survive concurrent reconciliation.",
+                confidence=0.95,
+                supporting_refs=refs,
+            )
+        )
+    return findings
 
 
 def _python_backend_parity(files: dict[str, str]) -> list[dict[str, Any]]:
@@ -205,6 +284,58 @@ def _python_backend_parity(files: dict[str, str]) -> list[dict[str, Any]]:
     return findings
 
 
+def _python_external_data_completeness(path: str, text: str) -> list[dict[str, Any]]:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+    findings: list[dict[str, Any]] = []
+    lines = text.splitlines(keepends=True)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not re.search(r"(?:download|fetch|refresh|load).*(?:master|catalog|instrument|dataset|snapshot|metadata)|(?:master|catalog|instrument|dataset).*(?:download|fetch|load)", node.name, re.I):
+            continue
+        start = getattr(node, "lineno", 1)
+        end = getattr(node, "end_lineno", start)
+        body = "".join(lines[start - 1:end])
+        if not re.search(r"(?:requests|httpx)\.(?:get|stream)\s*\(", body):
+            continue
+        if not re.search(r"(?:response|resp)\.(?:json\s*\(|content|text)", body):
+            continue
+        if not re.search(r"write_text\s*\(|json\.dump\s*\(|open\s*\([^)]*[\"']w", body):
+            continue
+        completeness = re.search(
+            r"isinstance\s*\(|len\s*\([^)]*\)\s*(?:<|>|<=|>=)|Content-Length|schema|validate[A-Za-z0-9_]*\s*\(|truncat|_MIN_[A-Z0-9_]+",
+            body,
+            re.I,
+        )
+        retry = re.search(r"for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\s+range\s*\(|retry|backoff", body, re.I)
+        if completeness is not None and retry is not None:
+            continue
+        marker = re.search(r"(?:requests|httpx)\.(?:get|stream)\s*\(", body)
+        findings.append(
+            _finding(
+                officer="Mechanic",
+                capability="data_integrity",
+                severity="major",
+                root_cause="unvalidated-external-data-cache",
+                path=path,
+                line_start=start + body[: marker.start() if marker else 0].count("\n"),
+                message="Bulk external data is cached as authoritative without completeness validation and resilient transfer handling.",
+                evidence=f"{node.name} downloads and caches parsed external data, but does not both retry transport failures and reject structurally valid yet implausibly incomplete payloads before replacing the cache.",
+                falsifiers=(
+                    "Checked for bounded retry/backoff on transport interruption.",
+                    "Checked for schema/type/count or content-length completeness validation before caching.",
+                    "Checked that the function persists bulk catalog/master/dataset data rather than a small optional response.",
+                ),
+                verification="Stream or fully read with bounded retries, validate type/schema and a defensible completeness invariant, and replace the cache only after the complete payload is accepted.",
+                confidence=0.93,
+            )
+        )
+    return findings
+
+
 def run_static_cross_path_review(root: str | Path, changed_files: Iterable[str]) -> dict[str, Any]:
     root_path = Path(root).resolve()
     changed = sorted({str(item) for item in changed_files if str(item)})
@@ -217,9 +348,14 @@ def run_static_cross_path_review(root: str | Path, changed_files: Iterable[str])
             files[path] = text
     findings: list[dict[str, Any]] = []
     for path, text in files.items():
-        if Path(path).suffix.lower() == ".go":
+        suffix = Path(path).suffix.lower()
+        if suffix == ".go":
             findings.extend(_policy_callback_postcondition(path, text))
+            findings.extend(_go_permissive_config_validation(path, text))
+        elif suffix == ".py":
+            findings.extend(_python_external_data_completeness(path, text))
     findings.extend(_transport_authorization_gap(files))
+    findings.extend(_go_shared_status_overwrite(files))
     findings.extend(_python_backend_parity(files))
     unique: dict[tuple[str, str], dict[str, Any]] = {}
     for finding in findings:
