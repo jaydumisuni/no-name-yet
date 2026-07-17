@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from main_review.external_static_review import run_external_static_review
 from main_review.static_invariant_review import run_static_invariant_review
 
 
@@ -116,3 +117,26 @@ const char* skip_value(const char* p, const char* end) noexcept {
         encoding="utf-8",
     )
     assert "cursor-dereference-before-end-check" not in _roots(run_static_invariant_review(tmp_path, ["parser.hpp"]))
+
+
+def test_equivalent_parser_locations_collapse_to_one_user_facing_root(tmp_path: Path) -> None:
+    source = tmp_path / "parser.hpp"
+    source.write_text(
+        """
+const char* skip_value(const char* p, const char* end) noexcept {
+    return *p == 't' ? p + 4 : p;
+}
+const char* parse_key(const char* p, const char* end) noexcept {
+    return *p == '"' ? p + 1 : p;
+}
+        """,
+        encoding="utf-8",
+    )
+    result = run_external_static_review(tmp_path, ["parser.hpp"], review_mode="snapshot")
+    findings = [
+        item
+        for item in result["officer_council"]["admitted_findings"]
+        if item.get("root_cause") == "cursor-dereference-before-end-check"
+    ]
+    assert len(findings) == 1
+    assert len(findings[0]["supporting_evidence_refs"]) == 2
