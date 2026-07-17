@@ -107,77 +107,71 @@ jobs:
           path: main-review-result.json
           if-no-files-found: error
 
-      - name: Checkout Go crypto fix ancestry
+      - name: Checkout Zero defective revision
         uses: actions/checkout@v4
         with:
-          repository: golang/crypto
-          ref: 533fb3f7e4a5ae23f69d1837cd851d35ff5b76ce
-          path: validation2-cases/golang-crypto
-          persist-credentials: false
-          fetch-depth: 2
-          sparse-checkout: |
-            ssh
-            go.mod
-            README.md
-
-      - name: Restore Go crypto defective parent
-        run: git -C validation2-cases/golang-crypto checkout --detach HEAD^
-
-      - name: Checkout ToolHive defective revision
-        uses: actions/checkout@v4
-        with:
-          repository: stacklok/toolhive
-          ref: d76d4e3bd687d54d61b17a1ef6bc384b8a48f709
-          path: validation2-cases/toolhive
+          repository: Gitlawb/zero
+          ref: 1af58828eb3c22567599c000736c913a290959d2
+          path: validation3-cases/zero
           persist-credentials: false
           fetch-depth: 1
           sparse-checkout: |
-            pkg/authz
-            pkg/mcp
-            pkg/vmcp/core
-            pkg/vmcp/server
+            internal/config
             go.mod
             README.md
 
-      - name: Checkout Insights RBAC defective revision
+      - name: Checkout OSAC Operator defective revision
         uses: actions/checkout@v4
         with:
-          repository: project-kessel/insights-rbac
-          ref: 34f9e8ddc53da04c1009fc792fd1fbf0c98966d3
-          path: validation2-cases/insights-rbac
+          repository: osac-project/osac-operator
+          ref: d6f502b0a1b0754f405a0d81e47d5454f78df3d4
+          path: validation3-cases/osac-operator
           persist-credentials: false
           fetch-depth: 1
           sparse-checkout: |
-            rbac/management/permissions
-            tests/management/permissions
-            pyproject.toml
+            internal/controller
+            go.mod
             README.md
 
-      - name: Freeze Sergeant-first validation-set-two reports
+      - name: Checkout NSE Dashboard defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: subramanya1496/nse-dashboard
+          ref: 37e7789ed2585a10531c41ce3168df3df2d2b3f8
+          path: validation3-cases/nse-dashboard
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            src
+            dashboard
+            requirements.txt
+            README.md
+
+      - name: Freeze Sergeant-first validation-set-three reports
         env:
           SERGEANT_LLM_ENABLED: "false"
           SERGEANT_CPL_ENABLED: "false"
           SERGEANT_CPL_POLICY: "disabled"
-          SERGEANT_CLOUDFLARE_USAGE_STATE: ${{ runner.temp }}/sergeant-validation-two-usage.json
+          SERGEANT_CLOUDFLARE_USAGE_STATE: ${{ runner.temp }}/sergeant-validation-three-usage.json
         run: |
-          mkdir -p build/static-validation-two
+          mkdir -p build/static-validation-three
           python scripts/run_static_training_set.py \
-            review-training/unseen-validation-set-2.json \
-            --output build/static-validation-two/unseen-validation-set-2.json \
-            | tee build/static-validation-two/unseen-validation-set-2-summary.json
+            review-training/unseen-validation-set-3.json \
+            --output build/static-validation-three/unseen-validation-set-3.json \
+            | tee build/static-validation-three/unseen-validation-set-3-summary.json
 
-      - name: Publish validation-set-two summary
+      - name: Publish validation-set-three summary
         if: always()
         run: |
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
           from pathlib import Path
-          path = Path('build/static-validation-two/unseen-validation-set-2.json')
+          path = Path('build/static-validation-three/unseen-validation-set-3.json')
           if not path.exists():
-              print('\n## Unseen static validation set two\n\nNo report was produced.')
+              print('\n## Unseen static validation set three\n\nNo report was produced.')
               raise SystemExit(0)
           data = json.loads(path.read_text())
-          print('\n## Unseen static validation set two')
+          print('\n## Unseen static validation set three')
           print('\n| Case | Verdict | Admitted | Advisory | Assurances | Models |')
           print('|---|---:|---:|---:|---:|---:|')
           for item in data['summaries']:
@@ -187,11 +181,11 @@ jobs:
               )
           PY
 
-      - name: Upload immutable Sergeant-first validation-set-two reports
+      - name: Upload immutable Sergeant-first validation-set-three reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: static-validation-unseen-set-2
-          path: build/static-validation-two/
+          name: static-validation-unseen-set-3
+          path: build/static-validation-three/
           if-no-files-found: error
           retention-days: 90
