@@ -636,32 +636,79 @@ def _uncontained_file_reads(path: str, text: str) -> list[FieldFinding]:
 
 
 def _process_local_file_lock(path: str, text: str) -> list[FieldFinding]:
-    local_lock = bool(re.search(r"threading\.(?:Lock|RLock)\s*\(", text))
-    persistent_state = bool(re.search(r"write_text|json\.dump|\.replace\s*\(|os\.replace|\.tmp[\"']", text))
+    """Report only a process-local lock that actually guards a file transaction.
+
+    A lock declaration and a filesystem write somewhere else in the same module
+    are unrelated evidence.  The guard and persistent mutation must meet in one
+    function before this root is admitted.
+    """
+
     interprocess = bool(re.search(
-        r"\bfcntl\.|\bmsvcrt\.|flock\b|lockf\b|portalocker|filelock|os\.O_EXCL|_interprocess_lock|atomic lock file",
+        r"\bfcntl\.|\bmsvcrt\.|flock\b|lockf\b|portalocker|filelock|"
+        r"os\.O_EXCL|_interprocess_lock|atomic lock file",
         text,
         re.I,
     ))
-    if not (local_lock and persistent_state) or interprocess:
+    if interprocess:
         return []
-    line = _line(text, re.compile(r"threading\.(?:Lock|RLock)"))
-    return [
-        FieldFinding(
-            "Mechanic",
-            "concurrency",
-            "major",
-            "Persistent usage-state update is protected only by a process-local lock.",
-            path,
-            line,
-            "A threading lock surrounds filesystem state updates, but no inter-process lock is present; separate CLI, IDE, or CI processes can race and overwrite reservations.",
-            "cross-process-state-race",
-            0.92,
-            ["Checked for POSIX and Windows inter-process file locking.", "Checked for a lock-file library."],
-            "Serialize the complete load-modify-save transaction with an inter-process lock and atomically replace from a unique temporary file.",
-        )
-    ]
 
+    lock_names = {
+        match.group("name")
+        for match in re.finditer(
+            r"(?P<name>(?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
+            r"threading\.(?:Lock|RLock)\s*\(",
+            text,
+        )
+    }
+    if not lock_names:
+        return []
+
+    persistent_re = re.compile(
+        r"\.write_text\s*\(|\.write_bytes\s*\(|json\.dump\s*\(|"
+        r"\bos\.replace\s*\(|(?<![.\w])replace\s*\(|"
+        r"\.replace\s*\(|\bopen\s*\([^\n,]+,\s*[\"'][^\"']*[wax+]",
+        re.I,
+    )
+    for function in _python_functions(text):
+        body = function.body
+        persistent = persistent_re.search(body)
+        if persistent is None:
+            continue
+        for lock_name in sorted(lock_names):
+            escaped = re.escape(lock_name)
+            with_guard = re.search(
+                rf"\bwith\s+{escaped}\s*:\s*[\s\S]*?",
+                body,
+                re.I,
+            )
+            acquire = re.search(rf"\b{escaped}\.(?:acquire|lock)\s*\(", body, re.I)
+            if with_guard is None and acquire is None:
+                continue
+            guard_position = min(
+                [match.start() for match in (with_guard, acquire) if match is not None]
+            )
+            if guard_position > persistent.start():
+                continue
+            return [
+                FieldFinding(
+                    "Mechanic",
+                    "concurrency",
+                    "major",
+                    "Persistent file-state update is guarded only by a process-local lock.",
+                    path,
+                    function.line_start,
+                    f"Function {function.name} performs a filesystem state mutation while holding {lock_name}, "
+                    "but the lock cannot serialize another process.",
+                    "cross-process-state-race",
+                    0.94,
+                    [
+                        "Required the process-local lock and filesystem mutation to occur in the same function.",
+                        "Checked for POSIX, Windows, lock-file, and library-backed inter-process locking.",
+                    ],
+                    "Serialize the complete load-modify-save transaction with an inter-process lock and atomically replace a unique temporary file.",
+                )
+            ]
+    return []
 
 def _generic_quota_429(path: str, text: str) -> list[FieldFinding]:
     if "429" not in text or "quota" not in text.lower():
