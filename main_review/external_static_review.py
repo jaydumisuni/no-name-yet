@@ -66,6 +66,27 @@ def _external_standard(root: Path, changed: list[str]) -> dict[str, Any]:
     }
 
 
+def _snapshot_diff(diff: dict[str, Any]) -> dict[str, Any]:
+    """Remove patch-only proof obligations from a historical code snapshot."""
+
+    evidence = dict(diff.get("evidence") or {})
+    rows = [dict(item) for item in evidence.get("findings", []) if isinstance(item, dict)]
+    rows = [
+        item
+        for item in rows
+        if str(item.get("root_cause") or "") != "proof-gap"
+        and str(item.get("message") or "").lower() != "implementation changed without changed tests in the same pr."
+    ]
+    evidence["findings"] = rows
+    evidence["finding_count"] = len(rows)
+    return {
+        **diff,
+        "evidence": evidence,
+        "verdict": decide_verdict(evidence).to_dict(),
+        "snapshot_policy": "Historical snapshots do not assert changed-test obligations from future fix files.",
+    }
+
+
 def _calibrated_semantic_findings(semantic: dict[str, Any]) -> list[dict[str, Any]]:
     """Collapse equivalent roots and reject overly broad publication matches."""
 
@@ -87,10 +108,6 @@ def _calibrated_semantic_findings(semantic: dict[str, Any]) -> list[dict[str, An
                 continue
             caller = relationship.group("caller")
             callee = relationship.group("callee")
-            # Publishing a cached/stored state from a create/setup/secret-receipt
-            # lifecycle is materially different from ordinary status or request
-            # notifications.  This boundary prevents every emitter from being
-            # treated as an initialization defect.
             if not re.search(r"(?:save|cache|store|publish)", callee, re.I):
                 continue
             if not re.search(r"(?:setup|create|reset|receiv)", caller, re.I):
@@ -111,9 +128,6 @@ def _capability_findings_for_mode(
 ) -> list[dict[str, Any]]:
     rows = [dict(item) for item in capabilities.get("findings", []) if isinstance(item, dict)]
     if review_mode == "snapshot":
-        # A historical defective snapshot is not a proposed patch.  Missing a
-        # future fix/test file cannot establish that the snapshot author failed
-        # to add changed tests in the same PR.
         rows = [
             item
             for item in rows
@@ -142,15 +156,18 @@ def run_external_static_review(
 
     repository_review = _strict_changed_scope(review_repository(root_path), changed)
     diff = normalize_diff_review(review_changed_files(changed), root_path, changed)
+    if review_mode == "snapshot":
+        diff = _snapshot_diff(diff)
     standard = _external_standard(root_path, changed)
     capabilities = normalize_capability_review(run_capability_engine(root_path, changed), root_path)
     semantic = run_static_semantic_review(root_path, semantic_files or changed)
+    calibrated_semantic = _calibrated_semantic_findings(semantic)
     capability_findings = _capability_findings_for_mode(capabilities, semantic, review_mode=review_mode)
     capabilities = {
         **capabilities,
         "findings": capability_findings,
         "finding_count": len(capability_findings),
-        "static_semantic_review": {**semantic, "admitted_candidate_findings": _calibrated_semantic_findings(semantic)},
+        "static_semantic_review": {**semantic, "admitted_candidate_findings": calibrated_semantic},
     }
     intelligence = run_review_intelligence({"capability_review": capabilities})
     challenge = run_challenge_mode(repository_review)
