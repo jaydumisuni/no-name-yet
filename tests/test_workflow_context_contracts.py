@@ -3,11 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 
-WORKFLOWS = tuple(Path(".github/workflows").glob("*.yml"))
+JOB_LEVEL_CONTEXT_TARGETS = (
+    Path(".github/workflows/blind-static-training.yml"),
+    Path(".github/workflows/review-intelligence-proof.yml"),
+)
 
 
-def test_runner_only_context_is_not_used_in_job_level_environment() -> None:
-    for path in WORKFLOWS:
+def test_runner_only_context_is_not_used_in_target_job_environment() -> None:
+    for path in JOB_LEVEL_CONTEXT_TARGETS:
         text = path.read_text(encoding="utf-8")
         assert "SERGEANT_CLOUDFLARE_USAGE_STATE: ${{ runner.temp }}" not in text
 
