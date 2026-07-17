@@ -35,7 +35,7 @@ def test_model_free_multilanguage_suite_is_exact() -> None:
         minimum_recall=1.0,
     )
 
-    assert result["passed"] is True
+    assert result["passed"] is True, result
     assert result["case_count"] == 12
     assert result["expected_finding_count"] == 9
     assert result["true_positive_count"] == 9
