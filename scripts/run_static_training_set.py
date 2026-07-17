@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from main_review.pr_reviewer import run_independent_pr_review
+from main_review.external_static_review import run_external_static_review
 
 
 def _verdict_value(result: dict[str, Any]) -> str:
@@ -31,7 +31,7 @@ def _list(value: object) -> list[Any]:
 
 def _summary(case: dict[str, Any], result: dict[str, Any], elapsed: float) -> dict[str, Any]:
     council = result.get("officer_council") if isinstance(result.get("officer_council"), dict) else {}
-    cpl = result.get("cpl") if isinstance(result.get("cpl"), dict) else {}
+    cpl = result.get("cpl_review") if isinstance(result.get("cpl_review"), dict) else {}
     admitted = _list(council.get("admitted_findings"))
     advisory = _list(council.get("advisory_findings"))
     rejected = _list(council.get("rejected_findings"))
@@ -42,6 +42,7 @@ def _summary(case: dict[str, Any], result: dict[str, Any], elapsed: float) -> di
         "defective_ref": case["defective_ref"],
         "source_pr": case["source_pr"],
         "workspace_policy": case.get("workspace_policy", "static_first"),
+        "policy_profile": result.get("policy_profile", "external_static"),
         "verdict": _verdict_value(result),
         "admitted_finding_count": len(admitted),
         "advisory_finding_count": len(advisory),
@@ -50,6 +51,7 @@ def _summary(case: dict[str, Any], result: dict[str, Any], elapsed: float) -> di
         "model_status": cpl.get("status", "disabled"),
         "model_calls": int(cpl.get("model_call_count", 0) or 0),
         "elapsed_seconds": round(elapsed, 3),
+        "unavailable_requested_files": list(result.get("unavailable_requested_files", [])),
         "admitted_roots": [
             {
                 "root_cause": item.get("root_cause"),
@@ -83,18 +85,18 @@ def run_manifest(manifest_path: Path, output_path: Path) -> dict[str, Any]:
         root = Path(case["checkout_path"]).resolve()
         if not root.is_dir():
             raise FileNotFoundError(f"case checkout is missing: {root}")
-        changed_files = [str(item) for item in case.get("changed_files", []) if str(item)]
-        if not changed_files:
+        requested_files = [str(item) for item in case.get("changed_files", []) if str(item)]
+        if not requested_files:
             raise ValueError(f"case {case.get('case_id')} has no review scope")
 
         started = time.monotonic()
-        result = run_independent_pr_review(root, changed_files=changed_files)
+        result = run_external_static_review(root, requested_files)
         elapsed = time.monotonic() - started
         full_results.append({"case": case, "result": result})
         summaries.append(_summary(case, result, elapsed))
 
     payload = {
-        "schema_version": "sergeant.static-training-result.v1",
+        "schema_version": "sergeant.static-training-result.v2",
         "set_id": manifest.get("set_id"),
         "rules": manifest.get("rules", {}),
         "case_count": len(summaries),
