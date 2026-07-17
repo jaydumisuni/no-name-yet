@@ -30,6 +30,8 @@ from .static_invariant_review import run_static_invariant_review
 from .static_semantic_review import run_static_semantic_review
 from .verdict import decide_verdict, review_repository
 
+_SEVERITY_RANK = {"blocker": 4, "major": 3, "minor": 2, "advisory": 1}
+
 
 def _normalize_path(value: object) -> str:
     return str(value or "").strip().replace("\\", "/").lstrip("./")
@@ -114,6 +116,64 @@ def _calibrated_semantic_findings(semantic: dict[str, Any]) -> list[dict[str, An
     return [row for _, row in selected.values()]
 
 
+def _collapse_root_findings(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return one user-facing finding per root and path while retaining provenance."""
+
+    collapsed: dict[tuple[str, str], dict[str, Any]] = {}
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        finding = dict(raw)
+        key = (
+            str(finding.get("root_cause") or finding.get("message") or "unknown"),
+            _normalize_path(finding.get("path")),
+        )
+        reference = str(finding.get("evidence_ref") or "")
+        existing = collapsed.get(key)
+        if existing is None:
+            finding["supporting_evidence_refs"] = sorted({reference} - {""})
+            collapsed[key] = finding
+            continue
+
+        refs = {
+            str(item)
+            for item in existing.get("supporting_evidence_refs", [])
+            if str(item)
+        }
+        refs.update(
+            str(item)
+            for item in finding.get("supporting_evidence_refs", [])
+            if str(item)
+        )
+        if reference:
+            refs.add(reference)
+
+        existing_rank = _SEVERITY_RANK.get(str(existing.get("severity") or "").lower(), 0)
+        candidate_rank = _SEVERITY_RANK.get(str(finding.get("severity") or "").lower(), 0)
+        existing_confidence = float(existing.get("confidence", 0.0) or 0.0)
+        candidate_confidence = float(finding.get("confidence", 0.0) or 0.0)
+        if (candidate_rank, candidate_confidence) > (existing_rank, existing_confidence):
+            representative = finding
+        else:
+            representative = existing
+        representative = dict(representative)
+        representative["supporting_evidence_refs"] = sorted(refs)
+        line_values = [
+            int(value)
+            for value in (existing.get("line_start"), finding.get("line_start"))
+            if isinstance(value, int) and value > 0
+        ]
+        if line_values:
+            representative["line_start"] = min(line_values)
+            representative["line_end"] = max(
+                int(existing.get("line_end") or existing.get("line_start") or 0),
+                int(finding.get("line_end") or finding.get("line_start") or 0),
+            )
+            representative["evidence_ref"] = f"{key[1]}:{representative['line_start']}"
+        collapsed[key] = representative
+    return list(collapsed.values())
+
+
 def _capability_findings_for_mode(
     capabilities: dict[str, Any], semantic: dict[str, Any], invariants: dict[str, Any], *, review_mode: str,
 ) -> list[dict[str, Any]]:
@@ -126,7 +186,7 @@ def _capability_findings_for_mode(
         ]
     rows.extend(_calibrated_semantic_findings(semantic))
     rows.extend(dict(item) for item in invariants.get("findings", []) if isinstance(item, dict))
-    return rows
+    return _collapse_root_findings(rows)
 
 
 def run_external_static_review(
