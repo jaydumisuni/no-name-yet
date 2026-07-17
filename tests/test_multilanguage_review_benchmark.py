@@ -64,13 +64,16 @@ def test_model_free_multilanguage_suite_is_exact() -> None:
         or case["false_positive_count"]
         or case["false_negative_count"]
     ]
+    diagnostic = "\n".join(
+        f"{row['id']}: verdict={row['actual_verdict']} expected={row['expected_verdict']} "
+        f"tp={row['tp']} fp={row['fp']} fn={row['fn']} missed={row['missed']} false={row['false_positives']}"
+        for row in failures
+    )
 
-    assert result["passed"] is True, {
-        "precision": result["precision"],
-        "recall": result["recall"],
-        "verdict_accuracy": result["verdict_accuracy"],
-        "failures": failures,
-    }
+    assert result["passed"] is True, (
+        f"precision={result['precision']} recall={result['recall']} "
+        f"verdict_accuracy={result['verdict_accuracy']}\n{diagnostic}"
+    )
     assert result["case_count"] == 12
     assert result["expected_finding_count"] == 9
     assert result["true_positive_count"] == 9
