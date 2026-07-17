@@ -6,12 +6,18 @@ on:
     paths:
       - scripts/apply_pr102_final_review_fixes.py
       - .github/workflows/apply-pr102-final-review-fixes.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/apply_pr102_final_review_fixes.py
+      - .github/workflows/apply-pr102-final-review-fixes.yml
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.ref == 'cpl-quality-noise-governor' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
