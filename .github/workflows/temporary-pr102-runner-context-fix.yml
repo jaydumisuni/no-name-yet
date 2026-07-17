@@ -34,10 +34,10 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          files = [
+          files = (
               Path('.github/workflows/blind-static-training.yml'),
               Path('.github/workflows/review-intelligence-proof.yml'),
-          ]
+          )
           forbidden = '      SERGEANT_CLOUDFLARE_USAGE_STATE: ${{ runner.temp }}/sergeant-training-usage.json\n'
           install_marker = '      - name: Install frozen Sergeant package\n'
           runtime_step = (
@@ -45,14 +45,17 @@ jobs:
               '        shell: bash\n'
               '        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-training-usage.json" >> "$GITHUB_ENV"\n\n'
           )
+
           for path in files:
               text = path.read_text(encoding='utf-8')
-              if text.count(forbidden) != 1:
-                  raise SystemExit(f'{path}: expected one forbidden job-env assignment, found {text.count(forbidden)}')
-              if text.count(install_marker) != 1:
-                  raise SystemExit(f'{path}: expected one install marker, found {text.count(install_marker)}')
-              text = text.replace(forbidden, '', 1)
-              text = text.replace(install_marker, runtime_step + install_marker, 1)
+              if forbidden in text:
+                  text = text.replace(forbidden, '', 1)
+              if 'Configure isolated Cloudflare usage state' not in text:
+                  if install_marker not in text:
+                      raise SystemExit(f'{path}: install marker is missing')
+                  text = text.replace(install_marker, runtime_step + install_marker, 1)
+              if forbidden in text:
+                  raise SystemExit(f'{path}: forbidden job-level runner context remains')
               path.write_text(text, encoding='utf-8')
 
           Path('tests/test_workflow_context_contracts.py').write_text('''from __future__ import annotations
