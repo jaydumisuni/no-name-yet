@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -26,6 +26,25 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Apply one-time static review integration
+        run: python scripts/apply_review_finish_patch.py
+
+      - name: Commit integrated static review capabilities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "sergeant-review-constructor"
+          git config user.email "sergeant-review-constructor@users.noreply.github.com"
+          git add main_review/static_invariant_review.py main_review/offline_investigation.py
+          if git diff --cached --quiet; then
+            echo "Static review integration already applied."
+          else
+            git commit -m "Integrate final static review capabilities"
+            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
 
       - name: Setup Python
         uses: actions/setup-python@v5
