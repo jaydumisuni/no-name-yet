@@ -16,68 +16,198 @@ def replace_once(relative: str, old: str, new: str) -> None:
 
 replace_once(
     "main_review/offline_investigation.py",
-    """        if inline and inline not in literal_markers | folded_markers:\n            command_lines.append(inline)\n""",
-    """        if inline and inline not in literal_markers | folded_markers:\n            command_lines.append(_clean_yaml_scalar(inline))\n""",
+    """        if inline and inline not in literal_markers | folded_markers:
+            command_lines.append(inline)
+""",
+    """        if inline and inline not in literal_markers | folded_markers:
+            command_lines.append(_clean_yaml_scalar(inline))
+""",
 )
 
 replace_once(
     "main_review/offline_investigation.py",
-    """def _executed_test_paths(text: str) -> set[str]:\n    \"\"\"Return test paths appearing in actual runner invocations only.\"\"\"\n""",
-    """def _strip_shell_comment(command: str) -> str:\n    \"\"\"Remove an unquoted shell comment without changing quoted hashes.\"\"\"\n\n    quote: str | None = None\n    escaped = False\n    for index, character in enumerate(command):\n        if escaped:\n            escaped = False\n            continue\n        if character == \"\\\\\" and quote != \"'\":\n            escaped = True\n            continue\n        if character in {\"'\", '\"'}:\n            if quote is None:\n                quote = character\n            elif quote == character:\n                quote = None\n            continue\n        if character == \"#\" and quote is None and (index == 0 or command[index - 1].isspace()):\n            return command[:index].rstrip()\n    return command\n\n\ndef _executed_test_paths(text: str) -> set[str]:\n    \"\"\"Return test paths appearing in actual runner invocations only.\"\"\"\n""",
+    """def _executed_test_paths(text: str) -> set[str]:
+    \"\"\"Return test paths appearing in actual runner invocations only.\"\"\"
+""",
+    """def _strip_shell_comment(command: str) -> str:
+    \"\"\"Remove an unquoted shell comment without changing quoted hashes.\"\"\"
+
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(command):
+        if escaped:
+            escaped = False
+            continue
+        if character == \"\\\\\" and quote != \"'\":
+            escaped = True
+            continue
+        if character in {\"'\", '\"'}:
+            if quote is None:
+                quote = character
+            elif quote == character:
+                quote = None
+            continue
+        if character == \"#\" and quote is None and (index == 0 or command[index - 1].isspace()):
+            return command[:index].rstrip()
+    return command
+
+
+def _executed_test_paths(text: str) -> set[str]:
+    \"\"\"Return test paths appearing in actual runner invocations only.\"\"\"
+""",
 )
 
 replace_once(
     "main_review/offline_investigation.py",
-    """        for logical in logical_lines:\n            for segment in re.split(r\"\\s*(?:&&|\\|\\||;|\\|)\\s*\", logical):\n""",
-    """        for logical in logical_lines:\n            logical = _strip_shell_comment(logical)\n            if not logical:\n                continue\n            for segment in re.split(r\"\\s*(?:&&|\\|\\||;|\\|)\\s*\", logical):\n""",
+    """        for logical in logical_lines:
+            for segment in re.split(r\"\\s*(?:&&|\\|\\||;|\\|)\\s*\", logical):
+""",
+    """        for logical in logical_lines:
+            logical = _strip_shell_comment(logical)
+            if not logical:
+                continue
+            for segment in re.split(r\"\\s*(?:&&|\\|\\||;|\\|)\\s*\", logical):
+""",
 )
 
 replace_once(
     "main_review/offline_investigation.py",
-    """        for match in re.finditer(r\"\\b([A-Za-z_][A-Za-z0-9_]*)\\.replace\\s*\\(\", body):\n            replacements.append((match.start(), match.group(1)))\n""",
-    """        known_path_receivers = set(aliases) | set(fd_paths)\n        for match in re.finditer(r\"\\b([A-Za-z_][A-Za-z0-9_]*)\\.replace\\s*\\(\", body):\n            receiver = match.group(1)\n            if receiver in known_path_receivers:\n                replacements.append((match.start(), receiver))\n""",
+    """        for match in re.finditer(r\"(?:os\\\\.)?replace\\\\s*\\\\(\\\\s*([^,\\\\n]+)\\\\s*,\", body):
+            replacements.append((match.start(), match.group(1).strip()))
+""",
+    """        for match in re.finditer(
+            r\"(?:\\\\bos\\\\.replace|(?<![.\\\\w])replace)\\\\s*\\\\(\\\\s*([^,\\\\n]+)\\\\s*,\",
+            body,
+        ):
+            replacements.append((match.start(), match.group(1).strip()))
+""",
 )
 
 replace_once(
     "main_review/offline_investigation.py",
-    """        non_durable: list[str] = []\n        for replace_pos, source in sorted(replacements):\n""",
-    """        non_durable: list[str] = []\n        publication_boundaries: dict[str, int] = {}\n        for replace_pos, source in sorted(replacements):\n""",
+    """        for match in re.finditer(r\"\\\\b([A-Za-z_][A-Za-z0-9_]*)\\\\.replace\\\\s*\\\\(\", body):
+            replacements.append((match.start(), match.group(1)))
+""",
+    """        known_path_receivers = set(aliases) | set(fd_paths)
+        for match in re.finditer(
+            r\"(?m)^\\\\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\\\\s*=\\\\s*\"
+            r\"(?:pathlib\\\\.)?Path\\\\s*\\\\([^\\\\n]*\\\\)\"
+            r\"|(?m)^\\\\s*(?P<class_name>[A-Za-z_][A-Za-z0-9_]*)\\\\s*=\\\\s*\"
+            r\"[A-Za-z_][A-Za-z0-9_]*\\\\.__class__\\\\s*\\\\([^\\\\n]*\\\\)\"
+            r\"|(?m)^\\\\s*(?P<method_name>[A-Za-z_][A-Za-z0-9_]*)\\\\s*=\\\\s*\"
+            r\"[A-Za-z_][A-Za-z0-9_]*\\\\.(?:with_suffix|with_name|resolve|absolute)\\\\s*\\\\([^\\\\n]*\\\\)\",
+            body,
+        ):
+            known_path_receivers.add(
+                match.group(\"name\") or match.group(\"class_name\") or match.group(\"method_name\")
+            )
+        for match in re.finditer(r\"\\\\b([A-Za-z_][A-Za-z0-9_]*)\\\\.replace\\\\s*\\\\(\", body):
+            receiver = match.group(1)
+            if receiver in known_path_receivers:
+                replacements.append((match.start(), receiver))
+""",
 )
 
 replace_once(
     "main_review/offline_investigation.py",
-    """                durable = any(\n                    write < flush < fsync < replace_pos\n                    for write in write_positions\n                    for flush in flush_positions\n                    for fsync in fsync_positions\n                )\n""",
-    """                identity = f\"handle:{handle}\"\n                lower_bound = publication_boundaries.get(identity, -1)\n                durable = any(\n                    lower_bound < write < flush < fsync < replace_pos\n                    for write in write_positions\n                    for flush in flush_positions\n                    for fsync in fsync_positions\n                )\n                if durable:\n                    publication_boundaries[identity] = replace_pos\n""",
+    """        non_durable: list[str] = []
+        for replace_pos, source in sorted(replacements):
+""",
+    """        non_durable: list[str] = []
+        publication_boundaries: dict[str, int] = {}
+        for replace_pos, source in sorted(replacements):
+""",
 )
 
 replace_once(
     "main_review/offline_investigation.py",
-    """                durable = any(write < fsync < replace_pos for write in writes for fsync in fsyncs)\n""",
-    """                identity = f\"fd:{fd}\"\n                lower_bound = publication_boundaries.get(identity, -1)\n                durable = any(lower_bound < write < fsync < replace_pos for write in writes for fsync in fsyncs)\n                if durable:\n                    publication_boundaries[identity] = replace_pos\n""",
+    """                durable = any(
+                    write < flush < fsync < replace_pos
+                    for write in write_positions
+                    for flush in flush_positions
+                    for fsync in fsync_positions
+                )
+""",
+    """                identity = f\"handle:{handle}\"
+                lower_bound = publication_boundaries.get(identity, -1)
+                durable = any(
+                    lower_bound < write < flush < fsync < replace_pos
+                    for write in write_positions
+                    for flush in flush_positions
+                    for fsync in fsync_positions
+                )
+                if durable:
+                    publication_boundaries[identity] = replace_pos
+""",
+)
+
+replace_once(
+    "main_review/offline_investigation.py",
+    """                durable = any(write < fsync < replace_pos for write in writes for fsync in fsyncs)
+""",
+    """                identity = f\"fd:{fd}\"
+                lower_bound = publication_boundaries.get(identity, -1)
+                durable = any(lower_bound < write < fsync < replace_pos for write in writes for fsync in fsyncs)
+                if durable:
+                    publication_boundaries[identity] = replace_pos
+""",
 )
 
 replace_once(
     "main_review/workspace_interfaces.py",
-    """def _validate_adapter_evidence(\n    result: dict[str, Any],\n    task: dict[str, Any],\n    *,\n    adapter_name: str,\n    research: bool,\n) -> dict[str, Any] | None:\n""",
-    """def _validate_adapter_evidence(\n    result: dict[str, Any],\n    task: dict[str, Any],\n    *,\n    request: dict[str, Any],\n    adapter_name: str,\n    research: bool,\n) -> dict[str, Any] | None:\n""",
+    """def _validate_adapter_evidence(
+    result: dict[str, Any],
+    task: dict[str, Any],
+    *,
+    adapter_name: str,
+    research: bool,
+) -> dict[str, Any] | None:
+""",
+    """def _validate_adapter_evidence(
+    result: dict[str, Any],
+    task: dict[str, Any],
+    *,
+    request: dict[str, Any],
+    adapter_name: str,
+    research: bool,
+) -> dict[str, Any] | None:
+""",
 )
 
 replace_once(
     "main_review/workspace_interfaces.py",
-    """    if provenance.get(\"adapter\") != adapter_name:\n        raise ValueError(\"adapter evidence provenance does not match the executing adapter\")\n    return validate_evidence_packet(packet, task)\n""",
-    """    if provenance.get(\"adapter\") != adapter_name:\n        raise ValueError(\"adapter evidence provenance does not match the executing adapter\")\n    if research:\n        allowed_sources = {str(item) for item in request.get(\"allowed_sources\", []) if str(item)}\n        if str(provenance.get(\"source\")) not in allowed_sources:\n            raise ValueError(\"research evidence source is outside the authorized source policy\")\n    return validate_evidence_packet(packet, task)\n""",
+    """    if provenance.get(\"adapter\") != adapter_name:
+        raise ValueError(\"adapter evidence provenance does not match the executing adapter\")
+    return validate_evidence_packet(packet, task)
+""",
+    """    if provenance.get(\"adapter\") != adapter_name:
+        raise ValueError(\"adapter evidence provenance does not match the executing adapter\")
+    if research:
+        allowed_sources = {str(item).strip() for item in request.get(\"allowed_sources\", []) if str(item).strip()}
+        if str(provenance.get(\"source\") or \"\").strip() not in allowed_sources:
+            raise ValueError(\"research evidence source is outside the authorized source policy\")
+    return validate_evidence_packet(packet, task)
+""",
 )
 
 replace_once(
     "main_review/workspace_interfaces.py",
-    """            packet = _validate_adapter_evidence(result, task, adapter_name=workspace.name, research=False)\n""",
-    """            packet = _validate_adapter_evidence(\n                result, task, request=request, adapter_name=workspace.name, research=False\n            )\n""",
+    """            packet = _validate_adapter_evidence(result, task, adapter_name=workspace.name, research=False)
+""",
+    """            packet = _validate_adapter_evidence(
+                result, task, request=request, adapter_name=workspace.name, research=False
+            )
+""",
 )
 
 replace_once(
     "main_review/workspace_interfaces.py",
-    """            packet = _validate_adapter_evidence(result, task, adapter_name=research.name, research=True)\n""",
-    """            packet = _validate_adapter_evidence(\n                result, task, request=request, adapter_name=research.name, research=True\n            )\n""",
+    """            packet = _validate_adapter_evidence(result, task, adapter_name=research.name, research=True)
+""",
+    """            packet = _validate_adapter_evidence(
+                result, task, request=request, adapter_name=research.name, research=True
+            )
+""",
 )
 
 TEST = ROOT / "tests/test_workspace_rematch_round2.py"
@@ -112,6 +242,11 @@ def test_one_durability_sequence_cannot_satisfy_two_publications() -> None:
     findings = _atomic_replace_without_fsync("main_review/example.py", source)
     assert len(findings) == 1
     assert "temp_path" in findings[0].evidence
+
+
+def test_path_method_publication_remains_visible() -> None:
+    source = '''\ndef save(path, payload):\n    temporary = path.with_suffix(".tmp")\n    temporary.write_text(payload)\n    temporary.replace(path)\n'''
+    assert len(_atomic_replace_without_fsync("main_review/example.py", source)) == 1
 
 
 def test_separate_durable_handles_can_be_published_after_preparation() -> None:
@@ -185,5 +320,11 @@ def test_research_evidence_from_allowed_source_is_admitted() -> None:
     encoding="utf-8",
 )
 
-Path(__file__).unlink(missing_ok=True)
-(ROOT / ".github/workflows/build-workspace-rematch-round2.yml").unlink(missing_ok=True)
+for relative in (
+    "scripts/apply_workspace_rematch_round2_fixes.py",
+    ".github/workflows/build-workspace-rematch-round2.yml",
+    "scripts/postfix_workspace_rematch_product.py",
+    "scripts/apply_final_workspace_rematch.py",
+    ".github/workflows/apply-final-rematch-repair.yml",
+):
+    (ROOT / relative).unlink(missing_ok=True)
