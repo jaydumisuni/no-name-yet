@@ -7,6 +7,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+from .static_recovery_review import run_static_recovery_review
+
 
 def _safe_text(root: Path, relative: str) -> str:
     try:
@@ -114,11 +116,21 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
             }
         )
 
+    recovery = run_static_recovery_review(root_path, changed)
+    findings.extend(
+        dict(item)
+        for item in recovery.get("findings", [])
+        if isinstance(item, dict)
+    )
+    unique: dict[tuple[str, str], dict[str, Any]] = {}
+    for finding in findings:
+        unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
+
     return {
-        "schema_version": "sergeant.static-status-review.v1",
+        "schema_version": "sergeant.static-status-review.v2",
         "mode": "model_free_static",
-        "finding_count": len(findings),
-        "findings": findings,
+        "finding_count": len(unique),
+        "findings": list(unique.values()),
         "resource_writers": {
             resource_type: [
                 {"path": path, "line": line, "variable": variable}
@@ -126,5 +138,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
             ]
             for resource_type, rows in writers.items()
         },
+        "static_recovery_review": recovery,
         "executed_project_code": False,
     }
