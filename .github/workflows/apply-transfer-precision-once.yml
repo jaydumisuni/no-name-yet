@@ -1,0 +1,111 @@
+name: Apply Transfer Precision Once
+
+on:
+  push:
+    branches:
+      - certify-full-cloudflare-council-20260716
+
+permissions:
+  contents: write
+
+jobs:
+  apply-transfer-precision:
+    if: ${{ !contains(github.event.head_commit.message, 'Apply transfer precision correction') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: certify-full-cloudflare-council-20260716
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply narrow evidence-admission patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          council_path = Path('main_review/officer_council.py')
+          council = council_path.read_text(encoding='utf-8')
+          old_messages = '''_GENERIC_RISK_MESSAGES = {
+              "changed file is in a high-risk path.",
+              "high-risk path detected for review attention.",
+          }'''
+          new_messages = '''_GENERIC_RISK_MESSAGES = {
+              "changed file is in a high-risk path.",
+              "high-risk path detected for review attention.",
+              "potential tainted input path needs validation review.",
+              "user-controlled input appears near a risky sink.",
+          }'''
+          if old_messages not in council:
+              raise SystemExit('officer_council generic-message anchor changed')
+          council_path.write_text(council.replace(old_messages, new_messages, 1), encoding='utf-8')
+
+          policy_path = Path('main_review/capability_policy.py')
+          policy = policy_path.read_text(encoding='utf-8')
+          if 'import ast\n' not in policy:
+              policy = policy.replace('from __future__ import annotations\n\nimport re\n', 'from __future__ import annotations\n\nimport ast\nimport re\n', 1)
+
+          anchor = '''def _has_file_containment_guard(text: str) -> bool:
+              if FILE_GUARD_RE.search(text):
+                  return True
+              return bool(CANONICAL_PATH_RE.search(text) and CONTAINMENT_ASSERTION_RE.search(text))
+          '''
+          helper = '''def _has_file_containment_guard(text: str) -> bool:
+              if FILE_GUARD_RE.search(text):
+                  return True
+              return bool(CANONICAL_PATH_RE.search(text) and CONTAINMENT_ASSERTION_RE.search(text))
+
+
+          def _nearby_input_and_file_sink(scope: str, *, maximum_distance: int = 1200) -> bool:
+              sources = list(INPUT_SOURCE_RE.finditer(scope))
+              sinks = list(FILE_SINK_RE.finditer(scope))
+              return any(
+                  0 <= sink.start() - source.start() <= maximum_distance
+                  for source in sources
+                  for sink in sinks
+              )
+
+
+          def _has_local_input_file_access(relative: str, text: str) -> bool:
+              """Require request input and file access inside one bounded executable scope."""
+
+              if Path(relative).suffix.lower() != ".py":
+                  return _nearby_input_and_file_sink(text)
+              try:
+                  tree = ast.parse(text)
+              except SyntaxError:
+                  return _nearby_input_and_file_sink(text)
+              lines = text.splitlines(keepends=True)
+              for node in ast.walk(tree):
+                  if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                      continue
+                  start = getattr(node, "lineno", 1)
+                  end = getattr(node, "end_lineno", start)
+                  if _nearby_input_and_file_sink("".join(lines[start - 1:end])):
+                      return True
+              return False
+          '''
+          if '_has_local_input_file_access' not in policy:
+              if anchor not in policy:
+                  raise SystemExit('capability_policy containment anchor changed')
+              policy = policy.replace(anchor, helper, 1)
+
+          old_condition = 'if INPUT_SOURCE_RE.search(text) and FILE_SINK_RE.search(text) and not _has_file_containment_guard(text):'
+          new_condition = 'if _has_local_input_file_access(item, text) and not _has_file_containment_guard(text):'
+          if old_condition not in policy:
+              raise SystemExit('capability_policy file-flow condition changed')
+          policy = policy.replace(old_condition, new_condition, 1)
+          policy_path.write_text(policy, encoding='utf-8')
+
+          workflow = Path('.github/workflows/apply-transfer-precision-once.yml')
+          workflow.unlink()
+          PY
+
+      - name: Commit exact correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main_review/officer_council.py main_review/capability_policy.py .github/workflows/apply-transfer-precision-once.yml
+          git commit -m "Apply transfer precision correction"
+          git push origin HEAD:certify-full-cloudflare-council-20260716
