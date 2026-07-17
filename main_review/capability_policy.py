@@ -7,6 +7,7 @@ raw findings only when changed-source evidence proves a known risk shape.
 """
 from __future__ import annotations
 
+import ast
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -149,6 +150,36 @@ def _has_file_containment_guard(text: str) -> bool:
     return bool(CANONICAL_PATH_RE.search(text) and CONTAINMENT_ASSERTION_RE.search(text))
 
 
+def _nearby_input_and_file_sink(scope: str, *, maximum_distance: int = 1200) -> bool:
+    sources = list(INPUT_SOURCE_RE.finditer(scope))
+    sinks = list(FILE_SINK_RE.finditer(scope))
+    return any(
+        0 <= sink.start() - source.start() <= maximum_distance
+        for source in sources
+        for sink in sinks
+    )
+
+
+def _has_local_input_file_access(relative: str, text: str) -> bool:
+    """Require request input and file access inside one bounded executable scope."""
+
+    if Path(relative).suffix.lower() != ".py":
+        return _nearby_input_and_file_sink(text)
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return _nearby_input_and_file_sink(text)
+    lines = text.splitlines(keepends=True)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        start = getattr(node, "lineno", 1)
+        end = getattr(node, "end_lineno", start)
+        if _nearby_input_and_file_sink("".join(lines[start - 1:end])):
+            return True
+    return False
+
+
 def _changed_test_covering_target(root: Path | None, changed_files: list[object], target: object) -> str:
     if root is None or not isinstance(target, str) or not target:
         return ""
@@ -207,7 +238,7 @@ def _augment_security_findings(
         if not text:
             continue
 
-        if INPUT_SOURCE_RE.search(text) and FILE_SINK_RE.search(text) and not _has_file_containment_guard(text):
+        if _has_local_input_file_access(item, text) and not _has_file_containment_guard(text):
             if not _finding_exists(findings, "data_flow", item, "file access"):
                 findings.append({
                     "capability": "data_flow",

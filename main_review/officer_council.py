@@ -46,6 +46,8 @@ OFFICER_BY_CAPABILITY = {
 _GENERIC_RISK_MESSAGES = {
     "changed file is in a high-risk path.",
     "high-risk path detected for review attention.",
+    "potential tainted input path needs validation review.",
+    "user-controlled input appears near a risky sink.",
 }
 
 
