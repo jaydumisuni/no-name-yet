@@ -137,7 +137,7 @@ def _patch_process_lock_detector() -> None:
         r"def _process_local_file_lock\(path: str, text: str\) -> list\[FieldFinding\]:\n"
         r"[\s\S]*?(?=def _generic_quota_429\()"
     )
-    text, count = pattern.subn(replacement, text, count=1)
+    text, count = pattern.subn(lambda _: replacement, text, count=1)
     if count != 1:
         raise RuntimeError(f"expected one process-lock detector, replaced {count}")
     path.write_text(text, encoding="utf-8")
