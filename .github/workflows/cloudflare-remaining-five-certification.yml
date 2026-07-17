@@ -58,7 +58,6 @@ jobs:
 
   certify-remaining-five:
     needs: validate-candidate
-    if: ${{ vars.SERGEANT_CLOUDFLARE_LIVE_CERTIFICATION_ENABLED == 'true' }}
     environment: sergeant-cloudflare-certification
     runs-on: ubuntu-latest
     timeout-minutes: 55
