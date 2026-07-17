@@ -1,0 +1,36 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "rust-path-traversal",
+  "title": "Rust request path is joined without containment",
+  "expected_verdict": "REQUEST_CHANGES",
+  "changed_files": ["src/files.rs", "tests/files.rs"],
+  "expected_findings": [
+    {
+      "id": "rust-file-data-flow",
+      "category": "data_flow",
+      "severity": "major",
+      "paths": ["src/files.rs"],
+      "line_start": 6,
+      "line_end": 6,
+      "root_cause": "unsafe-file-access",
+      "keywords": ["request", "path", "containment", "file"]
+    },
+    {
+      "id": "rust-file-security",
+      "category": "security_taint",
+      "severity": "major",
+      "paths": ["src/files.rs"],
+      "line_start": 6,
+      "line_end": 6,
+      "root_cause": "unsafe-file-access",
+      "keywords": ["path", "input", "file", "validation"]
+    }
+  ],
+  "files": [
+    {"path": "Cargo.toml", "content": "[package]\nname = \"files-service\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"},
+    {"path": "README.md", "content": "# Rust files service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: cargo test\n"},
+    {"path": "src/files.rs", "content": "use std::fs;\nuse std::path::Path;\n\npub fn download(requested: &str) -> std::io::Result<Vec<u8>> {\n    let root = Path::new(\"/srv/files\");\n    fs::read(root.join(requested))\n}\n"},
+    {"path": "tests/files.rs", "content": "#[test]\nfn download_symbol_exists() { let _ = files_service::download; }\n"}
+  ]
+}

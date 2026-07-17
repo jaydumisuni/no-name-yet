@@ -7,10 +7,13 @@ raw findings only when changed-source evidence proves a known risk shape.
 """
 from __future__ import annotations
 
+import ast
 import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+from .languages import classify_role
 
 IMPACT_ONLY_CAPABILITIES = {"call_graph", "cross_file"}
 EVALUATION_PREFIXES = ("review-benchmarks/", "battle-tests/")
@@ -21,18 +24,28 @@ SECURITY_SOURCE_SUFFIXES = {
 }
 DEMONSTRATED_SECURITY_SINK_RE = re.compile(
     r"(?:\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\.|"
-    r"\bchild_process\.exec\s*\(|\bcp\.exec\s*\(|\bquery\s*\(|\bexecute\s*\(|"
-    r"\braw\s*\(|\binnerHTML\b|\bdangerouslySetInnerHTML\b|\bshell\s*[:=]\s*true\b)",
+    r"\bchild_process\.exec\s*\(|\bcp\.exec\s*\(|"
+    r"\b(?:db|database|conn|connection|tx|stmt)\.(?:query|queryContext|execute|execContext)\s*\(|"
+    r"(?<![.\w])(?:query|queryContext|execute|execContext)\s*\(|"
+    r"\braw\s*\(|\binnerHTML\b|\bdangerouslySetInnerHTML\b|\bshell\s*[:=]\s*true\b|"
+    r"\bRuntime\.getRuntime\(\)\.exec\s*\(|\bProcessBuilder\s*\(|\bProcess\.Start\s*\(|"
+    r"\b(?:std::)?fs::read\s*\(|\bFile::open\s*\(|\bFiles?\.(?:read|readAllBytes|open)\s*\()",
     re.I,
 )
 INPUT_SOURCE_RE = re.compile(
-    r"\b(?:req\.(?:body|query|params)|request\.(?:json|args|form|params)|input\s*\(|process\.env)\b",
+    r"(?:\breq\.(?:body|query|params)\b|\brequest\.(?:json|args|form|params)\b|"
+    r"\binput\s*\(|\bprocess\.env\b|\b(?:r|request)\.URL\.Query\(\)\.Get\s*\(|"
+    r"\b(?:r|request)\.FormValue\s*\(|\b(?:c|ctx|context)\.(?:Query|Param|FormValue)\s*\(|"
+    r"@(?:RequestParam|PathVariable)\b|\b(?:request|req)\.getParameter\s*\(|"
+    r"\bparams\s*\[|\brequested\s*:\s*&(?:'\w+\s+)?str\b)",
     re.I,
 )
 NON_QUERY_SENSITIVE_SINK_RE = re.compile(
     r"(?:\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\.|\bchild_process\.exec\s*\(|"
     r"\bcp\.exec\s*\(|\braw\s*\(|\binnerHTML\b|\bdangerouslySetInnerHTML\b|\bshell\s*[:=]\s*true\b|"
-    r"\b(?:open|send_file|send_from_directory)\s*\()",
+    r"\b(?:open|send_file|send_from_directory)\s*\(|\b(?:std::)?fs::read\s*\(|"
+    r"\bFile::open\s*\(|\bFiles?\.(?:read|readAllBytes|open)\s*\(|"
+    r"\bRuntime\.getRuntime\(\)\.exec\s*\(|\bProcessBuilder\s*\(|\bProcess\.Start\s*\()",
     re.I,
 )
 PARAMETERIZED_QUERY_RE = re.compile(
@@ -40,27 +53,44 @@ PARAMETERIZED_QUERY_RE = re.compile(
     r"(?:(?!\1)[\s\S]){0,500}\1\s*,",
     re.I,
 )
-FILE_SINK_RE = re.compile(r"\b(?:open|send_file|send_from_directory)\s*\(", re.I)
+FILE_SINK_RE = re.compile(
+    r"(?:\b(?:open|send_file|send_from_directory)\s*\(|\b(?:std::)?fs::read\s*\(|"
+    r"\bFile::open\s*\(|\bFiles?\.(?:read|readAllBytes|open)\s*\()",
+    re.I,
+)
 FILE_GUARD_RE = re.compile(
     r"\b(?:resolve|is_relative_to|secure_filename|basename|commonpath|normalize_repository_path)\b",
     re.I,
 )
+CANONICAL_PATH_RE = re.compile(r"\b(?:canonicalize|toRealPath|getCanonicalPath)\b", re.I)
+CONTAINMENT_ASSERTION_RE = re.compile(
+    r"\b(?:strip_prefix|starts_with|startsWith|is_relative_to|commonpath)\b",
+    re.I,
+)
 PRIVILEGED_ROUTE_RE = re.compile(
-    r"\b(?:app|router)\.(?:get|post|put|patch|delete)\s*\(\s*[\"']/(?:admin|internal|manage|staff)(?:/|[\"'])",
+    r"(?:\b(?:app|router)\.(?:get|post|put|patch|delete)\s*\(\s*[\"']/(?:admin|internal|manage|staff)(?:/|[\"'])|"
+    r"@(?:Get|Post|Put|Patch|Delete|Request)Mapping\s*\(\s*(?:value\s*=\s*)?[\"']/(?:admin|internal|manage|staff)(?:/|[\"'])|"
+    r"\[(?:HttpGet|HttpPost|HttpPut|HttpPatch|HttpDelete|Route)\s*\(\s*[\"']/(?:admin|internal|manage|staff)(?:/|[\"'])|"
+    r"\b(?:get|post|put|patch|delete)\s+[\"']/(?:admin|internal|manage|staff)(?:/|[\"']))",
     re.I,
 )
 AUTH_GUARD_RE = re.compile(
     r"\b(?:authorize|authorization|permission|permissions|role|roles|is_admin|current_user|requires_role|"
-    r"login_required|jwt|scope|scopes|auth_guard)\b",
+    r"login_required|jwt|scope|scopes|auth_guard|PreAuthorize|Secured|Authorize|hasRole|hasAuthority)\b",
     re.I,
 )
 _LINE_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "security_taint": (FILE_SINK_RE, PRIVILEGED_ROUTE_RE, DEMONSTRATED_SECURITY_SINK_RE),
     "data_flow": (FILE_SINK_RE, DEMONSTRATED_SECURITY_SINK_RE),
-    "performance": (re.compile(r"\bfor\b"), re.compile(r"\.map\s*\(")),
+    "performance": (re.compile(r"\bfor\b"), re.compile(r"\.map\s*\("), re.compile(r"\.each\s+do\b")),
     "concurrency": (
+        re.compile(
+            r"\b(?:global[A-Za-z0-9_]*|shared[A-Za-z0-9_]*|[A-Za-z0-9_]*(?:counter|cache|state))"
+            r"\s*(?:\+\+|--|[+\-*/]=)",
+            re.I,
+        ),
         re.compile(r"\basyncio\.create_task\b|\bPromise\.all\b|\bsetTimeout\b|\bsetInterval\b"),
-        re.compile(r"\bglobal\b|\bshared\b|\bcounter\b|\bcache\b|\bstate\b", re.I),
+        re.compile(r"\bTask\.(?:Run|Yield|WhenAll)\b|\btokio::spawn\b|\bThread\.new\b", re.I),
     ),
     "api_contract": (re.compile(r"\b(?:app|router)\.(?:get|post|put|patch|delete)\s*\("),),
     "architecture": (re.compile(r"^\s*(?:from|import)\s+", re.M),),
@@ -98,13 +128,7 @@ def _is_evaluation_path(relative: str) -> bool:
 
 
 def _is_test_path(relative: str) -> bool:
-    path = Path(relative)
-    lowered = relative.lower()
-    return (
-        lowered.startswith(("tests/", "test/"))
-        or path.name.lower().startswith("test_")
-        or path.name.lower().endswith(("_test.py", ".test.js", ".test.ts", ".spec.js", ".spec.ts"))
-    )
+    return classify_role(relative) == "test"
 
 
 def _is_security_source_path(relative: str) -> bool:
@@ -118,6 +142,42 @@ def _is_security_source_path(relative: str) -> bool:
     """
 
     return Path(relative.replace("\\", "/")).suffix.lower() in SECURITY_SOURCE_SUFFIXES
+
+
+def _has_file_containment_guard(text: str) -> bool:
+    if FILE_GUARD_RE.search(text):
+        return True
+    return bool(CANONICAL_PATH_RE.search(text) and CONTAINMENT_ASSERTION_RE.search(text))
+
+
+def _nearby_input_and_file_sink(scope: str, *, maximum_distance: int = 1200) -> bool:
+    sources = list(INPUT_SOURCE_RE.finditer(scope))
+    sinks = list(FILE_SINK_RE.finditer(scope))
+    return any(
+        0 <= sink.start() - source.start() <= maximum_distance
+        for source in sources
+        for sink in sinks
+    )
+
+
+def _has_local_input_file_access(relative: str, text: str) -> bool:
+    """Require request input and file access inside one bounded executable scope."""
+
+    if Path(relative).suffix.lower() != ".py":
+        return _nearby_input_and_file_sink(text)
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return _nearby_input_and_file_sink(text)
+    lines = text.splitlines(keepends=True)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        start = getattr(node, "lineno", 1)
+        end = getattr(node, "end_lineno", start)
+        if _nearby_input_and_file_sink("".join(lines[start - 1:end])):
+            return True
+    return False
 
 
 def _changed_test_covering_target(root: Path | None, changed_files: list[object], target: object) -> str:
@@ -138,9 +198,11 @@ def _changed_test_covering_target(root: Path | None, changed_files: list[object]
 def _first_matching_line(text: str, patterns: tuple[re.Pattern[str], ...]) -> int | None:
     if not text:
         return None
-    for number, line in enumerate(text.splitlines(), start=1):
-        if any(pattern.search(line) for pattern in patterns):
-            return number
+    lines = text.splitlines()
+    for pattern in patterns:
+        for number, line in enumerate(lines, start=1):
+            if pattern.search(line):
+                return number
     return None
 
 
@@ -176,7 +238,7 @@ def _augment_security_findings(
         if not text:
             continue
 
-        if INPUT_SOURCE_RE.search(text) and FILE_SINK_RE.search(text) and not FILE_GUARD_RE.search(text):
+        if _has_local_input_file_access(item, text) and not _has_file_containment_guard(text):
             if not _finding_exists(findings, "data_flow", item, "file access"):
                 findings.append({
                     "capability": "data_flow",
@@ -253,7 +315,8 @@ def normalize_capability_review(packet: dict[str, Any], root: str | Path | None 
         if not isinstance(finding, dict):
             continue
         capability = str(finding.get("capability", ""))
-        severity = str(finding.get("severity", ""))
+        severity = str(finding.get("severity") or "unknown").lower()
+        finding["severity"] = severity
         path = str(finding.get("path") or "")
         text = _annotate_location(finding, root_path)
 

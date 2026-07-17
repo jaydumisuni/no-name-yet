@@ -128,6 +128,39 @@ def test_prediction_extraction_deduplicates_same_finding() -> None:
     assert len(predictions) == 1
 
 
+def test_prediction_extraction_uses_canonical_officer_ledger_when_present() -> None:
+    admitted = {
+        "capability": "security_taint",
+        "severity": "major",
+        "message": "Grounded command injection.",
+        "evidence": "Input reaches a shell sink.",
+        "path": "src/jobs.py",
+        "line_start": 8,
+        "admission": "actionable",
+    }
+    rejected = {
+        "capability": "security_taint",
+        "severity": "major",
+        "message": "Rejected scanner guess.",
+        "path": "src/jobs.py",
+        "line_start": 1,
+    }
+    packet = _empty_packet("REQUEST_CHANGES")
+    packet["capability_review"] = {"findings": [rejected]}
+    packet["officer_council"] = {
+        "admitted_findings": [admitted],
+        "advisory_findings": [],
+        "rejected_findings": [rejected],
+    }
+
+    predictions, valid_count = extract_predictions(packet)
+
+    assert valid_count == 1
+    assert len(predictions) == 1
+    assert predictions[0]["source"] == "officer-council"
+    assert predictions[0]["message"] == admitted["message"]
+
+
 def test_filtered_note_does_not_inflate_duplicate_denominator(monkeypatch: pytest.MonkeyPatch) -> None:
     finding = {
         "capability": "data_flow",

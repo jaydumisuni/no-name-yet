@@ -1,0 +1,15 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "ruby-linear-loop",
+  "title": "Ruby report performs one linear pass",
+  "expected_verdict": "APPROVE",
+  "changed_files": ["lib/report.rb", "spec/report_spec.rb"],
+  "expected_findings": [],
+  "files": [
+    {"path": "Gemfile", "content": "source 'https://rubygems.org'\ngem 'rspec'\n"},
+    {"path": "README.md", "content": "# Ruby reports service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: bundle exec rspec\n"},
+    {"path": "lib/report.rb", "content": "class Report\n  def self.labels(rows)\n    rows.map { |row| row.to_s }\n  end\nend\n"},
+    {"path": "spec/report_spec.rb", "content": "RSpec.describe Report do\n  it('returns labels') { expect(Report.labels([1])).to eq(['1']) }\nend\n"}
+  ]
+}

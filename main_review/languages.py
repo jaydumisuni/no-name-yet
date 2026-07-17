@@ -6,6 +6,7 @@ later AI/review layers useful context even before deep AST analyzers exist.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -72,6 +73,12 @@ ROLE_BY_NAME = {
     "build.gradle": "manifest",
     "settings.gradle": "manifest",
     "pubspec.yaml": "manifest",
+    "composer.json": "manifest",
+    "package.swift": "manifest",
+    "cmakelists.txt": "manifest",
+    "makefile": "manifest",
+    "mix.exs": "manifest",
+    "build.sbt": "manifest",
     "renv.lock": "lockfile",
     "package-lock.json": "lockfile",
     "yarn.lock": "lockfile",
@@ -79,6 +86,8 @@ ROLE_BY_NAME = {
     "poetry.lock": "lockfile",
     "cargo.lock": "lockfile",
 }
+
+MANIFEST_SUFFIXES = (".csproj", ".fsproj", ".vbproj", ".sln")
 
 RISKY_DIR_PARTS = {
     ".github",
@@ -116,8 +125,14 @@ TEST_SUFFIXES = (
     "-test.ts",
     "-spec.js",
     "-spec.ts",
+    "_spec.rb",
+    ".spec.rb",
+    "_test.php",
 )
 TEST_PREFIXES = ("test_", "test-", "spec_", "spec-")
+NATIVE_TEST_CLASS_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*(?:Test|Tests)\.(?:java|kt|kts|cs|swift)$"
+)
 
 
 def detect_language(path: str | Path) -> str:
@@ -128,8 +143,13 @@ def detect_language(path: str | Path) -> str:
     return _EXTENSION_INDEX.get(p.suffix.lower(), LanguageSpec("Unknown")).name
 
 
-def _looks_like_test_file(name_key: str) -> bool:
-    return name_key.startswith(TEST_PREFIXES) or name_key.endswith(TEST_SUFFIXES)
+def _looks_like_test_file(name: str) -> bool:
+    name_key = name.lower()
+    return (
+        name_key.startswith(TEST_PREFIXES)
+        or name_key.endswith(TEST_SUFFIXES)
+        or bool(NATIVE_TEST_CLASS_RE.fullmatch(name))
+    )
 
 
 def classify_role(path: str | Path) -> str:
@@ -139,7 +159,9 @@ def classify_role(path: str | Path) -> str:
 
     if name_key in ROLE_BY_NAME:
         return ROLE_BY_NAME[name_key]
-    if parts & TEST_DIR_PARTS or _looks_like_test_file(name_key):
+    if name_key.endswith(MANIFEST_SUFFIXES):
+        return "manifest"
+    if parts & TEST_DIR_PARTS or _looks_like_test_file(p.name):
         return "test"
     if parts & DOC_DIR_PARTS or p.suffix.lower() in {".md", ".mdx", ".rst"}:
         return "documentation"

@@ -1,0 +1,15 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "go-parameterized-sql",
+  "title": "Go request value uses a bound SQL parameter",
+  "expected_verdict": "APPROVE",
+  "changed_files": ["internal/users.go", "internal/users_test.go"],
+  "expected_findings": [],
+  "files": [
+    {"path": "go.mod", "content": "module example.com/users\n\ngo 1.23\n"},
+    {"path": "README.md", "content": "# Go users service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: go test ./...\n"},
+    {"path": "internal/users.go", "content": "package internal\n\nimport (\n  \"database/sql\"\n  \"net/http\"\n)\n\nfunc UserByID(db *sql.DB, r *http.Request) (*sql.Rows, error) {\n  id := r.URL.Query().Get(\"id\")\n  return db.Query(\"SELECT * FROM users WHERE id = $1\", id)\n}\n"},
+    {"path": "internal/users_test.go", "content": "package internal\n\nimport \"testing\"\nfunc TestUserByIDExists(t *testing.T) { _ = UserByID }\n"}
+  ]
+}

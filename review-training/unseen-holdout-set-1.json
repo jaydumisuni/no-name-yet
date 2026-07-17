@@ -1,0 +1,50 @@
+{
+  "schema_version": "sergeant.review-training.v1",
+  "set_id": "unseen-holdout-set-1",
+  "purpose": "Final untouched static holdout before the model-free battle-readiness decision. No detector changes are permitted before scoring.",
+  "rules": {
+    "models_enabled": false,
+    "workspace_default": "none",
+    "expected_defects_visible_to_sergeant": false,
+    "runtime_is_confirmation_not_discovery": true,
+    "training_changes_allowed_before_scoring": false
+  },
+  "cases": [
+    {
+      "case_id": "volsync-json-roundtrip-field-loss",
+      "repository": "falconizmi/volsync",
+      "defective_ref": "51d41534a5b38b1274b7bfbf03b05caec6d2775b",
+      "source_pr": 3,
+      "checkout_path": "holdout-cases/volsync",
+      "changed_files": [
+        "internal/controller/mover/syncthing/api/connection.go",
+        "internal/controller/mover/syncthing/api/types.go",
+        "internal/controller/mover/syncthing/syncthing.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "controller-reliability-swallowed-conflict",
+      "repository": "Johnfv5nk/Controller-reliability",
+      "defective_ref": "f90b3e490bffcba7e3dd69881840580b59680fe7",
+      "source_pr": 2,
+      "checkout_path": "holdout-cases/controller-reliability",
+      "changed_files": [
+        "internal/controller/reliability_controller.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "odoo-stale-job-infinite-reclaim",
+      "repository": "OpenSPP/odoo-job-worker",
+      "defective_ref": "6cf0f5f6527a896e0ae950b178df6369001f0d6f",
+      "source_pr": 15,
+      "checkout_path": "holdout-cases/odoo-job-worker",
+      "changed_files": [
+        "job_worker/cli/worker.py",
+        "job_worker/exception.py"
+      ],
+      "workspace_policy": "static_first"
+    }
+  ]
+}

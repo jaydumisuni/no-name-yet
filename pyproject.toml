@@ -64,6 +64,20 @@ packages = ["main_review"]
   "review-benchmarks/blind/ui-backend-boundary.json",
   "review-benchmarks/blind/unsafe-sql-data-flow.json",
 ]
+"share/sergeant/review-benchmarks/multilanguage" = [
+  "review-benchmarks/multilanguage/csharp-atomic-counter.json",
+  "review-benchmarks/multilanguage/csharp-shared-counter.json",
+  "review-benchmarks/multilanguage/go-parameterized-sql.json",
+  "review-benchmarks/multilanguage/go-unsafe-sql.json",
+  "review-benchmarks/multilanguage/java-admin-authorization.json",
+  "review-benchmarks/multilanguage/java-admin-authorized.json",
+  "review-benchmarks/multilanguage/ruby-linear-loop.json",
+  "review-benchmarks/multilanguage/ruby-nested-loop.json",
+  "review-benchmarks/multilanguage/rust-contained-path.json",
+  "review-benchmarks/multilanguage/rust-path-traversal.json",
+  "review-benchmarks/multilanguage/typescript-command-clean.json",
+  "review-benchmarks/multilanguage/typescript-command-injection.json",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

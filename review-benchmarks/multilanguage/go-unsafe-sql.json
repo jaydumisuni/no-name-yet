@@ -1,0 +1,36 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "go-unsafe-sql",
+  "title": "Go request value is concatenated into SQL",
+  "expected_verdict": "REQUEST_CHANGES",
+  "changed_files": ["internal/users.go", "internal/users_test.go"],
+  "expected_findings": [
+    {
+      "id": "go-unsafe-sql-data-flow",
+      "category": "data_flow",
+      "severity": "major",
+      "paths": ["internal/users.go"],
+      "line_start": 10,
+      "line_end": 10,
+      "root_cause": "unsafe-data-flow",
+      "keywords": ["request", "sql", "parameter", "query"]
+    },
+    {
+      "id": "go-unsafe-sql-security",
+      "category": "security_taint",
+      "severity": "major",
+      "paths": ["internal/users.go"],
+      "line_start": 10,
+      "line_end": 10,
+      "root_cause": "unsafe-data-flow",
+      "keywords": ["input", "query", "validation", "sensitive"]
+    }
+  ],
+  "files": [
+    {"path": "go.mod", "content": "module example.com/users\n\ngo 1.23\n"},
+    {"path": "README.md", "content": "# Go users service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: go test ./...\n"},
+    {"path": "internal/users.go", "content": "package internal\n\nimport (\n  \"database/sql\"\n  \"net/http\"\n)\n\nfunc UserByID(db *sql.DB, r *http.Request) (*sql.Rows, error) {\n  id := r.URL.Query().Get(\"id\")\n  return db.Query(\"SELECT * FROM users WHERE id = \" + id)\n}\n"},
+    {"path": "internal/users_test.go", "content": "package internal\n\nimport \"testing\"\nfunc TestUserByIDExists(t *testing.T) { _ = UserByID }\n"}
+  ]
+}

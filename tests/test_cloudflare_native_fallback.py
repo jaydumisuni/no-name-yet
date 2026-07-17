@@ -60,7 +60,7 @@ def test_generic_provider_does_not_use_cloudflare_fallback(monkeypatch) -> None:
 def test_reasoning_models_receive_larger_proof_budget() -> None:
     assert model_proof_output_tokens("@cf/qwen/qwen3-30b-a3b-fp8") == 900
     assert model_proof_output_tokens("@cf/zai-org/glm-4.7-flash") == 900
-    assert model_proof_output_tokens("@cf/qwen/qwen2.5-coder-32b-instruct") == 384
+    assert model_proof_output_tokens("@cf/qwen/qwen2.5-coder-32b-instruct") == 900
 
 
 def test_dual_route_error_does_not_echo_upstream_body(monkeypatch) -> None:

@@ -26,6 +26,11 @@ from .cloudflare_models import (
     is_cloudflare_provider,
     public_base_url,
 )
+from .cloudflare_usage import (
+    CloudflareUsageError,
+    mark_cloudflare_quota_blocked,
+    reserve_cloudflare_request,
+)
 
 LLMProtocol = Literal["responses", "chat_completions"]
 LLMPolicy = Literal["preferred", "required", "disabled"]
@@ -240,6 +245,56 @@ def _load_json_response(request: urllib.request.Request, timeout: float) -> dict
     return payload
 
 
+def is_cloudflare_quota_error(error: BaseException) -> bool:
+    """Return whether an error represents the Workers AI daily-allocation limit."""
+
+    message = str(error).lower()
+    return bool(
+        "code 4006" in message
+        or '"code":4006' in message
+        or "daily free allocation" in message
+        or "daily allocation is exhausted" in message
+        or "quota circuit is open" in message
+    )
+
+
+def is_http_rate_limit_error(error: BaseException) -> bool:
+    """Return whether the provider rejected a request with generic HTTP 429."""
+
+    return "http 429" in str(error).lower()
+
+
+def _load_model_response(
+    route: LLMRoute,
+    request: urllib.request.Request,
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    stage: str,
+) -> dict[str, Any]:
+    if is_cloudflare_provider(route.provider):
+        try:
+            reserve_cloudflare_request(
+                model=route.model,
+                input_chars=len(system_prompt) + len(user_prompt),
+                max_output_tokens=route.max_output_tokens,
+                stage=stage,
+            )
+        except CloudflareUsageError as error:
+            raise LLMProviderError(str(error)) from error
+    try:
+        return _load_json_response(request, route.timeout_seconds)
+    except LLMProviderError as error:
+        if is_cloudflare_provider(route.provider) and is_cloudflare_quota_error(error):
+            state = mark_cloudflare_quota_blocked()
+            reset_at = str(state.get("reset_at") or "the next UTC day")
+            raise LLMProviderError(
+                "Cloudflare daily inference allocation is exhausted "
+                f"(HTTP 429 / code 4006); quota circuit opened until {reset_at}."
+            ) from error
+        raise
+
+
 def list_models(base_url: str, *, api_key: str = "", timeout_seconds: float = 3.0) -> tuple[str, ...]:
     request = urllib.request.Request(
         f"{_normalize_base_url(base_url)}/models",
@@ -377,13 +432,15 @@ def _response_shape(payload: dict[str, Any]) -> str:
 def _text_value(value: object) -> str:
     if isinstance(value, str) and value.strip():
         return value
+    if isinstance(value, dict):
+        for key in ("text", "content", "value", "response", "output"):
+            text = _text_value(value.get(key))
+            if text:
+                return text
+        return ""
     if isinstance(value, list):
-        parts = [
-            str(item.get("text", ""))
-            for item in value
-            if isinstance(item, dict) and isinstance(item.get("text"), str) and item.get("text")
-        ]
-        return "\n".join(parts)
+        parts = [_text_value(item) for item in value]
+        return "\n".join(part for part in parts if part)
     return ""
 
 
@@ -394,21 +451,22 @@ def _extract_text(payload: dict[str, Any], protocol: LLMProtocol) -> str:
             first = choices[0]
             message = first.get("message", {})
             if isinstance(message, dict):
-                content = _text_value(message.get("content"))
-                if content:
-                    return content
+                for key in ("content", "reasoning_content", "reasoning", "analysis"):
+                    content = _text_value(message.get(key))
+                    if content:
+                        return content
             choice_text = _text_value(first.get("text"))
             if choice_text:
                 return choice_text
 
-    for key in ("response", "output_text", "generated_text", "text"):
+    for key in ("response", "output_text", "generated_text", "text", "reasoning_content", "reasoning", "analysis"):
         value = _text_value(payload.get(key))
         if value:
             return value
 
     result = payload.get("result")
     if isinstance(result, dict):
-        for key in ("response", "output_text", "generated_text", "text", "output"):
+        for key in ("response", "output_text", "generated_text", "text", "output", "reasoning_content", "reasoning", "analysis"):
             value = _text_value(result.get(key))
             if value:
                 return value
@@ -432,6 +490,13 @@ def _extract_text(payload: dict[str, Any], protocol: LLMProtocol) -> str:
         f"Response shape: {_response_shape(payload)}"
     )
 
+
+def _json_candidate_score(payload: dict[str, Any]) -> int:
+    keys = {str(key) for key in payload}
+    important = {"verdict", "findings", "coverage", "status", "model", "capabilities"}
+    return len(keys & important) * 10
+
+
 def _parse_json_text(text: str) -> dict[str, Any]:
     candidate = text.strip()
     if candidate.startswith("```"):
@@ -444,14 +509,23 @@ def _parse_json_text(text: str) -> dict[str, Any]:
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError:
-        start = candidate.find("{")
-        end = candidate.rfind("}")
-        if start < 0 or end <= start:
-            raise LLMProviderError("Cpl model output did not contain a JSON object.") from None
-        try:
-            payload = json.loads(candidate[start : end + 1])
-        except json.JSONDecodeError as error:
-            raise LLMProviderError("Cpl model output contained invalid JSON.") from error
+        decoder = json.JSONDecoder()
+        objects: list[tuple[int, dict[str, Any]]] = []
+        for index, character in enumerate(candidate):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(candidate[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                objects.append((index, value))
+        if not objects:
+            raise LLMProviderError("Cpl model output did not contain a parseable JSON object.") from None
+        payload = max(
+            objects,
+            key=lambda item: (_json_candidate_score(item[1]), item[0]),
+        )[1]
     if not isinstance(payload, dict):
         raise LLMProviderError("Cpl model output JSON must be an object.")
     return payload
@@ -487,7 +561,13 @@ def _invoke_cloudflare_native_text(
         headers=_request_headers(route.api_key),
         method="POST",
     )
-    response = _load_json_response(request, route.timeout_seconds)
+    response = _load_model_response(
+        route,
+        request,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        stage="native_fallback",
+    )
     return _extract_text(response, "chat_completions")
 
 
@@ -524,9 +604,20 @@ def invoke_json(route: LLMRoute, *, system_prompt: str, user_prompt: str) -> dic
         method="POST",
     )
     try:
-        response = _load_json_response(request, route.timeout_seconds)
+        response = _load_model_response(
+            route,
+            request,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            stage="openai_compatible",
+        )
     except LLMProviderError as first_error:
-        if route.protocol != "chat_completions" or "response_format" not in body:
+        if (
+            is_cloudflare_quota_error(first_error)
+            or is_http_rate_limit_error(first_error)
+            or route.protocol != "chat_completions"
+            or "response_format" not in body
+        ):
             raise
         body.pop("response_format", None)
         retry = urllib.request.Request(
@@ -536,13 +627,21 @@ def invoke_json(route: LLMRoute, *, system_prompt: str, user_prompt: str) -> dic
             method="POST",
         )
         try:
-            response = _load_json_response(retry, route.timeout_seconds)
-        except LLMProviderError:
+            response = _load_model_response(
+                route,
+                retry,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                stage="openai_compatible_without_response_format",
+            )
+        except LLMProviderError as retry_error:
+            if is_cloudflare_quota_error(retry_error):
+                raise
             raise first_error
 
     try:
         return _parse_json_text(_extract_text(response, route.protocol))
-    except LLMProviderError as compatible_error:
+    except LLMProviderError:
         if not is_cloudflare_provider(route.provider):
             raise
         try:
@@ -553,6 +652,8 @@ def invoke_json(route: LLMRoute, *, system_prompt: str, user_prompt: str) -> dic
             )
             return _parse_json_text(native_text)
         except LLMProviderError as native_error:
+            if is_cloudflare_quota_error(native_error):
+                raise
             raise LLMProviderError(
                 "Cloudflare OpenAI-compatible and native model routes both failed without a parseable JSON response."
             ) from native_error

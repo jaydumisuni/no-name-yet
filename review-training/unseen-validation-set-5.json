@@ -1,0 +1,52 @@
+{
+  "schema_version": "sergeant.review-training.v1",
+  "set_id": "unseen-validation-set-5",
+  "purpose": "Final untouched transfer holdout before the model-free battle-readiness decision. Covers transient cache visibility, API-key authorization integration, and durable index rebuild behavior. No detector changes before scoring.",
+  "rules": {
+    "models_enabled": false,
+    "workspace_default": "none",
+    "expected_defects_visible_to_sergeant": false,
+    "runtime_is_confirmation_not_discovery": true,
+    "training_changes_allowed_before_scoring": false
+  },
+  "cases": [
+    {
+      "case_id": "kgateway-transient-notfound-drops-status",
+      "repository": "kgateway-dev/kgateway",
+      "defective_ref": "c5a8158e9b1985372e39e4a7395fe4bf1da71329",
+      "source_pr": 14414,
+      "checkout_path": "validation5-cases/kgateway",
+      "changed_files": [
+        "pkg/kgateway/proxy_syncer/status_syncer.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "cudly-user-api-key-scope-not-enforced",
+      "repository": "LeanerCloud/CUDly",
+      "defective_ref": "27fdb06b5787f8e9a528a5c136ef36382603d031",
+      "source_pr": 1226,
+      "checkout_path": "validation5-cases/cudly",
+      "changed_files": [
+        "internal/api/handler.go",
+        "internal/api/types.go",
+        "internal/auth/service_apikeys_api.go",
+        "internal/server/app.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "obsidian-index-rebuild-durability",
+      "repository": "fakechris/obsidian_vault_pipeline",
+      "defective_ref": "2c5fb7316f956ea99d2a849a0e33473b092e2cdc",
+      "source_pr": 3,
+      "checkout_path": "validation5-cases/obsidian-vault-pipeline",
+      "changed_files": [
+        "src/openclaw_pipeline/knowledge_index.py",
+        "src/openclaw_pipeline/runtime.py",
+        "src/openclaw_pipeline/unified_pipeline_enhanced.py"
+      ],
+      "workspace_policy": "static_first"
+    }
+  ]
+}

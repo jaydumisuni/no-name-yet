@@ -1,0 +1,50 @@
+{
+  "schema_version": "sergeant.review-training.v1",
+  "set_id": "unseen-validation-set-1",
+  "purpose": "Fresh static validation after development-set learning. No detector changes are permitted before these reports are frozen and scored.",
+  "rules": {
+    "models_enabled": false,
+    "workspace_default": "none",
+    "expected_defects_visible_to_sergeant": false,
+    "runtime_is_confirmation_not_discovery": true,
+    "training_changes_allowed_before_scoring": false
+  },
+  "cases": [
+    {
+      "case_id": "praison-browser-session-lifecycle",
+      "repository": "MervinPraison/PraisonAI",
+      "defective_ref": "254f1ef7e4e45a9646d69abbd090fbdd83920f32",
+      "source_pr": 3119,
+      "checkout_path": "validation-cases/praisonai",
+      "changed_files": [
+        "src/praisonai-browser/praisonai_browser/server.py",
+        "src/praisonai-browser/praisonai_browser/sessions.py",
+        "src/praisonai-browser/tests/browser/test_server.py"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "trustee-reconcile-order-stability",
+      "repository": "openshift/trustee-operator",
+      "defective_ref": "1ca882e36f3e99a43039514bde052100b1b5311b",
+      "source_pr": 365,
+      "checkout_path": "validation-cases/trustee-operator",
+      "changed_files": [
+        "internal/controller/trusteeconfig_controller.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "glaze-lazy-parser-boundary",
+      "repository": "stephenberry/glaze",
+      "defective_ref": "c68755a52845b02bda01e2ef7287bdf5385b5523",
+      "source_pr": 2708,
+      "checkout_path": "validation-cases/glaze",
+      "changed_files": [
+        "include/glaze/json/lazy.hpp",
+        "tests/json_test/lazy_test.cpp"
+      ],
+      "workspace_policy": "static_first"
+    }
+  ]
+}

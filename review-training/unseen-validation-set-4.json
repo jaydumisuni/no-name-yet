@@ -1,0 +1,49 @@
+{
+  "schema_version": "sergeant.review-training.v1",
+  "set_id": "unseen-validation-set-4",
+  "purpose": "Final fresh transfer cycle before battle-readiness decision. Covers strict structured input, durable status delivery, and stale-state recovery. No detector changes before scoring.",
+  "rules": {
+    "models_enabled": false,
+    "workspace_default": "none",
+    "expected_defects_visible_to_sergeant": false,
+    "runtime_is_confirmation_not_discovery": true,
+    "training_changes_allowed_before_scoring": false
+  },
+  "cases": [
+    {
+      "case_id": "stratos-policy-silent-acceptance",
+      "repository": "menlocloud/stratos",
+      "defective_ref": "2cca30e8f2551055cbb5256fec21d165b3d8f716",
+      "source_pr": 66,
+      "checkout_path": "validation4-cases/stratos",
+      "changed_files": [
+        "internal/cloud/client/objectstore_ceph_policy.go",
+        "internal/platform/project/cloud_bucket_settings.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "kaddy-swallowed-status-conflict",
+      "repository": "PlatformRelay/Kaddy",
+      "defective_ref": "9f18ebf9080fef5884a3dc43a7b0152802595555",
+      "source_pr": 22,
+      "checkout_path": "validation4-cases/kaddy",
+      "changed_files": [
+        "operator/internal/controller/caddysite_controller.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "repo-guard-stale-failed-status",
+      "repository": "cloudoperators/repo-guard",
+      "defective_ref": "0b287e97ea00aee1901cea7f606b8004e8a6b18b",
+      "source_pr": 200,
+      "checkout_path": "validation4-cases/repo-guard",
+      "changed_files": [
+        "api/v1/githubteam_types.go",
+        "internal/controller/githubteam_controller.go"
+      ],
+      "workspace_policy": "static_first"
+    }
+  ]
+}
