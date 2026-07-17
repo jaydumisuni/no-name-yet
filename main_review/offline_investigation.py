@@ -275,7 +275,7 @@ def _workflow_run_commands(text: str) -> list[WorkflowCommand]:
         command_lines: list[str] = []
         command_line = index + 1
         if inline and inline not in literal_markers | folded_markers:
-            command_lines.append(inline)
+            command_lines.append(_clean_yaml_scalar(inline))
         else:
             for candidate_index, candidate in enumerate(lines[index + 1:], start=index + 1):
                 candidate_code = _yaml_code(candidate)
