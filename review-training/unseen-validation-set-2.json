@@ -1,0 +1,58 @@
+{
+  "schema_version": "sergeant.review-training.v1",
+  "set_id": "unseen-validation-set-2",
+  "purpose": "Fresh authorization and cross-path contract validation after two static learning rounds. Reports must be frozen before the later fixes are inspected by Sergeant.",
+  "rules": {
+    "models_enabled": false,
+    "workspace_default": "none",
+    "expected_defects_visible_to_sergeant": false,
+    "runtime_is_confirmation_not_discovery": true,
+    "training_changes_allowed_before_scoring": false
+  },
+  "cases": [
+    {
+      "case_id": "go-ssh-critical-option-bypass",
+      "repository": "golang/crypto",
+      "defective_ref": "parent-of-533fb3f7e4a5ae23f69d1837cd851d35ff5b76ce",
+      "source_pr": 0,
+      "source_fix_commit": "533fb3f7e4a5ae23f69d1837cd851d35ff5b76ce",
+      "checkout_path": "validation2-cases/golang-crypto",
+      "changed_files": [
+        "ssh/server.go",
+        "ssh/server_test.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "toolhive-vmcp-authorization-seam",
+      "repository": "stacklok/toolhive",
+      "defective_ref": "d76d4e3bd687d54d61b17a1ef6bc384b8a48f709",
+      "source_pr": 5841,
+      "checkout_path": "validation2-cases/toolhive",
+      "changed_files": [
+        "pkg/authz/middleware.go",
+        "pkg/mcp/errors.go",
+        "pkg/vmcp/core/core.go",
+        "pkg/vmcp/core/core_calls.go",
+        "pkg/vmcp/server/serve_handlers.go",
+        "pkg/vmcp/server/server.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "insights-rbac-v2-fallback-gap",
+      "repository": "project-kessel/insights-rbac",
+      "defective_ref": "34f9e8ddc53da04c1009fc792fd1fbf0c98966d3",
+      "source_pr": 3069,
+      "checkout_path": "validation2-cases/insights-rbac",
+      "changed_files": [
+        "rbac/management/permissions/group_access.py",
+        "rbac/management/permissions/permission_access.py",
+        "rbac/management/permissions/principal_access.py",
+        "rbac/management/permissions/role_access.py",
+        "rbac/management/permissions/role_v2_access.py"
+      ],
+      "workspace_policy": "static_first"
+    }
+  ]
+}

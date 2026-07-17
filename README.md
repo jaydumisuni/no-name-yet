@@ -21,13 +21,13 @@ Repository / changed files
         ↓
 Deterministic Sergeant evidence
         ↓
-Cpl mission planning
+Cpl briefs permanent officers
         ↓
-General + specialist reasoning passes
+Officer field investigations
         ↓
-Evidence grounding and rejection
+Optional model support amplifies officer packets
         ↓
-Cross-source consensus
+Analyst reconciliation + Challenger + Judge ledger
         ↓
 Commander verdict
 ```
@@ -63,12 +63,12 @@ Cpl is not a model name or a renamed proxy. It is Sergeant's reasoning layer.
 A gateway only forwards requests. Cpl:
 
 1. receives changed-file scope and deterministic Sergeant evidence;
-2. performs a general reasoning pass;
-3. selects specialist missions from repository risk and evidence;
-4. rotates available models where useful;
-5. rejects unsupported or out-of-scope findings;
-6. merges findings by path, line range, model, and specialist;
-7. returns auditable evidence to Sergeant consensus.
+2. coordinates the permanent-officer formation even when no model route is available;
+3. assigns deterministic repository investigations to the responsible officers;
+4. recruits and rotates available models only when they can strengthen a named officer question;
+5. preserves confirmations, advisories, rejected claims, and unresolved assurance separately;
+6. sends the canonical Judge ledger—not raw scanner or model votes—to Sergeant;
+7. returns an auditable ground report with evidence, falsifiers, transactions, and required actions.
 
 Current specialists:
 
@@ -113,7 +113,7 @@ This is a configurable routing policy, not a permanent claim that one model is u
 **Preferred** is the product default:
 
 - deploy Cpl when a route is available;
-- fall back to deterministic Sergeant evidence when it is not;
+- keep Cpl's deterministic permanent-officer formation active when a model route is not available;
 - state clearly in the report whether Cpl ran.
 
 **Required** is the strict release gate:

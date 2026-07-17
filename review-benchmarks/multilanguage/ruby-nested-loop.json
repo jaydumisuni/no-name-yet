@@ -1,0 +1,26 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "ruby-nested-loop",
+  "title": "Ruby report performs quadratic nested iteration",
+  "expected_verdict": "APPROVE",
+  "changed_files": ["lib/report.rb", "spec/report_spec.rb"],
+  "expected_findings": [
+    {
+      "id": "ruby-quadratic-loop",
+      "category": "performance",
+      "severity": "minor",
+      "paths": ["lib/report.rb"],
+      "line_start": 4,
+      "line_end": 5,
+      "root_cause": "runtime-risk",
+      "keywords": ["nested", "iteration", "quadratic", "scaling"]
+    }
+  ],
+  "files": [
+    {"path": "Gemfile", "content": "source 'https://rubygems.org'\ngem 'rspec'\n"},
+    {"path": "README.md", "content": "# Ruby reports service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: bundle exec rspec\n"},
+    {"path": "lib/report.rb", "content": "class Report\n  def self.pairs(rows)\n    output = []\n    rows.each do |left|\n      rows.each do |right|\n        output << [left, right]\n      end\n    end\n    output\n  end\nend\n"},
+    {"path": "spec/report_spec.rb", "content": "RSpec.describe Report do\n  it('returns one pair') { expect(Report.pairs([1])).to eq([[1, 1]]) }\nend\n"}
+  ]
+}

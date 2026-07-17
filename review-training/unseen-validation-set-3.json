@@ -1,0 +1,55 @@
+{
+  "schema_version": "sergeant.review-training.v1",
+  "set_id": "unseen-validation-set-3",
+  "purpose": "Fresh static validation across configuration integrity, shared status ownership, and external-data completeness. No detector changes before scoring.",
+  "rules": {
+    "models_enabled": false,
+    "workspace_default": "none",
+    "expected_defects_visible_to_sergeant": false,
+    "runtime_is_confirmation_not_discovery": true,
+    "training_changes_allowed_before_scoring": false
+  },
+  "cases": [
+    {
+      "case_id": "zero-silent-unknown-config",
+      "repository": "Gitlawb/zero",
+      "defective_ref": "1af58828eb3c22567599c000736c913a290959d2",
+      "source_pr": 645,
+      "checkout_path": "validation3-cases/zero",
+      "changed_files": [
+        "internal/config/validate.go",
+        "internal/config/validate_test.go",
+        "internal/config/unknownfields.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "osac-shared-status-overwrite",
+      "repository": "osac-project/osac-operator",
+      "defective_ref": "d6f502b0a1b0754f405a0d81e47d5454f78df3d4",
+      "source_pr": 333,
+      "checkout_path": "validation3-cases/osac-operator",
+      "changed_files": [
+        "internal/controller/clusterorder_controller.go",
+        "internal/controller/storage_controller.go",
+        "internal/controller/externalip_controller.go",
+        "internal/controller/publicip_controller.go"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "nse-truncated-external-data",
+      "repository": "subramanya1496/nse-dashboard",
+      "defective_ref": "37e7789ed2585a10531c41ce3168df3df2d2b3f8",
+      "source_pr": 13,
+      "checkout_path": "validation3-cases/nse-dashboard",
+      "changed_files": [
+        "src/instrument_master.py",
+        "dashboard/css/style.css",
+        "dashboard/index.html",
+        "dashboard/portfolio.html"
+      ],
+      "workspace_policy": "static_first"
+    }
+  ]
+}

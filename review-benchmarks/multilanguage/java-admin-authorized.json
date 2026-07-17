@@ -1,0 +1,15 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "java-admin-authorized",
+  "title": "Java administrative route has an explicit authorization guard",
+  "expected_verdict": "APPROVE",
+  "changed_files": ["src/main/java/app/AdminController.java", "src/test/java/app/AdminControllerTest.java"],
+  "expected_findings": [],
+  "files": [
+    {"path": "pom.xml", "content": "<project><modelVersion>4.0.0</modelVersion><groupId>app</groupId><artifactId>admin</artifactId><version>1</version></project>\n"},
+    {"path": "README.md", "content": "# Java admin service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: mvn test\n"},
+    {"path": "src/main/java/app/AdminController.java", "content": "package app;\n\nimport org.springframework.security.access.prepost.PreAuthorize;\nimport org.springframework.web.bind.annotation.DeleteMapping;\nimport org.springframework.web.bind.annotation.RestController;\n\n@RestController\npublic class AdminController {\n  @PreAuthorize(\"hasRole('ADMIN')\")\n  @DeleteMapping(\"/admin/users/{id}\")\n  public void deleteUser(String id) { }\n}\n"},
+    {"path": "src/test/java/app/AdminControllerTest.java", "content": "package app;\nclass AdminControllerTest { void loads() { new AdminController(); } }\n"}
+  ]
+}

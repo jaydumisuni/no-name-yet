@@ -1,0 +1,234 @@
+name: Full Cloudflare Council Member Certification
+
+on:
+  pull_request:
+    branches: [cpl-quality-noise-governor]
+    paths:
+      - '.github/workflows/cloudflare-full-council-certification.yml'
+      - 'main_review/cloudflare_cli.py'
+      - 'main_review/cloudflare_incremental_certification.py'
+      - 'main_review/cloudflare_models.py'
+      - 'main_review/cloudflare_scout_qualification.py'
+      - 'main_review/cloudflare_usage.py'
+      - 'main_review/llm_provider.py'
+      - 'tests/test_cloudflare_full_roster_qualification.py'
+      - 'tests/test_cloudflare_incremental_certification.py'
+      - 'tests/test_cloudflare_usage_governor.py'
+      - 'tests/test_coderabbit_rematch_regressions.py'
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: cloudflare-full-council-certification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact candidate head without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install candidate without provider secrets
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pytest
+
+      - name: Run focused compatibility, ledger and quota tests
+        run: |
+          python -m pytest -q \
+            tests/test_cloudflare_full_roster_qualification.py \
+            tests/test_cloudflare_incremental_certification.py \
+            tests/test_cloudflare_mission_qualification.py \
+            tests/test_cloudflare_usage_governor.py \
+            tests/test_coderabbit_rematch_regressions.py
+
+  certify-approved-candidate:
+    needs: validate-candidate
+    if: ${{ vars.SERGEANT_CLOUDFLARE_LIVE_CERTIFICATION_ENABLED == 'true' }}
+    environment: sergeant-cloudflare-certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      SERGEANT_CLOUDFLARE_MODELS: '@cf/zai-org/glm-4.7-flash,@cf/qwen/qwen2.5-coder-32b-instruct,@cf/ibm-granite/granite-4.0-h-micro,@cf/openai/gpt-oss-120b,@cf/moonshotai/kimi-k2.7-code,@cf/qwen/qwen3-30b-a3b-fp8,@cf/openai/gpt-oss-20b'
+      SERGEANT_CPL_ENABLED: 'true'
+      SERGEANT_CPL_POLICY: required
+      SERGEANT_CPL_DEPTH: maximum
+      SERGEANT_CPL_MAX_PASSES: '7'
+      SERGEANT_CPL_MAX_COUNCIL_MEMBERS: '7'
+      SERGEANT_CPL_MAX_ROUNDS: '3'
+      SERGEANT_CPL_MAX_INPUT_CHARS: '16000'
+      SERGEANT_CLOUDFLARE_TIMEOUT_SECONDS: '90'
+      SERGEANT_CLOUDFLARE_USAGE_STATE: build/cloudflare-usage-state.json
+      SERGEANT_CLOUDFLARE_DAILY_BUDGET_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_DAILY_BUDGET_NEURONS || '10000' }}
+      SERGEANT_CLOUDFLARE_SAFETY_RESERVE_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_SAFETY_RESERVE_NEURONS || '2500' }}
+      SERGEANT_CLOUDFLARE_UNKNOWN_MODEL_RESERVATION_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_UNKNOWN_MODEL_RESERVATION_NEURONS || '2500' }}
+    steps:
+      - name: Checkout approved exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install approved candidate before secret-bearing steps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Record candidate head
+        run: |
+          mkdir -p build
+          git rev-parse HEAD | tee build/full-council-tested-sha.txt
+
+      - name: Restore latest certification and quota ledger
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p build /tmp/full-council-ledger
+          artifact_id=""
+          if [ -n "${GH_TOKEN:-}" ]; then
+            artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-full-council-ledger&per_page=100" --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty' 2>/dev/null || true)"
+          fi
+          if [ -n "$artifact_id" ]; then
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/full-council-ledger.zip
+            unzip -o /tmp/full-council-ledger.zip -d /tmp/full-council-ledger >/dev/null
+            [ ! -f /tmp/full-council-ledger/full-council-ledger.json ] || cp /tmp/full-council-ledger/full-council-ledger.json build/full-council-ledger.json
+            [ ! -f /tmp/full-council-ledger/cloudflare-usage-state.json ] || cp /tmp/full-council-ledger/cloudflare-usage-state.json build/cloudflare-usage-state.json
+          fi
+
+      - name: Create fixed role-specific mission fixtures
+        run: |
+          mkdir -p build/full-council-fixture/src
+          cat > build/full-council-fixture/src/auth.py <<'PY'
+          import subprocess
+
+          def run_user_command(request):
+              command = request.args.get("command")
+              return subprocess.run(command, shell=True)
+          PY
+          cat > build/full-council-fixture/src/scout.py <<'PY'
+          RETRY_LIMIT = 3
+          TIMEOUT_SECONDS = 15
+          SUPPORTED_LANGUAGES = ["python", "javascript"]
+          PY
+
+      - name: Capture route status after protected approval
+        env:
+          SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+          SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+        run: sergeant-cloudflare --pretty status --require > build/full-council-status.json
+
+      - name: Resume only missing council-member proofs
+        id: incremental
+        shell: bash
+        env:
+          SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+          SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+        run: |
+          set +e
+          python -m main_review.cloudflare_incremental_certification \
+            build/full-council-fixture \
+            --auth-file src/auth.py \
+            --scout-file src/scout.py \
+            --tested-sha "$(cat build/full-council-tested-sha.txt)" \
+            --ledger build/full-council-ledger.json \
+            --output build/full-council-certification-summary.json \
+            --pretty \
+            --require
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Verify configured values are absent from artifacts
+        id: artifact_scan
+        if: always()
+        env:
+          SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+          SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          values = [
+              os.getenv('SERGEANT_CLOUDFLARE_ACCOUNT_ID', ''),
+              os.getenv('SERGEANT_CLOUDFLARE_API_TOKEN', ''),
+          ]
+          artifacts = list(Path('build').glob('full-council-*.json'))
+          artifacts.extend(Path('build').glob('cloudflare-usage-state.json'))
+          assert artifacts
+          for path in artifacts:
+              text = path.read_text(encoding='utf-8', errors='replace')
+              for value in values:
+                  if value:
+                      assert value not in text, f'Configured provider value appeared in {path}'
+          PY
+
+      - name: Upload resumable council ledger
+        if: always() && steps.artifact_scan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-full-council-ledger
+          path: |
+            build/full-council-ledger.json
+            build/cloudflare-usage-state.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload full council certification evidence
+        if: always() && steps.artifact_scan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-full-council-certification
+          path: |
+            build/full-council-tested-sha.txt
+            build/full-council-status.json
+            build/full-council-certification-summary.json
+            build/full-council-ledger.json
+            build/cloudflare-usage-state.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce exact seven-member certification
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          required = {
+              '@cf/zai-org/glm-4.7-flash',
+              '@cf/qwen/qwen2.5-coder-32b-instruct',
+              '@cf/ibm-granite/granite-4.0-h-micro',
+              '@cf/openai/gpt-oss-120b',
+              '@cf/moonshotai/kimi-k2.7-code',
+              '@cf/qwen/qwen3-30b-a3b-fp8',
+              '@cf/openai/gpt-oss-20b',
+          }
+          payload = json.loads(Path('build/full-council-certification-summary.json').read_text(encoding='utf-8'))
+          if payload.get('quota_blocked'):
+              raise SystemExit('Certification paused after the first provider quota signal; completed evidence was preserved.')
+          if payload.get('budget_blocked'):
+              raise SystemExit('Certification paused before inference by Sergeant local budget governance.')
+          assert set(payload.get('certified_models', [])) == required, 'The exact seven-member Cloudflare roster did not certify.'
+          assert payload.get('passed') is True, 'Not all seven Cloudflare council members certified.'
+          PY

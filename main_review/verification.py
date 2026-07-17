@@ -64,8 +64,16 @@ def _has_manifest(root: Path) -> bool:
         "pubspec.yaml",
         "composer.json",
         "Gemfile",
+        "Package.swift",
+        "CMakeLists.txt",
+        "Makefile",
+        "mix.exs",
+        "build.sbt",
     }
-    return any((root / manifest).exists() for manifest in manifests)
+    project_manifest_globs = ("*.csproj", "*.fsproj", "*.vbproj", "*.sln")
+    return any((root / manifest).exists() for manifest in manifests) or any(
+        any(root.glob(pattern)) for pattern in project_manifest_globs
+    )
 
 
 def _has_project_docs(root: Path) -> bool:

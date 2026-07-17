@@ -28,6 +28,8 @@ def test_role_classifier_marks_docs_tests_manifests_and_risky_paths() -> None:
     assert classify_role("README.md") == "documentation"
     assert classify_role("tests/test_app.py") == "test"
     assert classify_role("package.json") == "manifest"
+    assert classify_role("Service.csproj") == "manifest"
+    assert classify_role("Package.swift") == "manifest"
     assert classify_role(".github/workflows/ci.yml") == "infrastructure"
     assert classify_role("src/app.py") == "source"
     assert is_high_risk_path(".github/workflows/ci.yml") is True

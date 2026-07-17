@@ -1,0 +1,15 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "typescript-command-clean",
+  "title": "TypeScript fixed executable with bounded arguments",
+  "expected_verdict": "APPROVE",
+  "changed_files": ["src/jobs.ts", "tests/jobs.test.ts"],
+  "expected_findings": [],
+  "files": [
+    {"path": "package.json", "content": "{\"name\":\"typescript-service\",\"scripts\":{\"test\":\"vitest\"}}\n"},
+    {"path": "README.md", "content": "# TypeScript service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n"},
+    {"path": "src/jobs.ts", "content": "import { execFile } from 'node:child_process';\n\nexport function gitStatus() {\n  return execFile('git', ['status', '--short'], { shell: false });\n}\n"},
+    {"path": "tests/jobs.test.ts", "content": "import { gitStatus } from '../src/jobs';\ntest('exports bounded command', () => expect(gitStatus).toBeDefined());\n"}
+  ]
+}

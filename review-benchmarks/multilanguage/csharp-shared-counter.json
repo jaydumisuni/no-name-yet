@@ -1,0 +1,26 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "csharp-shared-counter",
+  "title": "C# concurrent tasks mutate a shared counter",
+  "expected_verdict": "APPROVE",
+  "changed_files": ["src/JobCounter.cs", "tests/JobCounterTests.cs"],
+  "expected_findings": [
+    {
+      "id": "csharp-counter-race",
+      "category": "concurrency",
+      "severity": "minor",
+      "paths": ["src/JobCounter.cs"],
+      "line_start": 8,
+      "line_end": 8,
+      "root_cause": "runtime-risk",
+      "keywords": ["task", "shared", "counter", "atomic"]
+    }
+  ],
+  "files": [
+    {"path": "Service.csproj", "content": "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n"},
+    {"path": "README.md", "content": "# C# job service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: dotnet test\n"},
+    {"path": "src/JobCounter.cs", "content": "using System.Threading.Tasks;\n\npublic static class JobCounter {\n  private static int sharedCounter = 0;\n\n  public static async Task<int> ProcessAsync() {\n    await Task.Yield();\n    sharedCounter++;\n    return sharedCounter;\n  }\n}\n"},
+    {"path": "tests/JobCounterTests.cs", "content": "public class JobCounterTests { public void SymbolExists() { _ = typeof(JobCounter); } }\n"}
+  ]
+}

@@ -24,8 +24,6 @@ BenchmarkMode = Literal["deterministic", "one-model", "council"]
 CASE_SCHEMA = "sergeant.blind-benchmark.case.v1"
 RESULT_SCHEMA = "sergeant.blind-benchmark.result.v1"
 _ALLOWED_SEVERITIES = {"blocker", "major", "minor"}
-
-
 class ReviewBenchmarkError(ValueError):
     """Raised when a blind benchmark case or mode is invalid."""
 
@@ -140,17 +138,36 @@ def extract_predictions(packet: dict[str, Any]) -> tuple[list[dict[str, Any]], i
     """
 
     raw: list[tuple[str, dict[str, Any]]] = []
-    raw.extend(("repository", item) for item in _bucket(packet, "repository_review"))
-    raw.extend(("diff", item) for item in _bucket(packet, "diff_review"))
-    capability = packet.get("capability_review", {})
-    if isinstance(capability, dict):
-        raw.extend(("capability", item) for item in capability.get("findings", []) if isinstance(item, dict))
-    cpl = packet.get("cpl_review", packet.get("semantic_review", {}))
-    if isinstance(cpl, dict):
-        cpl_findings = cpl.get("actionable_findings")
-        if not isinstance(cpl_findings, list):
-            cpl_findings = cpl.get("findings", [])
-        raw.extend(("cpl", item) for item in cpl_findings if isinstance(item, dict))
+    formation = packet.get("officer_council")
+    if isinstance(formation, dict):
+        # Benchmark the Judge ledger, not pre-adjudication scanner votes.  Minor
+        # advisories remain measurable findings, while generic risk triggers
+        # and rejected claims cannot inflate quality scores or verdicts.
+        raw.extend(
+            ("officer-council", item)
+            for item in formation.get("admitted_findings", [])
+            if isinstance(item, dict)
+        )
+        raw.extend(
+            ("officer-council", item)
+            for item in formation.get("advisory_findings", [])
+            if isinstance(item, dict)
+            and item.get("admission") == "advisory"
+        )
+    else:
+        # Backward-compatible packets created before the permanent-officer
+        # formation retain the historical extraction behavior.
+        raw.extend(("repository", item) for item in _bucket(packet, "repository_review"))
+        raw.extend(("diff", item) for item in _bucket(packet, "diff_review"))
+        capability = packet.get("capability_review", {})
+        if isinstance(capability, dict):
+            raw.extend(("capability", item) for item in capability.get("findings", []) if isinstance(item, dict))
+        cpl = packet.get("cpl_review", packet.get("semantic_review", {}))
+        if isinstance(cpl, dict):
+            cpl_findings = cpl.get("actionable_findings")
+            if not isinstance(cpl_findings, list):
+                cpl_findings = cpl.get("findings", [])
+            raw.extend(("cpl", item) for item in cpl_findings if isinstance(item, dict))
 
     unique: list[dict[str, Any]] = []
     seen: set[tuple[object, ...]] = set()

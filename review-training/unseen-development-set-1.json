@@ -1,0 +1,53 @@
+{
+  "schema_version": "sergeant.review-training.v1",
+  "set_id": "unseen-development-set-1",
+  "purpose": "Static-first development cases. Sergeant reviews the defective revision before the later fix is inspected.",
+  "rules": {
+    "models_enabled": false,
+    "workspace_default": "none",
+    "expected_defects_visible_to_sergeant": false,
+    "runtime_is_confirmation_not_discovery": true
+  },
+  "cases": [
+    {
+      "case_id": "matrix-key-backup-event-order",
+      "repository": "matrix-org/matrix-js-sdk",
+      "defective_ref": "82c488d155eb3cef97a116b4007c772a2d3421b6",
+      "source_pr": 5281,
+      "checkout_path": "training-cases/matrix-js-sdk",
+      "changed_files": [
+        "spec/integ/crypto/crypto.spec.ts",
+        "spec/unit/rust-crypto/backup.spec.ts",
+        "spec/unit/rust-crypto/rust-crypto.spec.ts",
+        "src/rust-crypto/backup.ts",
+        "src/rust-crypto/rust-crypto.ts"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "camel-multicast-timeout-race",
+      "repository": "apache/camel",
+      "defective_ref": "9971a57276a27db5549bffd032044b4abb45b6a9",
+      "source_pr": 24822,
+      "checkout_path": "training-cases/camel",
+      "changed_files": [
+        "core/camel-core-processor/src/main/java/org/apache/camel/processor/MulticastProcessor.java",
+        "core/camel-core/src/test/java/org/apache/camel/processor/MulticastParallelTimeoutDuringAggregationTest.java"
+      ],
+      "workspace_policy": "static_first"
+    },
+    {
+      "case_id": "marimo-form-submit-flow",
+      "repository": "marimo-team/marimo",
+      "defective_ref": "791f228d9b1ad6f47e4c8ab10a19d31858b8ece3",
+      "source_pr": 8779,
+      "checkout_path": "training-cases/marimo",
+      "changed_files": [
+        "frontend/src/plugins/impl/FormPlugin.tsx",
+        "marimo/_runtime/packages/pypi_package_manager.py",
+        "tests/_runtime/packages/test_pypi_package_manager.py"
+      ],
+      "workspace_policy": "static_first"
+    }
+  ]
+}

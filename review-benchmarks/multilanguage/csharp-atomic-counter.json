@@ -1,0 +1,15 @@
+{
+  "schema_version": "sergeant.blind-benchmark.case.v1",
+  "id": "csharp-atomic-counter",
+  "title": "C# concurrent counter uses an atomic increment",
+  "expected_verdict": "APPROVE",
+  "changed_files": ["src/JobCounter.cs", "tests/JobCounterTests.cs"],
+  "expected_findings": [],
+  "files": [
+    {"path": "Service.csproj", "content": "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n"},
+    {"path": "README.md", "content": "# C# job service\n"},
+    {"path": ".github/workflows/ci.yml", "content": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: dotnet test\n"},
+    {"path": "src/JobCounter.cs", "content": "using System.Threading;\nusing System.Threading.Tasks;\n\npublic static class JobCounter {\n  private static int sharedCounter = 0;\n\n  public static async Task<int> ProcessAsync() {\n    await Task.Yield();\n    return Interlocked.Increment(ref sharedCounter);\n  }\n}\n"},
+    {"path": "tests/JobCounterTests.cs", "content": "public class JobCounterTests { public void SymbolExists() { _ = typeof(JobCounter); } }\n"}
+  ]
+}

@@ -52,6 +52,7 @@ CLOUDFLARE_REASONING_MODELS = {
     "@cf/qwen/qwen3-30b-a3b-fp8",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/openai/gpt-oss-20b",
+    "@cf/qwen/qwen2.5-coder-32b-instruct",
     "@cf/openai/gpt-oss-120b",
 }
 DEFAULT_MODEL_PROOF_OUTPUT_TOKENS = 384

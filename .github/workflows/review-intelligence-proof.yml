@@ -24,16 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      BENCHMARK_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'deterministic' }}
-      SERGEANT_CPL_BASE_URL: ${{ secrets.SERGEANT_CPL_BASE_URL }}
-      SERGEANT_CPL_API_KEY: ${{ secrets.SERGEANT_CPL_API_KEY }}
-      SERGEANT_CPL_MODEL: ${{ secrets.SERGEANT_CPL_MODEL }}
-      SERGEANT_CPL_PROVIDER: ${{ secrets.SERGEANT_CPL_PROVIDER }}
-      SERGEANT_CPL_PROTOCOL: ${{ secrets.SERGEANT_CPL_PROTOCOL }}
-      SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
-      SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
-      SERGEANT_CPL_MODEL_PRESET: ${{ vars.SERGEANT_CPL_MODEL_PRESET }}
-      SERGEANT_CPL_MODELS: ${{ vars.SERGEANT_CPL_MODELS }}
+      BENCHMARK_MODE: deterministic
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +53,8 @@ jobs:
             tests/test_battle_compare.py \
             tests/test_pr_reviewer.py \
             tests/test_cloudflare_provider.py \
+            tests/test_multilanguage_officers.py \
+            tests/test_multilanguage_review_benchmark.py \
             -q
 
       - name: Prove verified learning and recurrence handling
@@ -71,27 +64,24 @@ jobs:
             --output build/verified-learning-proof.json \
             --pretty
 
-      - name: Require a live route for model modes
-        if: env.BENCHMARK_MODE != 'deterministic'
-        run: sergeant cpl-status --require
-
       - name: Run blind benchmark
-        shell: bash
         run: |
-          set -euo pipefail
           mkdir -p build
-          args=(
-            review-benchmarks/blind
-            --mode "$BENCHMARK_MODE"
-            --minimum-precision 0.90
-            --minimum-recall 0.90
-            --output "build/review-benchmark-${BENCHMARK_MODE}.json"
+          sergeant-bench review-benchmarks/blind \
+            --mode deterministic \
+            --minimum-precision 0.90 \
+            --minimum-recall 0.90 \
+            --output build/review-benchmark-deterministic.json \
             --pretty
-          )
-          if [[ "$BENCHMARK_MODE" != "deterministic" ]]; then
-            args+=(--require-route)
-          fi
-          sergeant-bench "${args[@]}"
+
+      - name: Run model-free multi-language benchmark
+        run: |
+          sergeant-bench review-benchmarks/multilanguage \
+            --mode deterministic \
+            --minimum-precision 1.00 \
+            --minimum-recall 1.00 \
+            --output build/multilanguage-review-benchmark.json \
+            --pretty
 
       - name: Build wheel
         run: python -m build --wheel
@@ -109,6 +99,15 @@ jobs:
             --minimum-precision 0.90 \
             --minimum-recall 0.90 \
             --output "$GITHUB_WORKSPACE/build/installed-wheel-review-benchmark.json" \
+            --pretty
+          installed_data="$("$GITHUB_WORKSPACE/build/benchmark-wheel-venv/bin/python" -c \
+            'import sysconfig; from pathlib import Path; print(Path(sysconfig.get_path("data")) / "share" / "sergeant" / "review-benchmarks" / "multilanguage")')"
+          "$GITHUB_WORKSPACE/build/benchmark-wheel-venv/bin/sergeant-bench" \
+            "$installed_data" \
+            --mode deterministic \
+            --minimum-precision 1.00 \
+            --minimum-recall 1.00 \
+            --output "$GITHUB_WORKSPACE/build/installed-wheel-multilanguage-review-benchmark.json" \
             --pretty
 
       - name: Verify proof artifacts contain no configured secret
@@ -141,6 +140,192 @@ jobs:
           path: |
             build/review-benchmark-*.json
             build/installed-wheel-review-benchmark.json
+            build/multilanguage-review-benchmark.json
+            build/installed-wheel-multilanguage-review-benchmark.json
             build/verified-learning-proof.json
             dist/sergeant_reviewer-*.whl
           if-no-files-found: error
+
+  configured-model-review-quality:
+    needs: blind-review-quality
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'deterministic' }}
+    environment: sergeant-cloudflare-certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BENCHMARK_MODE: ${{ inputs.mode }}
+      SERGEANT_CPL_BASE_URL: ${{ secrets.SERGEANT_CPL_BASE_URL }}
+      SERGEANT_CPL_API_KEY: ${{ secrets.SERGEANT_CPL_API_KEY }}
+      SERGEANT_CPL_MODEL: ${{ vars.SERGEANT_CPL_MODEL }}
+      SERGEANT_CPL_PROVIDER: ${{ secrets.SERGEANT_CPL_PROVIDER }}
+      SERGEANT_CPL_PROTOCOL: ${{ secrets.SERGEANT_CPL_PROTOCOL }}
+      SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+      SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+      SERGEANT_CPL_MODEL_PRESET: ${{ vars.SERGEANT_CPL_MODEL_PRESET }}
+      SERGEANT_CPL_MODELS: ${{ vars.SERGEANT_CPL_MODELS }}
+    steps:
+      - name: Checkout approved exact revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install approved Sergeant candidate
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Require configured live route
+        run: sergeant cpl-status --require
+
+      - name: Run configured model benchmark
+        run: |
+          mkdir -p build
+          sergeant-bench review-benchmarks/blind \
+            --mode "$BENCHMARK_MODE" \
+            --minimum-precision 0.90 \
+            --minimum-recall 0.90 \
+            --require-route \
+            --output "build/review-benchmark-${BENCHMARK_MODE}.json" \
+            --pretty
+
+      - name: Verify configured values are absent from model proof
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          artifacts = list(Path("build").glob("review-benchmark-*.json"))
+          assert artifacts
+          values = [
+              os.getenv("SERGEANT_CPL_API_KEY", ""),
+              os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", ""),
+              os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ""),
+          ]
+          for path in artifacts:
+              text = path.read_text(encoding="utf-8", errors="replace")
+              for value in values:
+                  if value:
+                      assert value not in text, f"Configured secret or account identifier leaked into {path}"
+          PY
+
+      - name: Upload configured model proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-intelligence-proof-${{ env.BENCHMARK_MODE }}
+          path: build/review-benchmark-*.json
+          if-no-files-found: error
+
+  static-first-development-set:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+      SERGEANT_CLOUDFLARE_USAGE_STATE: ${{ runner.temp }}/sergeant-training-usage.json
+    steps:
+      - name: Checkout Sergeant exact head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout Matrix defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: matrix-org/matrix-js-sdk
+          ref: 82c488d155eb3cef97a116b4007c772a2d3421b6
+          path: training-cases/matrix-js-sdk
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            src/rust-crypto
+            spec/unit/rust-crypto
+            spec/integ/crypto
+            package.json
+            tsconfig.json
+            README.md
+
+      - name: Checkout Camel defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: apache/camel
+          ref: 9971a57276a27db5549bffd032044b4abb45b6a9
+          path: training-cases/camel
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            core/camel-core-processor
+            core/camel-core
+            pom.xml
+            README.md
+
+      - name: Checkout Marimo defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: marimo-team/marimo
+          ref: 791f228d9b1ad6f47e4c8ab10a19d31858b8ece3
+          path: training-cases/marimo
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            frontend/src/plugins/impl
+            frontend/package.json
+            marimo/_runtime/packages
+            tests/_runtime/packages
+            pyproject.toml
+            README.md
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Run Sergeant first without models or workspace
+        run: |
+          mkdir -p build/static-training
+          python scripts/run_static_training_set.py \
+            review-training/unseen-development-set-1.json \
+            --output build/static-training/unseen-development-set-1.json \
+            | tee build/static-training/unseen-development-set-1-summary.json
+
+      - name: Publish frozen Sergeant summary
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('build/static-training/unseen-development-set-1.json').read_text())
+          lines = [
+              '# Sergeant static-first development set',
+              '',
+              f"Exact Sergeant head: `{os.environ['GITHUB_SHA']}`",
+              '',
+              '| Case | Verdict | Admitted | Advisory | Assurances | Models | Seconds |',
+              '|---|---:|---:|---:|---:|---:|---:|',
+          ]
+          for item in data['summaries']:
+              lines.append(
+                  f"| {item['case_id']} | {item['verdict']} | {item['admitted_finding_count']} | "
+                  f"{item['advisory_finding_count']} | {item['unresolved_assurance_count']} | "
+                  f"{item['model_calls']} | {item['elapsed_seconds']} |"
+              )
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines) + '\n')
+          PY
+
+      - name: Upload immutable Sergeant-first reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-training-unseen-development-set-1
+          path: build/static-training/
+          if-no-files-found: error
+          retention-days: 90

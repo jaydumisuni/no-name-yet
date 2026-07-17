@@ -1,0 +1,122 @@
+name: Blind Static Training
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/blind-static-training.yml"
+      - "scripts/run_static_training_set.py"
+      - "review-training/unseen-development-set-1.json"
+
+permissions:
+  contents: read
+
+jobs:
+  static-first-development-set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+      SERGEANT_CLOUDFLARE_USAGE_STATE: ${{ runner.temp }}/sergeant-training-usage.json
+
+    steps:
+      - name: Checkout Sergeant exact head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout Matrix defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: matrix-org/matrix-js-sdk
+          ref: 82c488d155eb3cef97a116b4007c772a2d3421b6
+          path: training-cases/matrix-js-sdk
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            src/rust-crypto
+            spec/unit/rust-crypto
+            spec/integ/crypto
+            package.json
+            tsconfig.json
+            README.md
+
+      - name: Checkout Camel defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: apache/camel
+          ref: 9971a57276a27db5549bffd032044b4abb45b6a9
+          path: training-cases/camel
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            core/camel-core-processor
+            core/camel-core
+            pom.xml
+            README.md
+
+      - name: Checkout Marimo defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: marimo-team/marimo
+          ref: 791f228d9b1ad6f47e4c8ab10a19d31858b8ece3
+          path: training-cases/marimo
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            frontend/src/plugins/impl
+            frontend/package.json
+            marimo/_runtime/packages
+            tests/_runtime/packages
+            pyproject.toml
+            README.md
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Run Sergeant first without models or workspace
+        run: |
+          mkdir -p build/static-training
+          python scripts/run_static_training_set.py \
+            review-training/unseen-development-set-1.json \
+            --output build/static-training/unseen-development-set-1.json \
+            | tee build/static-training/unseen-development-set-1-summary.json
+
+      - name: Publish frozen Sergeant summary
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('build/static-training/unseen-development-set-1.json').read_text())
+          lines = [
+              '# Sergeant static-first development set',
+              '',
+              f"Exact Sergeant head: `{os.environ['GITHUB_SHA']}`",
+              '',
+              '| Case | Verdict | Admitted | Advisory | Assurances | Models | Seconds |',
+              '|---|---:|---:|---:|---:|---:|---:|',
+          ]
+          for item in data['summaries']:
+              lines.append(
+                  f"| {item['case_id']} | {item['verdict']} | {item['admitted_finding_count']} | "
+                  f"{item['advisory_finding_count']} | {item['unresolved_assurance_count']} | "
+                  f"{item['model_calls']} | {item['elapsed_seconds']} |"
+              )
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines) + '\n')
+          PY
+
+      - name: Upload immutable Sergeant-first reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-training-unseen-development-set-1
+          path: build/static-training/
+          if-no-files-found: error
+          retention-days: 90
