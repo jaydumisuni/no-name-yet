@@ -1,0 +1,120 @@
+name: Model-Free Core Campaign 2 Validation 1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-campaign-2-validation-1.yml"
+      - "review-training/model-free-core-campaign-2-validation-1.json"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout frozen Sergeant head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout Kotlin lifecycle defect
+        uses: actions/checkout@v4
+        with:
+          repository: yoon627/coin-trading-bot
+          ref: 533857281398f178599ddb45205ba8e5d327db7e
+          path: validation-cases/coin-trading-bot
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            bot/src/main/kotlin/com/trading/bot/engine
+            bot/src/main/resources/application.yml
+            deploy/aws/docker-compose.prod.yml
+
+      - name: Checkout systemd hardening defect
+        uses: actions/checkout@v4
+        with:
+          repository: noorinalabs/noorinalabs-deploy
+          ref: fd42c4b643e42a9010e0ce18e23ccf7a28dcb959
+          path: validation-cases/noorinalabs-deploy
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            scripts/backup.sh
+            scripts/b2_preflight.sh
+            scripts/emit-backup-failure-marker.sh
+            systemd/isnad-backup.service
+            systemd/isnad-backup-failure-marker.service
+
+      - name: Checkout structured-format defect
+        uses: actions/checkout@v4
+        with:
+          repository: tkhq/valet
+          ref: c6446a2b97e0ef4bb6fd9fab749ebe9b6ef49789
+          path: validation-cases/valet
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            packages/sdk/src/mcp
+            packages/sdk/package.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider usage state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-core-validation-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Run untouched validation without models or workspace
+        run: |
+          mkdir -p build/model-free-core-campaign-2-validation-1
+          python scripts/run_static_training_set.py \
+            review-training/model-free-core-campaign-2-validation-1.json \
+            --output build/model-free-core-campaign-2-validation-1/frozen-validation.json \
+            | tee build/model-free-core-campaign-2-validation-1/frozen-validation-summary.json
+
+      - name: Publish frozen validation summary
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('build/model-free-core-campaign-2-validation-1/frozen-validation.json').read_text())
+          lines = [
+              '# Model-free Sergeant core campaign 2 — untouched validation 1',
+              '',
+              f"Exact Sergeant head: `{os.environ['GITHUB_SHA']}`",
+              '',
+              '| Case | Verdict | Admitted | Advisory | Assurances | Models | Seconds |',
+              '|---|---:|---:|---:|---:|---:|---:|',
+          ]
+          for item in data['summaries']:
+              lines.append(
+                  f"| {item['case_id']} | {item['verdict']} | {item['admitted_finding_count']} | "
+                  f"{item['advisory_finding_count']} | {item['unresolved_assurance_count']} | "
+                  f"{item['model_calls']} | {item['elapsed_seconds']} |"
+              )
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines) + '\n')
+          PY
+
+      - name: Upload immutable validation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-campaign-2-validation-1
+          path: build/model-free-core-campaign-2-validation-1/
+          if-no-files-found: error
+          retention-days: 90
