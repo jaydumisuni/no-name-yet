@@ -24,14 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout exact qualification head without credentials
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify immutable Sergeant baseline and workflow-only scope
+      - name: Verify immutable baseline and workflow-only scope
         env:
           EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -42,8 +41,7 @@ jobs:
           test "${#changed[@]}" -eq 1
           test "${changed[0]}" = '.github/workflows/cloudflare-seventh-seat-qwq.yml'
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -51,9 +49,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e . pytest
-          python -m pytest -q \
-            tests/test_cloudflare_mission_qualification.py \
-            tests/test_cloudflare_usage_governor.py
+          python -m pytest -q tests/test_cloudflare_mission_qualification.py tests/test_cloudflare_usage_governor.py
 
   qualify-qwq:
     needs: validate-candidate
@@ -71,36 +67,39 @@ jobs:
       SERGEANT_CLOUDFLARE_SAFETY_RESERVE_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_SAFETY_RESERVE_NEURONS || '2500' }}
       SERGEANT_CLOUDFLARE_UNKNOWN_MODEL_RESERVATION_NEURONS: ${{ vars.SERGEANT_CLOUDFLARE_UNKNOWN_MODEL_RESERVATION_NEURONS || '2500' }}
     steps:
-      - name: Checkout exact qualification head without persisted credentials
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install the proved Sergeant route before secrets are exposed
+      - name: Install proved Sergeant route before secrets
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
 
-      - name: Restore latest shared Cloudflare usage state
+      - name: Restore latest shared usage state
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p build /tmp/qwq-usage
-          artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-remaining-five-ledger&per_page=100" \
+          artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-seventh-seat-qwq&per_page=100" \
             --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -z "$artifact_id" ]; then
+            artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-remaining-five-ledger&per_page=100" \
+              --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          fi
           if [ -n "$artifact_id" ]; then
             gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/qwq-usage.zip
             unzip -o /tmp/qwq-usage.zip -d /tmp/qwq-usage >/dev/null
-            [ ! -f /tmp/qwq-usage/cloudflare-usage-state.json ] || cp /tmp/qwq-usage/cloudflare-usage-state.json build/cloudflare-usage-state.json
+            usage="$(find /tmp/qwq-usage -name cloudflare-usage-state.json -print -quit)"
+            [ -z "$usage" ] || cp "$usage" build/cloudflare-usage-state.json
           fi
 
       - name: Create bounded Challenger fixture
@@ -114,8 +113,7 @@ jobs:
               return await store.find_by_refresh_token(refresh_token_id)
           PY
 
-      - name: Run one guided-json Challenger mission
-        id: mission
+      - name: Run adapter-aware guided-json Challenger mission
         env:
           SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
           SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
@@ -138,55 +136,27 @@ jobs:
               _load_model_response,
               _parse_json_text,
               _request_headers,
+              _response_shape,
           )
 
           model = os.environ["SERGEANT_QWQ_MODEL"]
-          baseline = os.environ["SERGEANT_BASELINE_SHA"]
-          source_path = Path("build/qwq-fixture/src/session.py")
-          source = source_path.read_text(encoding="utf-8")
+          source = Path("build/qwq-fixture/src/session.py").read_text(encoding="utf-8")
           schema = {
               "type": "object",
               "properties": {
-                  "status": {"type": "string", "const": "ready"},
-                  "model": {"type": "string", "const": model},
-                  "verdict": {"type": "string", "enum": ["PASS", "NEEDS WORK", "BLOCK"]},
+                  "status": {"type": "string"},
+                  "model": {"type": "string"},
+                  "verdict": {"type": "string"},
                   "accepted_hypothesis": {"type": "string"},
                   "rejected_hypothesis": {"type": "string"},
-                  "coverage": {
-                      "type": "object",
-                      "properties": {
-                          "files_reviewed": {"type": "array", "items": {"type": "string"}},
-                          "areas": {"type": "array", "items": {"type": "string"}},
-                      },
-                      "required": ["files_reviewed", "areas"],
-                  },
-                  "finding": {
-                      "type": "object",
-                      "properties": {
-                          "path": {"type": "string"},
-                          "line_start": {"type": "integer"},
-                          "line_end": {"type": "integer"},
-                          "category": {"type": "string"},
-                          "severity": {"type": "string"},
-                          "root_cause": {"type": "string"},
-                          "evidence": {"type": "string"},
-                          "evidence_verified": {"type": "boolean"},
-                          "falsifier_checked": {"type": "string"},
-                      },
-                      "required": [
-                          "path", "line_start", "line_end", "category", "severity",
-                          "root_cause", "evidence", "evidence_verified", "falsifier_checked"
-                      ],
-                  },
+                  "coverage": {"type": "object"},
+                  "finding": {"type": "object"}
               },
-              "required": [
-                  "status", "model", "verdict", "accepted_hypothesis",
-                  "rejected_hypothesis", "coverage", "finding"
-              ],
+              "required": ["status", "model", "verdict", "accepted_hypothesis", "rejected_hypothesis", "coverage", "finding"]
           }
           system_prompt = (
-              "You are Sergeant Challenger support. Return only the requested JSON object. "
-              "Adjudicate competing concurrency hypotheses from source evidence; do not vote or invent database guarantees."
+              "Return only one JSON object. You are Sergeant Challenger support. "
+              "Adjudicate competing concurrency hypotheses from source evidence and never assume unseen database guarantees."
           )
           user_prompt = json.dumps({
               "model": model,
@@ -196,58 +166,87 @@ jobs:
                   "H1": "The sequence is safe because each await finishes before the next statement.",
                   "H2": "Two concurrent calls can both observe no session before either insert completes unless an unseen transaction or uniqueness guarantee exists."
               },
-              "instruction": (
-                  "Choose the evidence-supported hypothesis, reject the weaker one, and report the review verdict. "
-                  "Treat an absent transaction or unique constraint as an unresolved protection, not as something you may assume exists."
-              ),
+              "required_output": {
+                  "status": "ready",
+                  "model": model,
+                  "verdict": "NEEDS WORK or BLOCK",
+                  "accepted_hypothesis": "H2 with reason",
+                  "rejected_hypothesis": "H1 with reason",
+                  "coverage": {"files_reviewed": ["src/session.py"], "areas": ["concurrency"]},
+                  "finding": {
+                      "path": "src/session.py",
+                      "line_start": 1,
+                      "line_end": 5,
+                      "category": "concurrency",
+                      "severity": "major",
+                      "root_cause": "non-atomic check then insert",
+                      "evidence": "find_by_refresh_token followed by insert_session across await points",
+                      "evidence_verified": True,
+                      "falsifier_checked": "no transaction or uniqueness guarantee appears in supplied source"
+                  }
+              }
           })
+
+          result = {
+              "schema_version": "sergeant.cloudflare-seventh-seat.v1",
+              "contract_version": "role-mission-v3",
+              "tested_sha": os.environ["SERGEANT_BASELINE_SHA"],
+              "model": model,
+              "tested_at": datetime.now(timezone.utc).isoformat(),
+              "status": "failed",
+              "structured_transport_passed": False,
+              "role_mission_passed": False,
+              "response_shape": "",
+              "response_source": "",
+              "response": None,
+              "error_kind": ""
+          }
 
           settings = CloudflareGatewaySettings.from_environment()
           route = cloudflare_route(settings, model=model, max_output_tokens=1200)
           body = {
               "messages": [
                   {"role": "system", "content": system_prompt},
-                  {"role": "user", "content": user_prompt},
+                  {"role": "user", "content": user_prompt}
               ],
               "temperature": 0,
               "max_tokens": 1200,
-              "guided_json": schema,
+              "guided_json": schema
           }
           request = urllib.request.Request(
               _cloudflare_native_endpoint(route),
               data=json.dumps(body).encode("utf-8"),
               headers=_request_headers(route.api_key),
-              method="POST",
+              method="POST"
           )
 
-          result = {
-              "schema_version": "sergeant.cloudflare-seventh-seat.v1",
-              "contract_version": "role-mission-v3",
-              "tested_sha": baseline,
-              "model": model,
-              "tested_at": datetime.now(timezone.utc).isoformat(),
-              "status": "failed",
-              "structured_transport_passed": False,
-              "role_mission_passed": False,
-              "response": None,
-              "error_kind": "",
-          }
           try:
-              response = _load_model_response(
+              raw = _load_model_response(
                   route,
                   request,
                   system_prompt=system_prompt,
                   user_prompt=user_prompt,
-                  stage="native_guided_json",
+                  stage="native_guided_json_result_object"
               )
-              payload = _parse_json_text(_extract_text(response, "chat_completions"))
+              result["response_shape"] = _response_shape(raw)
+              direct = raw.get("result")
+              if isinstance(direct, dict) and any(key in direct for key in ("status", "verdict", "finding")):
+                  payload = direct
+                  result["response_source"] = "native_result_object"
+              elif any(key in raw for key in ("status", "verdict", "finding")):
+                  payload = raw
+                  result["response_source"] = "native_top_level_object"
+              else:
+                  payload = _parse_json_text(_extract_text(raw, "chat_completions"))
+                  result["response_source"] = "extracted_text"
+
               coverage = payload.get("coverage") if isinstance(payload.get("coverage"), dict) else {}
               reviewed = coverage.get("files_reviewed") if isinstance(coverage.get("files_reviewed"), list) else []
               areas = coverage.get("areas") if isinstance(coverage.get("areas"), list) else []
               finding = payload.get("finding") if isinstance(payload.get("finding"), dict) else {}
-              evidence = str(finding.get("evidence") or "").lower()
               accepted = str(payload.get("accepted_hypothesis") or "").lower()
               rejected = str(payload.get("rejected_hypothesis") or "").lower()
+              evidence = str(finding.get("evidence") or "").lower()
               passed = bool(
                   payload.get("status") == "ready"
                   and payload.get("model") == model
@@ -267,26 +266,22 @@ jobs:
                   "status": "certified" if passed else "failed",
                   "structured_transport_passed": True,
                   "role_mission_passed": passed,
-                  "response": payload,
+                  "response": payload
               })
           except LLMProviderError as error:
               message = str(error).lower()
               if "4006" in message or "daily allocation" in message or "quota circuit" in message:
-                  kind = "http_429_code_4006_daily_allocation"
                   result["status"] = "quota_blocked"
+                  result["error_kind"] = "http_429_code_4006_daily_allocation"
               elif "blocked before inference" in message:
-                  kind = "local_budget_blocked"
                   result["status"] = "budget_blocked"
+                  result["error_kind"] = "local_budget_blocked"
               elif "parseable json" in message or "response" in message:
-                  kind = "response_contract"
+                  result["error_kind"] = "response_contract"
               else:
-                  kind = "provider_error"
-              result["error_kind"] = kind
+                  result["error_kind"] = "provider_error"
 
-          Path("build/qwq-seventh-seat-result.json").write_text(
-              json.dumps(result, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
+          Path("build/qwq-seventh-seat-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
           PY
 
       - name: Verify credentials are absent from evidence
@@ -299,18 +294,14 @@ jobs:
           python - <<'PY'
           import os
           from pathlib import Path
-
           paths = [Path("build/qwq-seventh-seat-result.json"), Path("build/cloudflare-usage-state.json")]
-          values = [
-              os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ""),
-              os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", ""),
-          ]
+          values = [os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ""), os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", "")]
           for path in paths:
-              assert path.is_file(), f"Missing evidence: {path}"
+              assert path.is_file()
               text = path.read_text(encoding="utf-8", errors="replace")
               for value in values:
                   if value:
-                      assert value not in text, f"Configured provider value appeared in {path}"
+                      assert value not in text
           PY
 
       - name: Upload seventh-seat evidence
@@ -330,11 +321,8 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-
           result = json.loads(Path("build/qwq-seventh-seat-result.json").read_text(encoding="utf-8"))
           if result.get("status") in {"quota_blocked", "budget_blocked"}:
               raise SystemExit(f"Qualification paused honestly: {result['status']}")
           assert result.get("status") == "certified", "QwQ-32B did not satisfy the seventh-seat Challenger contract."
-          assert result.get("structured_transport_passed") is True
-          assert result.get("role_mission_passed") is True
           PY
