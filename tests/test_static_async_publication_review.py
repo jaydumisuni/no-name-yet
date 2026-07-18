@@ -15,7 +15,7 @@ def test_dart_provider_ref_after_await_is_reported(tmp_path: Path) -> None:
         """
 @riverpod
 class CategoryController extends _$CategoryController {
-  Future<List<Item>?> build() async {
+  Future<List?> build() async {
     final db = ref.watch(databaseProvider);
     final result = await fetchWithFallback(db);
     final sync = ref.read(syncProvider);
@@ -35,7 +35,7 @@ def test_dart_provider_dependency_captured_before_await_is_clean(tmp_path: Path)
         """
 @riverpod
 class CategoryController extends _$CategoryController {
-  Future<List<Item>?> build() async {
+  Future<List?> build() async {
     final db = ref.watch(databaseProvider);
     final sync = ref.read(syncProvider);
     final result = await fetchWithFallback(db);
