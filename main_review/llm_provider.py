@@ -438,6 +438,30 @@ def _response_shape(payload: dict[str, Any]) -> str:
     return json.dumps(shape, sort_keys=True)
 
 
+_STRUCTURED_MODEL_KEYS = frozenset(
+    {
+        "status",
+        "verdict",
+        "finding",
+        "findings",
+        "coverage",
+        "facts",
+        "capabilities",
+        "claims",
+        "decision",
+    }
+)
+
+
+def _structured_model_object(value: object) -> dict[str, Any] | None:
+    """Return an already-structured model payload, excluding provider metadata."""
+
+    if not isinstance(value, dict):
+        return None
+    keys = {str(key) for key in value}
+    return value if keys & _STRUCTURED_MODEL_KEYS else None
+
+
 def _text_value(value: object) -> str:
     if isinstance(value, str) and value.strip():
         return value
@@ -446,6 +470,9 @@ def _text_value(value: object) -> str:
             text = _text_value(value.get(key))
             if text:
                 return text
+        structured = _structured_model_object(value)
+        if structured is not None:
+            return json.dumps(structured, sort_keys=True)
         return ""
     if isinstance(value, list):
         parts = [_text_value(item) for item in value]
