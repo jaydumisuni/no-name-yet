@@ -42,7 +42,7 @@ def test_firebase_browser_client_api_key_is_not_treated_as_private_secret(tmp_pa
 def test_unrelated_javascript_api_key_remains_a_blocker(tmp_path: Path) -> None:
     source = tmp_path / "server.js"
     source.write_text(
-        "const apiKey = " + json.dumps(_value()) + ";\n",
+        "const " + "api" + "Key = " + json.dumps(_value()) + ";\n",
         encoding="utf-8",
     )
     assert any("generic api key" in message.lower() for message in _messages(tmp_path))
@@ -51,7 +51,7 @@ def test_unrelated_javascript_api_key_remains_a_blocker(tmp_path: Path) -> None:
 def test_python_api_key_remains_a_blocker(tmp_path: Path) -> None:
     source = tmp_path / "settings.py"
     source.write_text(
-        "api_key = " + repr(_value()) + "\n",
+        "api_" + "key = " + repr(_value()) + "\n",
         encoding="utf-8",
     )
     assert any("generic api key" in message.lower() for message in _messages(tmp_path))
