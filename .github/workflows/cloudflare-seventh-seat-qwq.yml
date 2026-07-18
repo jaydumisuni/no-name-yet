@@ -20,7 +20,7 @@ env:
   SERGEANT_QWQ_MODEL: '@cf/qwen/qwq-32b'
 
 jobs:
-  validate-candidate:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,33 +29,30 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-
       - name: Verify immutable baseline and workflow-only scope
         env:
-          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          test "$EVENT_BASE_SHA" = "$SERGEANT_BASELINE_SHA"
-          mapfile -t changed < <(git diff --name-only "$EVENT_BASE_SHA" "$EVENT_HEAD_SHA")
+          test "$BASE_SHA" = "$SERGEANT_BASELINE_SHA"
+          mapfile -t changed < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           test "${#changed[@]}" -eq 1
           test "${changed[0]}" = '.github/workflows/cloudflare-seventh-seat-qwq.yml'
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Prove provider and quota machinery without secrets
+      - name: Prove quota and provider contracts without secrets
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e . pytest
           python -m pytest -q tests/test_cloudflare_mission_qualification.py tests/test_cloudflare_usage_governor.py
 
-  qualify-qwq:
-    needs: validate-candidate
+  qualify:
+    needs: validate
     environment: sergeant-cloudflare-certification
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     env:
       SERGEANT_CPL_ENABLED: 'true'
       SERGEANT_CPL_POLICY: required
@@ -72,55 +69,32 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install proved Sergeant route before secrets
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
-
-      - name: Restore latest shared usage state
+      - name: Restore latest QwQ usage state
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p build /tmp/qwq-usage
-          artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-seventh-seat-qwq&per_page=100" \
-            --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
-          if [ -z "$artifact_id" ]; then
-            artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-remaining-five-ledger&per_page=100" \
-              --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
-          fi
-          if [ -n "$artifact_id" ]; then
-            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/qwq-usage.zip
-            unzip -o /tmp/qwq-usage.zip -d /tmp/qwq-usage >/dev/null
-            usage="$(find /tmp/qwq-usage -name cloudflare-usage-state.json -print -quit)"
-            [ -z "$usage" ] || cp "$usage" build/cloudflare-usage-state.json
-          fi
-
-      - name: Create bounded Challenger fixture
-        run: |
-          mkdir -p build/qwq-fixture/src
-          cat > build/qwq-fixture/src/session.py <<'PY'
-          async def issue_session(store, refresh_token_id):
-              existing = await store.find_by_refresh_token(refresh_token_id)
-              if existing is None:
-                  await store.insert_session(refresh_token_id)
-              return await store.find_by_refresh_token(refresh_token_id)
-          PY
-
-      - name: Run adapter-aware guided-json Challenger mission
+          mkdir -p build /tmp/qwq
+          artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=cloudflare-seventh-seat-qwq&per_page=100" --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$artifact_id"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/qwq.zip
+          unzip -o /tmp/qwq.zip -d /tmp/qwq >/dev/null
+          cp "$(find /tmp/qwq -name cloudflare-usage-state.json -print -quit)" build/cloudflare-usage-state.json
+      - name: Run final nested-result Challenger mission
         env:
           SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
           SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
         run: |
           python - <<'PY'
           from __future__ import annotations
-
           import json
           import os
           import urllib.request
@@ -139,173 +113,164 @@ jobs:
               _response_shape,
           )
 
-          model = os.environ["SERGEANT_QWQ_MODEL"]
-          source = Path("build/qwq-fixture/src/session.py").read_text(encoding="utf-8")
+          model = os.environ['SERGEANT_QWQ_MODEL']
+          source = '''async def issue_session(store, refresh_token_id):
+              existing = await store.find_by_refresh_token(refresh_token_id)
+              if existing is None:
+                  await store.insert_session(refresh_token_id)
+              return await store.find_by_refresh_token(refresh_token_id)
+          '''
           schema = {
-              "type": "object",
-              "properties": {
-                  "status": {"type": "string"},
-                  "model": {"type": "string"},
-                  "verdict": {"type": "string"},
-                  "accepted_hypothesis": {"type": "string"},
-                  "rejected_hypothesis": {"type": "string"},
-                  "coverage": {"type": "object"},
-                  "finding": {"type": "object"}
+              'type': 'object',
+              'properties': {
+                  'status': {'type': 'string'},
+                  'model': {'type': 'string'},
+                  'verdict': {'type': 'string'},
+                  'accepted_hypothesis': {'type': 'string'},
+                  'rejected_hypothesis': {'type': 'string'},
+                  'coverage': {'type': 'object'},
+                  'finding': {'type': 'object'},
               },
-              "required": ["status", "model", "verdict", "accepted_hypothesis", "rejected_hypothesis", "coverage", "finding"]
+              'required': ['status', 'model', 'verdict', 'accepted_hypothesis', 'rejected_hypothesis', 'coverage', 'finding'],
           }
-          system_prompt = (
-              "Return only one JSON object. You are Sergeant Challenger support. "
-              "Adjudicate competing concurrency hypotheses from source evidence and never assume unseen database guarantees."
-          )
+          system_prompt = 'Return only one JSON object. You are Sergeant Challenger support. Adjudicate concurrency claims from supplied source and never assume unseen database guarantees.'
           user_prompt = json.dumps({
-              "model": model,
-              "path": "src/session.py",
-              "source": source,
-              "hypotheses": {
-                  "H1": "The sequence is safe because each await finishes before the next statement.",
-                  "H2": "Two concurrent calls can both observe no session before either insert completes unless an unseen transaction or uniqueness guarantee exists."
+              'model': model,
+              'path': 'src/session.py',
+              'source': source,
+              'hypotheses': {
+                  'H1': 'The sequence is safe because each await completes before the next statement.',
+                  'H2': 'Concurrent calls can both observe no session before either insert completes unless an unseen transaction or uniqueness guarantee exists.',
               },
-              "required_output": {
-                  "status": "ready",
-                  "model": model,
-                  "verdict": "NEEDS WORK or BLOCK",
-                  "accepted_hypothesis": "H2 with reason",
-                  "rejected_hypothesis": "H1 with reason",
-                  "coverage": {"files_reviewed": ["src/session.py"], "areas": ["concurrency"]},
-                  "finding": {
-                      "path": "src/session.py",
-                      "line_start": 1,
-                      "line_end": 5,
-                      "category": "concurrency",
-                      "severity": "major",
-                      "root_cause": "non-atomic check then insert",
-                      "evidence": "find_by_refresh_token followed by insert_session across await points",
-                      "evidence_verified": True,
-                      "falsifier_checked": "no transaction or uniqueness guarantee appears in supplied source"
-                  }
-              }
+              'required_output': {
+                  'status': 'ready',
+                  'model': model,
+                  'verdict': 'NEEDS WORK or BLOCK',
+                  'accepted_hypothesis': 'H2 with evidence',
+                  'rejected_hypothesis': 'H1 with reason',
+                  'coverage': {'files_reviewed': ['src/session.py'], 'areas': ['concurrency']},
+                  'finding': {
+                      'path': 'src/session.py',
+                      'category': 'concurrency',
+                      'severity': 'major',
+                      'evidence': 'find_by_refresh_token followed by insert_session across await points',
+                      'evidence_verified': True,
+                  },
+              },
           })
 
           result = {
-              "schema_version": "sergeant.cloudflare-seventh-seat.v1",
-              "contract_version": "role-mission-v3",
-              "tested_sha": os.environ["SERGEANT_BASELINE_SHA"],
-              "model": model,
-              "tested_at": datetime.now(timezone.utc).isoformat(),
-              "status": "failed",
-              "structured_transport_passed": False,
-              "role_mission_passed": False,
-              "response_shape": "",
-              "response_source": "",
-              "response": None,
-              "error_kind": ""
+              'schema_version': 'sergeant.cloudflare-seventh-seat.v1',
+              'contract_version': 'role-mission-v3',
+              'tested_sha': os.environ['SERGEANT_BASELINE_SHA'],
+              'model': model,
+              'tested_at': datetime.now(timezone.utc).isoformat(),
+              'status': 'failed',
+              'structured_transport_passed': False,
+              'role_mission_passed': False,
+              'response_shape': '',
+              'response_source': '',
+              'response': None,
+              'error_kind': '',
           }
 
           settings = CloudflareGatewaySettings.from_environment()
           route = cloudflare_route(settings, model=model, max_output_tokens=1200)
           body = {
-              "messages": [
-                  {"role": "system", "content": system_prompt},
-                  {"role": "user", "content": user_prompt}
+              'messages': [
+                  {'role': 'system', 'content': system_prompt},
+                  {'role': 'user', 'content': user_prompt},
               ],
-              "temperature": 0,
-              "max_tokens": 1200,
-              "guided_json": schema
+              'temperature': 0,
+              'max_tokens': 1200,
+              'guided_json': schema,
           }
           request = urllib.request.Request(
               _cloudflare_native_endpoint(route),
-              data=json.dumps(body).encode("utf-8"),
+              data=json.dumps(body).encode('utf-8'),
               headers=_request_headers(route.api_key),
-              method="POST"
+              method='POST',
           )
-
           try:
-              raw = _load_model_response(
-                  route,
-                  request,
-                  system_prompt=system_prompt,
-                  user_prompt=user_prompt,
-                  stage="native_guided_json_result_object"
-              )
-              result["response_shape"] = _response_shape(raw)
-              direct = raw.get("result")
-              if isinstance(direct, dict) and any(key in direct for key in ("status", "verdict", "finding")):
-                  payload = direct
-                  result["response_source"] = "native_result_object"
-              elif any(key in raw for key in ("status", "verdict", "finding")):
-                  payload = raw
-                  result["response_source"] = "native_top_level_object"
+              raw = _load_model_response(route, request, system_prompt=system_prompt, user_prompt=user_prompt, stage='native_guided_json_nested_response')
+              result['response_shape'] = _response_shape(raw)
+              outer = raw.get('result')
+              nested = outer.get('response') if isinstance(outer, dict) else None
+              if isinstance(nested, dict):
+                  payload = nested
+                  result['response_source'] = 'result.response.object'
+              elif isinstance(nested, str):
+                  payload = _parse_json_text(nested)
+                  result['response_source'] = 'result.response.text'
+              elif isinstance(outer, dict) and any(key in outer for key in ('status', 'verdict', 'finding')):
+                  payload = outer
+                  result['response_source'] = 'result.object'
               else:
-                  payload = _parse_json_text(_extract_text(raw, "chat_completions"))
-                  result["response_source"] = "extracted_text"
+                  payload = _parse_json_text(_extract_text(raw, 'chat_completions'))
+                  result['response_source'] = 'extracted_text'
 
-              coverage = payload.get("coverage") if isinstance(payload.get("coverage"), dict) else {}
-              reviewed = coverage.get("files_reviewed") if isinstance(coverage.get("files_reviewed"), list) else []
-              areas = coverage.get("areas") if isinstance(coverage.get("areas"), list) else []
-              finding = payload.get("finding") if isinstance(payload.get("finding"), dict) else {}
-              accepted = str(payload.get("accepted_hypothesis") or "").lower()
-              rejected = str(payload.get("rejected_hypothesis") or "").lower()
-              evidence = str(finding.get("evidence") or "").lower()
+              coverage = payload.get('coverage') if isinstance(payload.get('coverage'), dict) else {}
+              reviewed = coverage.get('files_reviewed') if isinstance(coverage.get('files_reviewed'), list) else []
+              areas = coverage.get('areas') if isinstance(coverage.get('areas'), list) else []
+              finding = payload.get('finding') if isinstance(payload.get('finding'), dict) else {}
+              evidence = str(finding.get('evidence') or '').lower()
+              accepted = str(payload.get('accepted_hypothesis') or '').lower()
+              rejected = str(payload.get('rejected_hypothesis') or '').lower()
               passed = bool(
-                  payload.get("status") == "ready"
-                  and payload.get("model") == model
-                  and payload.get("verdict") in {"NEEDS WORK", "BLOCK"}
-                  and "src/session.py" in {str(item) for item in reviewed}
-                  and any("concurr" in str(item).lower() or "state" in str(item).lower() for item in areas)
-                  and finding.get("path") == "src/session.py"
-                  and str(finding.get("category") or "").lower() in {"correctness", "concurrency"}
-                  and str(finding.get("severity") or "").lower() in {"major", "blocker"}
-                  and finding.get("evidence_verified") is True
-                  and "find_by_refresh_token" in evidence
-                  and "insert_session" in evidence
-                  and ("h2" in accepted or "concurrent" in accepted or "race" in accepted)
-                  and ("h1" in rejected or "safe" in rejected or "await" in rejected)
+                  payload.get('status') == 'ready'
+                  and payload.get('model') == model
+                  and payload.get('verdict') in {'NEEDS WORK', 'BLOCK'}
+                  and 'src/session.py' in {str(item) for item in reviewed}
+                  and any('concurr' in str(item).lower() or 'state' in str(item).lower() for item in areas)
+                  and finding.get('path') == 'src/session.py'
+                  and str(finding.get('category') or '').lower() in {'correctness', 'concurrency'}
+                  and str(finding.get('severity') or '').lower() in {'major', 'blocker'}
+                  and finding.get('evidence_verified') is True
+                  and 'find_by_refresh_token' in evidence
+                  and 'insert_session' in evidence
+                  and ('h2' in accepted or 'concurrent' in accepted or 'race' in accepted)
+                  and ('h1' in rejected or 'safe' in rejected or 'await' in rejected)
               )
               result.update({
-                  "status": "certified" if passed else "failed",
-                  "structured_transport_passed": True,
-                  "role_mission_passed": passed,
-                  "response": payload
+                  'status': 'certified' if passed else 'failed',
+                  'structured_transport_passed': True,
+                  'role_mission_passed': passed,
+                  'response': payload,
               })
           except LLMProviderError as error:
               message = str(error).lower()
-              if "4006" in message or "daily allocation" in message or "quota circuit" in message:
-                  result["status"] = "quota_blocked"
-                  result["error_kind"] = "http_429_code_4006_daily_allocation"
-              elif "blocked before inference" in message:
-                  result["status"] = "budget_blocked"
-                  result["error_kind"] = "local_budget_blocked"
-              elif "parseable json" in message or "response" in message:
-                  result["error_kind"] = "response_contract"
+              if '4006' in message or 'daily allocation' in message or 'quota circuit' in message:
+                  result['status'] = 'quota_blocked'
+                  result['error_kind'] = 'http_429_code_4006_daily_allocation'
+              elif 'blocked before inference' in message:
+                  result['status'] = 'budget_blocked'
+                  result['error_kind'] = 'local_budget_blocked'
+              elif 'parseable json' in message or 'response' in message:
+                  result['error_kind'] = 'response_contract'
               else:
-                  result["error_kind"] = "provider_error"
+                  result['error_kind'] = 'provider_error'
 
-          Path("build/qwq-seventh-seat-result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          Path('build/qwq-seventh-seat-result.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n', encoding='utf-8')
           PY
-
-      - name: Verify credentials are absent from evidence
-        id: credential_scan
+      - name: Verify secrets are absent
+        id: scan
         if: always()
         env:
-          SERGEANT_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
-          SERGEANT_CLOUDFLARE_API_TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.SERGEANT_CLOUDFLARE_ACCOUNT_ID }}
+          TOKEN: ${{ secrets.SERGEANT_CLOUDFLARE_API_TOKEN }}
         run: |
           python - <<'PY'
           import os
           from pathlib import Path
-          paths = [Path("build/qwq-seventh-seat-result.json"), Path("build/cloudflare-usage-state.json")]
-          values = [os.getenv("SERGEANT_CLOUDFLARE_ACCOUNT_ID", ""), os.getenv("SERGEANT_CLOUDFLARE_API_TOKEN", "")]
-          for path in paths:
+          for path in [Path('build/qwq-seventh-seat-result.json'), Path('build/cloudflare-usage-state.json')]:
               assert path.is_file()
-              text = path.read_text(encoding="utf-8", errors="replace")
-              for value in values:
+              text = path.read_text(encoding='utf-8', errors='replace')
+              for value in [os.getenv('ACCOUNT', ''), os.getenv('TOKEN', '')]:
                   if value:
                       assert value not in text
           PY
-
-      - name: Upload seventh-seat evidence
-        if: always() && steps.credential_scan.outcome == 'success'
+      - name: Upload final QwQ evidence
+        if: always() && steps.scan.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: cloudflare-seventh-seat-qwq
@@ -314,15 +279,14 @@ jobs:
             build/cloudflare-usage-state.json
           if-no-files-found: error
           retention-days: 90
-
       - name: Enforce accepted Challenger contract or honest rejection
         if: always()
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          result = json.loads(Path("build/qwq-seventh-seat-result.json").read_text(encoding="utf-8"))
-          if result.get("status") in {"quota_blocked", "budget_blocked"}:
+          result = json.loads(Path('build/qwq-seventh-seat-result.json').read_text(encoding='utf-8'))
+          if result.get('status') in {'quota_blocked', 'budget_blocked'}:
               raise SystemExit(f"Qualification paused honestly: {result['status']}")
-          assert result.get("status") == "certified", "QwQ-32B did not satisfy the seventh-seat Challenger contract."
+          assert result.get('status') == 'certified', 'QwQ-32B did not satisfy the seventh-seat Challenger contract.'
           PY
