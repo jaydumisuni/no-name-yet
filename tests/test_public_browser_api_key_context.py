@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from main_review.evidence import SecretEvidenceProvider
@@ -19,17 +20,20 @@ def test_firebase_browser_client_api_key_is_not_treated_as_private_secret(tmp_pa
     source = tmp_path / "app.js"
     public_identifier = "AIzaSy" + "PublicBrowserIdentifier123456"
     source.write_text(
-        f"""
-const firebaseConfig = {{
-  apiKey: "{public_identifier}",
-  authDomain: "example.firebaseapp.com",
-  projectId: "example-project",
-  storageBucket: "example.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef",
-}};
-initializeApp(firebaseConfig);
-        """,
+        "\n".join(
+            [
+                "const firebaseConfig = {",
+                "  apiKey: " + json.dumps(public_identifier) + ",",
+                '  authDomain: "example.firebaseapp.com",',
+                '  projectId: "example-project",',
+                '  storageBucket: "example.appspot.com",',
+                '  messagingSenderId: "123456789",',
+                '  appId: "1:123456789:web:abcdef",',
+                "};",
+                "initializeApp(firebaseConfig);",
+            ]
+        )
+        + "\n",
         encoding="utf-8",
     )
     assert not any("generic api key" in message.lower() for message in _messages(tmp_path))
@@ -38,7 +42,7 @@ initializeApp(firebaseConfig);
 def test_unrelated_javascript_api_key_remains_a_blocker(tmp_path: Path) -> None:
     source = tmp_path / "server.js"
     source.write_text(
-        f'const apiKey = "{_value()}";\n',
+        "const apiKey = " + json.dumps(_value()) + ";\n",
         encoding="utf-8",
     )
     assert any("generic api key" in message.lower() for message in _messages(tmp_path))
@@ -47,7 +51,7 @@ def test_unrelated_javascript_api_key_remains_a_blocker(tmp_path: Path) -> None:
 def test_python_api_key_remains_a_blocker(tmp_path: Path) -> None:
     source = tmp_path / "settings.py"
     source.write_text(
-        f'api_key = "{_value()}"\n',
+        "api_key = " + repr(_value()) + "\n",
         encoding="utf-8",
     )
     assert any("generic api key" in message.lower() for message in _messages(tmp_path))
