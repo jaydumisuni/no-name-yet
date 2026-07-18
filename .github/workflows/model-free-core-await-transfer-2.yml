@@ -1,0 +1,169 @@
+name: Model-Free Core Await Transfer 2
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-await-transfer-2.yml"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+      - "tests/test_static_await_state_review.py"
+      - "tests/test_static_js_remote_state_review.py"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout frozen Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout Kotlin fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: Matronhq/matron-android
+          ref: 6dbd927557951f6d18ded0c4b9a34e9a555bbda8
+          path: await-transfer-2/matron
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout React fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: bluom7/post-app-frontend
+          ref: b569158da12b996ee7007b75ea006c389c75c1e7
+          path: await-transfer-2/post-app
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout JavaScript ownership fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: nzilberberg/TomeRoam
+          ref: d513dc101d39fe874e30c3baa7ff65f0a4fac471
+          path: await-transfer-2/tomeroam
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Freeze defective parent revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in await-transfer-2/matron await-transfer-2/post-app await-transfer-2/tomeroam; do
+            git -C "$path" checkout --detach HEAD^
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-await-transfer-2-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-await-transfer-2
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          cases = [
+              {
+                  "case_id": "await-transfer-2-a",
+                  "repository": "Matronhq/matron-android",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-2/matron",
+                  "changed_files": [
+                      "app/src/main/java/chat/matron/android/viewmodels/DeviceLinkViewModel.kt"
+                  ],
+              },
+              {
+                  "case_id": "await-transfer-2-b",
+                  "repository": "bluom7/post-app-frontend",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-2/post-app",
+                  "changed_files": ["repos/post-app-frontend/index.html"],
+              },
+              {
+                  "case_id": "await-transfer-2-c",
+                  "repository": "nzilberberg/TomeRoam",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-2/tomeroam",
+                  "changed_files": ["js/banking.js"],
+              },
+          ]
+          for case in cases:
+              case["defective_ref"] = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              case["workspace_policy"] = "static_first"
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-await-transfer-2",
+              "purpose": "Second untouched transfer validation for stale state and ownership across suspension points. Expected roots remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-await-transfer-2/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review on untouched parents
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-await-transfer-2/runtime-manifest.json \
+            --output build/model-free-core-await-transfer-2/frozen-result.json \
+            2>&1 | tee build/model-free-core-await-transfer-2/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — await transfer 2"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-await-transfer-2/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-await-transfer-2
+          path: build/model-free-core-await-transfer-2/
+          if-no-files-found: error
+          retention-days: 90
