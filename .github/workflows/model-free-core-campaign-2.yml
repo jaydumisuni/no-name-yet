@@ -1,0 +1,122 @@
+name: Model-Free Core Campaign 2
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-campaign-2.yml"
+      - "review-training/model-free-core-campaign-2.json"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  sergeant-first-freeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout Sergeant exact head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout OpenLogi defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: AprilNEA/OpenLogi
+          ref: d46f81d2fcf163a7ffda4efc23e1629edfbb3a76
+          path: training-cases/openlogi
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            crates/openlogi-hook/src
+            crates/openlogi-hook/Cargo.toml
+            Cargo.toml
+            README.md
+
+      - name: Checkout Wardnet defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: wardnet/wardnet
+          ref: 0bd4a430565e4da4e3b7c68330a08145e010b058
+          path: training-cases/wardnet
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            deploy
+            source/daemon/crates/wardnetd/src
+            source/daemon/crates/wardnetd/Cargo.toml
+            README.md
+
+      - name: Checkout PennyWise defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: sarim2000/pennywiseai-tracker
+          ref: 9577b63f2da4be7498a99d83f4ffa92bf2ae2cb1
+          path: training-cases/pennywise
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            parser-core/src/main/kotlin/com/pennywiseai/parser/core/bank
+            parser-core/build.gradle.kts
+            settings.gradle.kts
+            README.md
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider usage state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-core-campaign-2-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Run Sergeant first without models or workspace
+        run: |
+          mkdir -p build/model-free-core-campaign-2
+          python scripts/run_static_training_set.py \
+            review-training/model-free-core-campaign-2.json \
+            --output build/model-free-core-campaign-2/frozen-sergeant-first.json \
+            | tee build/model-free-core-campaign-2/frozen-sergeant-first-summary.json
+
+      - name: Publish frozen summary
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('build/model-free-core-campaign-2/frozen-sergeant-first.json').read_text())
+          lines = [
+              '# Model-free Sergeant core campaign 2 — frozen first pass',
+              '',
+              f"Exact Sergeant head: `{os.environ['GITHUB_SHA']}`",
+              '',
+              '| Case | Verdict | Admitted | Advisory | Assurances | Models | Seconds |',
+              '|---|---:|---:|---:|---:|---:|---:|',
+          ]
+          for item in data['summaries']:
+              lines.append(
+                  f"| {item['case_id']} | {item['verdict']} | {item['admitted_finding_count']} | "
+                  f"{item['advisory_finding_count']} | {item['unresolved_assurance_count']} | "
+                  f"{item['model_calls']} | {item['elapsed_seconds']} |"
+              )
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines) + '\n')
+          PY
+
+      - name: Upload immutable Sergeant-first reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-campaign-2-sergeant-first
+          path: build/model-free-core-campaign-2/
+          if-no-files-found: error
+          retention-days: 90
