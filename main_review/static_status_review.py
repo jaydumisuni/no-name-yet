@@ -7,6 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+from .static_async_epoch_review import run_static_async_epoch_review
 from .static_async_lifecycle_review import run_static_async_lifecycle_review
 from .static_await_state_review import run_static_await_state_review
 from .static_core_contract_review import run_static_core_contract_review
@@ -123,53 +124,28 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         )
 
     recovery = run_static_recovery_review(root_path, changed)
-    findings.extend(
-        dict(item)
-        for item in recovery.get("findings", [])
-        if isinstance(item, dict)
-    )
+    findings.extend(dict(item) for item in recovery.get("findings", []) if isinstance(item, dict))
     stale_state = run_static_stale_state_review(root_path, changed)
-    findings.extend(
-        dict(item)
-        for item in stale_state.get("findings", [])
-        if isinstance(item, dict)
-    )
+    findings.extend(dict(item) for item in stale_state.get("findings", []) if isinstance(item, dict))
     transfer = run_static_transfer_review(root_path, changed)
-    findings.extend(
-        dict(item)
-        for item in transfer.get("findings", [])
-        if isinstance(item, dict)
-    )
+    findings.extend(dict(item) for item in transfer.get("findings", []) if isinstance(item, dict))
     core_contract = run_static_core_contract_review(root_path, changed)
-    findings.extend(
-        dict(item)
-        for item in core_contract.get("findings", [])
-        if isinstance(item, dict)
-    )
+    findings.extend(dict(item) for item in core_contract.get("findings", []) if isinstance(item, dict))
     async_lifecycle = run_static_async_lifecycle_review(root_path, changed)
-    findings.extend(
-        dict(item)
-        for item in async_lifecycle.get("findings", [])
-        if isinstance(item, dict)
-    )
+    findings.extend(dict(item) for item in async_lifecycle.get("findings", []) if isinstance(item, dict))
     await_state = run_static_await_state_review(root_path, changed)
-    findings.extend(
-        dict(item)
-        for item in await_state.get("findings", [])
-        if isinstance(item, dict)
-    )
+    findings.extend(dict(item) for item in await_state.get("findings", []) if isinstance(item, dict))
     js_remote_state = run_static_js_remote_state_review(root_path, changed)
-    findings.extend(
-        dict(item)
-        for item in js_remote_state.get("findings", [])
-        if isinstance(item, dict)
-    )
+    findings.extend(dict(item) for item in js_remote_state.get("findings", []) if isinstance(item, dict))
+    async_epoch = run_static_async_epoch_review(root_path, changed)
+    findings.extend(dict(item) for item in async_epoch.get("findings", []) if isinstance(item, dict))
+
     unique: dict[tuple[str, str], dict[str, Any]] = {}
     for finding in findings:
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v8",
+        "schema_version": "sergeant.static-status-review.v9",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -187,5 +163,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_async_lifecycle_review": async_lifecycle,
         "static_await_state_review": await_state,
         "static_js_remote_state_review": js_remote_state,
+        "static_async_epoch_review": async_epoch,
         "executed_project_code": False,
     }
