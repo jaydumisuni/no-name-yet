@@ -1,0 +1,169 @@
+name: Model-Free Core Await Transfer 3
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-await-transfer-3.yml"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout frozen Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout Dart fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: Suwayomi/Suwayomi-Tsumiru
+          ref: aa9e33d79fd065ac4d7ea948137c837ea7a25e75
+          path: await-transfer-3/tsumiru
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout TypeScript request-identity fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: xkazm04/personas
+          ref: 782bbb8f7a6b1951d6eff303cfac8c066c5f5bf6
+          path: await-transfer-3/personas
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout TypeScript logout-lifetime fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: rocket-meals/rocket-meals
+          ref: b66980b1a6e85a3cb9ce954fd4948b04c26e3f96
+          path: await-transfer-3/rocket-meals
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Freeze defective parent revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in await-transfer-3/tsumiru await-transfer-3/personas await-transfer-3/rocket-meals; do
+            git -C "$path" checkout --detach HEAD^
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-await-transfer-3-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-await-transfer-3
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          cases = [
+              {
+                  "case_id": "await-transfer-3-a",
+                  "repository": "Suwayomi/Suwayomi-Tsumiru",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-3/tsumiru",
+                  "changed_files": [
+                      "lib/src/features/library/presentation/category/controller/edit_category_controller.dart"
+                  ],
+              },
+              {
+                  "case_id": "await-transfer-3-b",
+                  "repository": "xkazm04/personas",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-3/personas",
+                  "changed_files": [
+                      "src/features/agents/components/allPersonas/PersonaConfigPanel.tsx"
+                  ],
+              },
+              {
+                  "case_id": "await-transfer-3-c",
+                  "repository": "rocket-meals/rocket-meals",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-3/rocket-meals",
+                  "changed_files": ["apps/frontend/app/app/(app)/_layout.tsx"],
+              },
+          ]
+          for case in cases:
+              case["defective_ref"] = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              case["workspace_policy"] = "static_first"
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-await-transfer-3",
+              "purpose": "Third untouched transfer validation for stale async publication and lifetime validity. Expected roots remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-await-transfer-3/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review on untouched parents
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-await-transfer-3/runtime-manifest.json \
+            --output build/model-free-core-await-transfer-3/frozen-result.json \
+            2>&1 | tee build/model-free-core-await-transfer-3/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — await transfer 3"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-await-transfer-3/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-await-transfer-3
+          path: build/model-free-core-await-transfer-3/
+          if-no-files-found: error
+          retention-days: 90
