@@ -1,0 +1,106 @@
+name: Apply Cloudflare Structured Response Fix
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/apply-cloudflare-structured-response-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Patch structured provider object support
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('main_review/llm_provider.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''def _text_value(value: object) -> str:
+              if isinstance(value, str) and value.strip():
+                  return value
+              if isinstance(value, dict):
+                  for key in ("text", "content", "value", "response", "output"):
+                      text = _text_value(value.get(key))
+                      if text:
+                          return text
+                  return ""
+              if isinstance(value, list):
+                  parts = [_text_value(item) for item in value]
+                  return "\\n".join(part for part in parts if part)
+              return ""
+          '''
+          new = '''_STRUCTURED_MODEL_KEYS = frozenset(
+              {
+                  "status",
+                  "verdict",
+                  "finding",
+                  "findings",
+                  "coverage",
+                  "facts",
+                  "capabilities",
+                  "claims",
+                  "decision",
+              }
+          )
+
+
+          def _structured_model_object(value: object) -> dict[str, Any] | None:
+              """Return an already-structured model payload, excluding provider metadata."""
+
+              if not isinstance(value, dict):
+                  return None
+              keys = {str(key) for key in value}
+              return value if keys & _STRUCTURED_MODEL_KEYS else None
+
+
+          def _text_value(value: object) -> str:
+              if isinstance(value, str) and value.strip():
+                  return value
+              if isinstance(value, dict):
+                  for key in ("text", "content", "value", "response", "output"):
+                      text = _text_value(value.get(key))
+                      if text:
+                          return text
+                  structured = _structured_model_object(value)
+                  if structured is not None:
+                      return json.dumps(structured, sort_keys=True)
+                  return ""
+              if isinstance(value, list):
+                  parts = [_text_value(item) for item in value]
+                  return "\\n".join(part for part in parts if part)
+              return ""
+          '''
+          if old not in text:
+              raise SystemExit('Expected _text_value implementation was not found exactly once.')
+          if text.count(old) != 1:
+              raise SystemExit('Expected one _text_value implementation.')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Prove existing fallback behavior
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+          python -m pytest -q tests/test_cloudflare_native_fallback.py
+
+      - name: Remove constructor and publish product change
+        run: |
+          rm .github/workflows/apply-cloudflare-structured-response-fix.yml
+          git config user.name 'Sergeant Proof Constructor'
+          git config user.email 'actions@users.noreply.github.com'
+          git add main_review/llm_provider.py .github/workflows/apply-cloudflare-structured-response-fix.yml
+          git commit -m 'Support structured Cloudflare result objects'
+          git push origin HEAD:${{ github.head_ref }}
