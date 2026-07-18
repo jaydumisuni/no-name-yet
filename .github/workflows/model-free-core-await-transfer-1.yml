@@ -138,34 +138,21 @@ jobs:
             | tee build/model-free-core-await-transfer-1/frozen-summary.json
 
       - name: Publish frozen transfer summary
+        if: always()
         shell: bash
         run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          data = json.loads(
-              Path("build/model-free-core-await-transfer-1/frozen-result.json").read_text()
-          )
-          lines = [
-              "# Model-free Sergeant core — await transfer 1",
-              "",
-              f"Exact Sergeant head: `{os.environ['GITHUB_SHA']}`",
-              "",
-              "| Case | Verdict | Admitted | Advisory | Assurances | Models | Seconds |",
-              "|---|---:|---:|---:|---:|---:|---:|",
-          ]
-          for item in data["summaries"]:
-              lines.append(
-                  f"| {item['case_id']} | {item['verdict']} | {item['admitted_finding_count']} | "
-                  f"{item['advisory_finding_count']} | {item['unresolved_assurance_count']} | "
-                  f"{item['model_calls']} | {item['elapsed_seconds']} |"
-              )
-          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(lines) + "\n")
-          PY
+          {
+            echo "# Model-free Sergeant core — await transfer 1"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-await-transfer-1/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload immutable transfer reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: model-free-core-await-transfer-1
