@@ -10,6 +10,7 @@ from typing import Any, Iterable
 from .static_async_lifecycle_review import run_static_async_lifecycle_review
 from .static_await_state_review import run_static_await_state_review
 from .static_core_contract_review import run_static_core_contract_review
+from .static_js_remote_state_review import run_static_js_remote_state_review
 from .static_recovery_review import run_static_recovery_review
 from .static_stale_state_review import run_static_stale_state_review
 from .static_transfer_review import run_static_transfer_review
@@ -157,12 +158,18 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         for item in await_state.get("findings", [])
         if isinstance(item, dict)
     )
+    js_remote_state = run_static_js_remote_state_review(root_path, changed)
+    findings.extend(
+        dict(item)
+        for item in js_remote_state.get("findings", [])
+        if isinstance(item, dict)
+    )
     unique: dict[tuple[str, str], dict[str, Any]] = {}
     for finding in findings:
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v7",
+        "schema_version": "sergeant.static-status-review.v8",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -179,5 +186,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_core_contract_review": core_contract,
         "static_async_lifecycle_review": async_lifecycle,
         "static_await_state_review": await_state,
+        "static_js_remote_state_review": js_remote_state,
         "executed_project_code": False,
     }
