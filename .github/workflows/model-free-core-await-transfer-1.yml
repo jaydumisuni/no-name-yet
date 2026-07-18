@@ -88,18 +88,21 @@ jobs:
               {
                   "case_id": "await-transfer-a",
                   "repository": "ayal/switcher-hack",
+                  "source_pr": None,
                   "checkout_path": "await-transfer/switcher",
                   "changed_files": ["auto_cloud.py"],
               },
               {
                   "case_id": "await-transfer-b",
                   "repository": "boysclubcabo-prog/stoked-command-center",
+                  "source_pr": None,
                   "checkout_path": "await-transfer/stoked",
                   "changed_files": ["app.js"],
               },
               {
                   "case_id": "await-transfer-c",
                   "repository": "spy4x/caldav-tasks-web",
+                  "source_pr": None,
                   "checkout_path": "await-transfer/caldav",
                   "changed_files": ["apps/web/src/components/Sidebar.tsx"],
               },
@@ -131,11 +134,13 @@ jobs:
           PY
 
       - name: Run normal pr-review on untouched parents
+        shell: bash
         run: |
+          set -o pipefail
           python scripts/run_static_training_set.py \
             build/model-free-core-await-transfer-1/runtime-manifest.json \
             --output build/model-free-core-await-transfer-1/frozen-result.json \
-            | tee build/model-free-core-await-transfer-1/frozen-summary.json
+            2>&1 | tee build/model-free-core-await-transfer-1/frozen-summary.json
 
       - name: Publish frozen transfer summary
         if: always()
