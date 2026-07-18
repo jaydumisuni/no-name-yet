@@ -11,18 +11,23 @@ def _messages(tmp_path: Path) -> list[str]:
     return [item.message for item in SecretEvidenceProvider().collect(tmp_path, insight)]
 
 
+def _value() -> str:
+    return "private-" + "service-key-1234567890"
+
+
 def test_firebase_browser_client_api_key_is_not_treated_as_private_secret(tmp_path: Path) -> None:
     source = tmp_path / "app.js"
+    public_identifier = "AIzaSy" + "PublicBrowserIdentifier123456"
     source.write_text(
-        """
-const firebaseConfig = {
-  apiKey: "AIzaSyPublicBrowserIdentifier123456",
+        f"""
+const firebaseConfig = {{
+  apiKey: "{public_identifier}",
   authDomain: "example.firebaseapp.com",
   projectId: "example-project",
   storageBucket: "example.appspot.com",
   messagingSenderId: "123456789",
   appId: "1:123456789:web:abcdef",
-};
+}};
 initializeApp(firebaseConfig);
         """,
         encoding="utf-8",
@@ -33,7 +38,7 @@ initializeApp(firebaseConfig);
 def test_unrelated_javascript_api_key_remains_a_blocker(tmp_path: Path) -> None:
     source = tmp_path / "server.js"
     source.write_text(
-        'const apiKey = "private-service-key-1234567890";\n',
+        f'const apiKey = "{_value()}";\n',
         encoding="utf-8",
     )
     assert any("generic api key" in message.lower() for message in _messages(tmp_path))
@@ -42,7 +47,7 @@ def test_unrelated_javascript_api_key_remains_a_blocker(tmp_path: Path) -> None:
 def test_python_api_key_remains_a_blocker(tmp_path: Path) -> None:
     source = tmp_path / "settings.py"
     source.write_text(
-        'api_key = "private-service-key-1234567890"\n',
+        f'api_key = "{_value()}"\n',
         encoding="utf-8",
     )
     assert any("generic api key" in message.lower() for message in _messages(tmp_path))
