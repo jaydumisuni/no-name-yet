@@ -78,7 +78,7 @@ jobs:
 
           sparse_lineage_checkout \
             tddworks/ClaudeBar \
-            4a6f75d63776b9e4d928d4a6a22bb24313407869 \
+            02d4b3c44f7d2decd2e09e6611634e38516493c4 \
             bf7334655ca79eda6712e5b4f50c79d814f59d48 \
             transfer-15/claudebar \
             '/Sources/Infrastructure/Claude/ClaudeAPIUsageProbe.swift'
@@ -152,7 +152,7 @@ jobs:
                       "repository": "tddworks/ClaudeBar",
                       "source_pr": 226,
                       "checkout_path": "transfer-15/claudebar",
-                      "defective_ref": "4a6f75d63776b9e4d928d4a6a22bb24313407869",
+                      "defective_ref": "02d4b3c44f7d2decd2e09e6611634e38516493c4",
                       "fixing_ref": "bf7334655ca79eda6712e5b4f50c79d814f59d48",
                       "changed_files": [
                           "Sources/Infrastructure/Claude/ClaudeAPIUsageProbe.swift"
