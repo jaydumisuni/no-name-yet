@@ -34,16 +34,17 @@ jobs:
           test "$(git rev-parse HEAD)" = "6da1fb4b000d2c6040fe0aa4d632c6eb041ddc85"
           test ! -e main_review/static_transfer_13_review.py
 
-      - name: Checkout exact defective revisions
+      - name: Checkout exact defective and fixing lineages
         shell: bash
         run: |
           set -euo pipefail
 
-          sparse_checkout() {
+          sparse_lineage_checkout() {
             local repository="$1"
-            local ref="$2"
-            local destination="$3"
-            shift 3
+            local defective="$2"
+            local fixing="$3"
+            local destination="$4"
+            shift 4
 
             git init "$destination"
             git -C "$destination" remote add origin "https://github.com/${repository}.git"
@@ -52,23 +53,31 @@ jobs:
             for pattern in "$@"; do
               printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"
             done
-            git -C "$destination" fetch --depth=1 --filter=blob:none origin "$ref"
-            git -C "$destination" checkout --detach FETCH_HEAD
-            test "$(git -C "$destination" rev-parse HEAD)" = "$ref"
+
+            git -C "$destination" fetch --depth=200 --filter=blob:none origin "$fixing"
+            if ! git -C "$destination" cat-file -e "${defective}^{commit}"; then
+              git -C "$destination" fetch --depth=1 --filter=blob:none origin "$defective"
+            fi
+            git -C "$destination" cat-file -e "${fixing}^{commit}"
+            git -C "$destination" cat-file -e "${defective}^{commit}"
+            git -C "$destination" checkout --detach "$defective"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$defective"
           }
 
-          sparse_checkout \
+          sparse_lineage_checkout \
             LeanerCloud/CUDly \
             5c267c5c6034153212b6a3ad688b4e141b0b6917 \
+            a3a294d68ca32bd001d6f4c34b16e2db233f3dfa \
             transfer-13/cudly \
             '/internal/api/db_rate_limiter.go' \
             '/internal/api/handler_accounts.go' \
             '/internal/api/handler_history.go' \
             '/internal/auth/service_apikeys.go'
 
-          sparse_checkout \
+          sparse_lineage_checkout \
             jedwards1230/gofer \
             946126e30d90730612d2888c61d5628d9421fcdf \
+            001a6cb7ec1961bf9e6bd4defef5f144afd186bf \
             transfer-13/gofer \
             '/cmd/gofer/run.go' \
             '/cmd/gofer/service.go' \
@@ -79,9 +88,10 @@ jobs:
             '/internal/tui/panel.go' \
             '/internal/tuibridge/bridge.go'
 
-          sparse_checkout \
+          sparse_lineage_checkout \
             Mikecranesync/MIRA \
             f1521bb25b2ae592ee84d121c0b39d814f7b0474 \
+            35f78b195061f0873ceec9d3ca18d2576bcf8edf \
             transfer-13/mira \
             '/mira-bots/shared/engine.py'
 
@@ -143,6 +153,7 @@ jobs:
                       "source_pr": 859,
                       "checkout_path": "transfer-13/cudly",
                       "defective_ref": "5c267c5c6034153212b6a3ad688b4e141b0b6917",
+                      "fixing_ref": "a3a294d68ca32bd001d6f4c34b16e2db233f3dfa",
                       "changed_files": [
                           "internal/api/db_rate_limiter.go",
                           "internal/api/handler_accounts.go",
@@ -157,6 +168,7 @@ jobs:
                       "source_pr": 148,
                       "checkout_path": "transfer-13/gofer",
                       "defective_ref": "946126e30d90730612d2888c61d5628d9421fcdf",
+                      "fixing_ref": "001a6cb7ec1961bf9e6bd4defef5f144afd186bf",
                       "changed_files": [
                           "cmd/gofer/run.go",
                           "cmd/gofer/service.go",
@@ -175,6 +187,7 @@ jobs:
                       "source_pr": 2817,
                       "checkout_path": "transfer-13/mira",
                       "defective_ref": "f1521bb25b2ae592ee84d121c0b39d814f7b0474",
+                      "fixing_ref": "35f78b195061f0873ceec9d3ca18d2576bcf8edf",
                       "changed_files": ["mira-bots/shared/engine.py"],
                       "workspace_policy": "static_first",
                   },
