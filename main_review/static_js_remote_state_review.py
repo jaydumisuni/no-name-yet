@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Any, Iterable
 
 _SOURCE_SUFFIXES = {".js", ".jsx", ".ts", ".tsx"}
+_TS_RETURN_RE = r"(?:\s*:\s*[A-Za-z_$][\w$<>,.\[\]\s|&?:]*)?"
 _ASYNC_FUNCTION_RE = re.compile(
-    r"(?:async\s+function\s+(?P<decl>[A-Za-z_$][\w$]*)\s*\([^)]*\)|"
-    r"(?:const|let|var)\s+(?P<arrow>[A-Za-z_$][\w$]*)\s*=\s*async\s*\([^)]*\)\s*=>)\s*\{",
+    rf"(?:async\s+function\s+(?P<decl>[A-Za-z_$][\w$]*)\s*\([^)]*\){_TS_RETURN_RE}|"
+    rf"(?:const|let|var)\s+(?P<arrow>[A-Za-z_$][\w$]*)\s*=\s*async\s*\([^)]*\){_TS_RETURN_RE}\s*=>)\s*\{{",
     re.M,
 )
 _PLAIN_FUNCTION_RE = re.compile(
-    r"function\s+(?P<name>[A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{",
+    rf"function\s+(?P<name>[A-Za-z_$][\w$]*)\s*\([^)]*\){_TS_RETURN_RE}\s*\{{",
     re.M,
 )
 _MODULE_EMPTY_RE = re.compile(
@@ -283,8 +284,6 @@ def _imperative_stale_publication(path: str, text: str) -> list[dict[str, Any]]:
     method_pattern = "|".join(publication_methods)
 
     for function_name, (body, body_offset) in functions.items():
-        # Definition plus at least two invocation/reference paths is strong evidence
-        # that overlapping executions are possible during UI lifecycle changes.
         call_count = len(re.findall(rf"\b{re.escape(function_name)}\s*\(", text))
         reference_count = len(
             re.findall(
