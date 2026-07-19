@@ -5,6 +5,9 @@ from pathlib import Path
 from main_review.static_python_cancellation_review import run_static_python_cancellation_review
 
 
+ROOT = "grouped-cancellation-not-caught-by-ordinary-except"
+
+
 def _roots(result: dict) -> set[str]:
     return {str(item.get("root_cause")) for item in result.get("findings", [])}
 
@@ -34,7 +37,7 @@ class Worker:
         encoding="utf-8",
     )
     result = run_static_python_cancellation_review(tmp_path, ["worker.py"])
-    assert "taskgroup-cancellation-not-caught-by-ordinary-except" in _roots(result)
+    assert ROOT in _roots(result)
 
 
 def test_cross_file_taskgroup_evidence_is_used_for_changed_shutdown_loop(tmp_path: Path) -> None:
@@ -71,8 +74,38 @@ async def execute_batch():
 
     result = run_static_python_cancellation_review(tmp_path, ["worker.py"])
 
-    assert "taskgroup-cancellation-not-caught-by-ordinary-except" in _roots(result)
+    assert ROOT in _roots(result)
     assert result["taskgroup_evidence_path"] == "jobs.py"
+
+
+def test_heterogeneous_shutdown_batch_with_ordinary_except_is_reported(tmp_path: Path) -> None:
+    source = tmp_path / "worker.py"
+    source.write_text(
+        """
+import asyncio
+
+class Worker:
+    async def stop(self):
+        tasks = [task for board_tasks in self._tasks.values() for task in board_tasks]
+        for attr in ("_poll_task", "_audit_task"):
+            task = getattr(self, attr)
+            if task is not None:
+                tasks.append(task)
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        """,
+        encoding="utf-8",
+    )
+
+    result = run_static_python_cancellation_review(tmp_path, ["worker.py"])
+
+    assert ROOT in _roots(result)
+    assert result["taskgroup_evidence_path"] is None
 
 
 def test_taskgroup_shutdown_with_except_star_is_clean(tmp_path: Path) -> None:
@@ -99,7 +132,7 @@ class Worker:
         encoding="utf-8",
     )
     result = run_static_python_cancellation_review(tmp_path, ["worker.py"])
-    assert "taskgroup-cancellation-not-caught-by-ordinary-except" not in _roots(result)
+    assert ROOT not in _roots(result)
 
 
 def test_plain_task_cancellation_without_taskgroup_is_clean(tmp_path: Path) -> None:
@@ -118,7 +151,28 @@ async def stop(task):
         encoding="utf-8",
     )
     result = run_static_python_cancellation_review(tmp_path, ["worker.py"])
-    assert "taskgroup-cancellation-not-caught-by-ordinary-except" not in _roots(result)
+    assert ROOT not in _roots(result)
+
+
+def test_simple_homogeneous_task_list_without_taskgroup_is_clean(tmp_path: Path) -> None:
+    source = tmp_path / "worker.py"
+    source.write_text(
+        """
+import asyncio
+
+async def stop(tasks):
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        """,
+        encoding="utf-8",
+    )
+    result = run_static_python_cancellation_review(tmp_path, ["worker.py"])
+    assert ROOT not in _roots(result)
 
 
 def test_explicit_exception_group_handling_is_clean(tmp_path: Path) -> None:
@@ -145,4 +199,4 @@ async def stop(task):
         encoding="utf-8",
     )
     result = run_static_python_cancellation_review(tmp_path, ["worker.py"])
-    assert "taskgroup-cancellation-not-caught-by-ordinary-except" not in _roots(result)
+    assert ROOT not in _roots(result)
