@@ -24,9 +24,9 @@ from .static_js_controller_epoch_review import run_static_js_controller_epoch_re
 from .static_js_remote_state_review import run_static_js_remote_state_review
 from .static_python_cancellation_review import run_static_python_cancellation_review
 from .static_recovery_review import run_static_recovery_review
+from .static_remote_contract_review import run_static_remote_contract_review
 from .static_stale_state_review import run_static_stale_state_review
 from .static_terminal_state_review import run_static_terminal_state_review
-from .static_transfer_10_review import run_static_transfer_10_review
 from .static_transfer_9_review import run_static_transfer_9_review
 from .static_transfer_review import run_static_transfer_review
 
@@ -128,6 +128,20 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     transfer = run_static_transfer_review(root_path, changed)
     core_contract = run_static_core_contract_review(root_path, changed)
     contract_surface = run_static_contract_surface_review(root_path, changed)
+    remote_contract = run_static_remote_contract_review(root_path, changed)
+    canonical_remote_paths = {
+        str(item.get("path")) for item in remote_contract.get("findings", []) if isinstance(item, dict)
+    }
+    if canonical_remote_paths:
+        contract_surface["findings"] = [
+            item
+            for item in contract_surface.get("findings", [])
+            if not (
+                str(item.get("root_cause")) == "malformed-collection-response-silently-treated-as-empty"
+                and str(item.get("path")) in canonical_remote_paths
+            )
+        ]
+        contract_surface["finding_count"] = len(contract_surface["findings"])
     async_lifecycle = run_static_async_lifecycle_review(root_path, changed)
     await_state = run_static_await_state_review(root_path, changed)
     js_remote_state = run_static_js_remote_state_review(root_path, changed)
@@ -144,13 +158,13 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     terminal_state = run_static_terminal_state_review(root_path, changed)
     external_integrity = run_static_external_integrity_review(root_path, changed)
     transfer_9 = run_static_transfer_9_review(root_path, changed)
-    transfer_10 = run_static_transfer_10_review(root_path, changed)
     for result in (
         recovery,
         stale_state,
         transfer,
         core_contract,
         contract_surface,
+        remote_contract,
         async_lifecycle,
         await_state,
         js_remote_state,
@@ -167,7 +181,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         terminal_state,
         external_integrity,
         transfer_9,
-        transfer_10,
     ):
         findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
 
@@ -176,7 +189,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v19",
+        "schema_version": "sergeant.static-status-review.v20",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -192,6 +205,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_transfer_review": transfer,
         "static_core_contract_review": core_contract,
         "static_contract_surface_review": contract_surface,
+        "static_remote_contract_review": remote_contract,
         "static_async_lifecycle_review": async_lifecycle,
         "static_await_state_review": await_state,
         "static_js_remote_state_review": js_remote_state,
@@ -208,6 +222,5 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_terminal_state_review": terminal_state,
         "static_external_integrity_review": external_integrity,
         "static_transfer_9_review": transfer_9,
-        "static_transfer_10_review": transfer_10,
         "executed_project_code": False,
     }
