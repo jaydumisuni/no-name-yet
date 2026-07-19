@@ -1,5 +1,6 @@
 name: Model-Free Core Transfer 12
 # Reviewer frozen before target selection: c936362346e3c50d91edcef72aedee4b7d38a834
+# First run preserved valid 0/2 evidence; case C was unavailable because [id] was parsed as a sparse pattern.
 
 on:
   workflow_dispatch:
@@ -68,7 +69,7 @@ jobs:
             elaris-xyz/bozPicks \
             0241560a8eccf4070519dc8e8a878c1ed1633a62 \
             transfer-12/bozpicks \
-            '/apps/web/src/app/api/markets/[id]/predict/route.ts' \
+            '/apps/web/src/app/api/markets/\[id\]/predict/route.ts' \
             '/apps/web/src/lib/vault.ts'
 
       - name: Set up Python
