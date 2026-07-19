@@ -13,6 +13,7 @@ from .static_async_publication_review import run_static_async_publication_review
 from .static_await_state_review import run_static_await_state_review
 from .static_core_contract_review import run_static_core_contract_review
 from .static_dart_provider_lifetime_review import run_static_dart_provider_lifetime_review
+from .static_js_auth_chrome_review import run_static_js_auth_chrome_review
 from .static_js_controller_epoch_review import run_static_js_controller_epoch_review
 from .static_js_remote_state_review import run_static_js_remote_state_review
 from .static_recovery_review import run_static_recovery_review
@@ -119,6 +120,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     async_lifecycle = run_static_async_lifecycle_review(root_path, changed)
     await_state = run_static_await_state_review(root_path, changed)
     js_remote_state = run_static_js_remote_state_review(root_path, changed)
+    js_auth_chrome = run_static_js_auth_chrome_review(root_path, changed)
     async_epoch = run_static_async_epoch_review(root_path, changed)
     js_controller_epoch = run_static_js_controller_epoch_review(root_path, changed)
     async_publication = run_static_async_publication_review(root_path, changed)
@@ -131,6 +133,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         async_lifecycle,
         await_state,
         js_remote_state,
+        js_auth_chrome,
         async_epoch,
         js_controller_epoch,
         async_publication,
@@ -143,7 +146,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v12",
+        "schema_version": "sergeant.static-status-review.v13",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -161,6 +164,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_async_lifecycle_review": async_lifecycle,
         "static_await_state_review": await_state,
         "static_js_remote_state_review": js_remote_state,
+        "static_js_auth_chrome_review": js_auth_chrome,
         "static_async_epoch_review": async_epoch,
         "static_js_controller_epoch_review": js_controller_epoch,
         "static_async_publication_review": async_publication,
