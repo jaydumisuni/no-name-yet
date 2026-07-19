@@ -1,0 +1,166 @@
+name: Model-Free Core Auth Transfer 6
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-auth-transfer-6.yml"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout frozen Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout candidate A fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: Nerdy-Technician/JellyGlance
+          ref: a9a7d3675dac155f5af1668230ce2a456a28bd62
+          path: auth-transfer-6/jellyglance
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout candidate B fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: Arifur999/Health-Care
+          ref: ba65dced06a2eb0da9a86fbfc58bdef2c11a4b99
+          path: auth-transfer-6/health-care
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout candidate C fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: Magedemil/Claude
+          ref: 1414d426688e68ce1430a68161a47fa70a837c49
+          path: auth-transfer-6/khedma
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Freeze defective parent revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in auth-transfer-6/jellyglance auth-transfer-6/health-care auth-transfer-6/khedma; do
+            git -C "$path" checkout --detach HEAD^
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-auth-transfer-6-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-auth-transfer-6
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          cases = [
+              {
+                  "case_id": "auth-transfer-6-a",
+                  "repository": "Nerdy-Technician/JellyGlance",
+                  "source_pr": None,
+                  "checkout_path": "auth-transfer-6/jellyglance",
+                  "changed_files": ["apps/web/src/pages/components/general/navbar.jsx"],
+              },
+              {
+                  "case_id": "auth-transfer-6-b",
+                  "repository": "Arifur999/Health-Care",
+                  "source_pr": None,
+                  "checkout_path": "auth-transfer-6/health-care",
+                  "changed_files": ["healthcare/src/components/modules/Auth/LoginForm.tsx"],
+              },
+              {
+                  "case_id": "auth-transfer-6-c",
+                  "repository": "Magedemil/Claude",
+                  "source_pr": None,
+                  "checkout_path": "auth-transfer-6/khedma",
+                  "changed_files": ["src/pages/Auth.tsx"],
+              },
+          ]
+          for case in cases:
+              case["defective_ref"] = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              case["workspace_policy"] = "static_first"
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-auth-transfer-6",
+              "purpose": "Sixth untouched transfer validation over fresh auth-state propagation defects. Expected roots remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "reviewer_code_frozen_before_target_selection": "86ad8f6beba70ee81164d8132f7a25c78d823518",
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-auth-transfer-6/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review on untouched parents
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-auth-transfer-6/runtime-manifest.json \
+            --output build/model-free-core-auth-transfer-6/frozen-result.json \
+            2>&1 | tee build/model-free-core-auth-transfer-6/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — auth transfer 6"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-auth-transfer-6/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-auth-transfer-6
+          path: build/model-free-core-auth-transfer-6/
+          if-no-files-found: error
+          retention-days: 90
