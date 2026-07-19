@@ -22,9 +22,11 @@ from .static_js_auth_chrome_review import run_static_js_auth_chrome_review
 from .static_js_auth_transition_review import run_static_js_auth_transition_review
 from .static_js_controller_epoch_review import run_static_js_controller_epoch_review
 from .static_js_remote_state_review import run_static_js_remote_state_review
+from .static_preawait_durability_review import run_static_preawait_durability_review
 from .static_python_cancellation_review import run_static_python_cancellation_review
 from .static_recovery_review import run_static_recovery_review
 from .static_remote_contract_review import run_static_remote_contract_review
+from .static_selector_continuity_review import run_static_selector_continuity_review
 from .static_stale_state_review import run_static_stale_state_review
 from .static_terminal_state_review import run_static_terminal_state_review
 from .static_transfer_10_replacement_review import (
@@ -169,6 +171,8 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     transfer_11 = run_static_transfer_11_review(root_path, changed)
     transfer_12 = run_static_transfer_12_review(root_path, changed)
     transfer_13 = run_static_transfer_13_review(root_path, changed)
+    selector_continuity = run_static_selector_continuity_review(root_path, changed)
+    preawait_durability = run_static_preawait_durability_review(root_path, changed)
     url_path_contract = run_static_url_path_contract_review(root_path, changed)
     for result in (
         recovery,
@@ -197,6 +201,8 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         transfer_11,
         transfer_12,
         transfer_13,
+        selector_continuity,
+        preawait_durability,
         url_path_contract,
     ):
         findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
@@ -206,7 +212,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v25",
+        "schema_version": "sergeant.static-status-review.v26",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -243,6 +249,8 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_transfer_11_review": transfer_11,
         "static_transfer_12_review": transfer_12,
         "static_transfer_13_review": transfer_13,
+        "static_selector_continuity_review": selector_continuity,
+        "static_preawait_durability_review": preawait_durability,
         "static_url_path_contract_review": url_path_contract,
         "executed_project_code": False,
     }
