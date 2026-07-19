@@ -1,0 +1,169 @@
+name: Model-Free Core Await Transfer 5
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-await-transfer-5.yml"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout frozen Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout candidate A fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: shantanuchandra/cardcompass
+          ref: 8941b53d4a016535c018540b4c1df0394614e061
+          path: await-transfer-5/cardcompass
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout candidate B fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: jdpnielsen/claude-reviewer
+          ref: 118bc693dfb7626006d6a46a5482c51b109e2189
+          path: await-transfer-5/claude-reviewer
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Checkout candidate C fixing commit
+        uses: actions/checkout@v4
+        with:
+          repository: vladikkrasulya/adtech-spyglass
+          ref: e73b9eb24bd360b0e972e4d8375aad916f8f0119
+          path: await-transfer-5/adtech-spyglass
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Freeze defective parent revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in await-transfer-5/cardcompass await-transfer-5/claude-reviewer await-transfer-5/adtech-spyglass; do
+            git -C "$path" checkout --detach HEAD^
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-await-transfer-5-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-await-transfer-5
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          cases = [
+              {
+                  "case_id": "await-transfer-5-a",
+                  "repository": "shantanuchandra/cardcompass",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-5/cardcompass",
+                  "changed_files": ["lib/features/auth/providers/auth_provider.dart"],
+              },
+              {
+                  "case_id": "await-transfer-5-b",
+                  "repository": "jdpnielsen/claude-reviewer",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-5/claude-reviewer",
+                  "changed_files": ["app/prs/[id]/page.tsx"],
+              },
+              {
+                  "case_id": "await-transfer-5-c",
+                  "repository": "vladikkrasulya/adtech-spyglass",
+                  "source_pr": None,
+                  "checkout_path": "await-transfer-5/adtech-spyglass",
+                  "changed_files": [
+                      "public/spyglass.app.js",
+                      "public/modules/topbar/index.js"
+                  ],
+              },
+          ]
+          for case in cases:
+              case["defective_ref"] = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              case["workspace_policy"] = "static_first"
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-await-transfer-5",
+              "purpose": "Fifth untouched transfer validation over fresh external async state defects. Expected roots remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "reviewer_code_frozen_before_target_selection": "d7e9c36a5a95c7e590fbf6186751427b7a4c4903",
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-await-transfer-5/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review on untouched parents
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-await-transfer-5/runtime-manifest.json \
+            --output build/model-free-core-await-transfer-5/frozen-result.json \
+            2>&1 | tee build/model-free-core-await-transfer-5/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — await transfer 5"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-await-transfer-5/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-await-transfer-5
+          path: build/model-free-core-await-transfer-5/
+          if-no-files-found: error
+          retention-days: 90
