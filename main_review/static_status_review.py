@@ -21,14 +21,11 @@ from .static_js_auth_chrome_review import run_static_js_auth_chrome_review
 from .static_js_auth_transition_review import run_static_js_auth_transition_review
 from .static_js_controller_epoch_review import run_static_js_controller_epoch_review
 from .static_js_remote_state_review import run_static_js_remote_state_review
-from .static_persistent_queue_review import run_static_persistent_queue_review
 from .static_python_cancellation_review import run_static_python_cancellation_review
 from .static_recovery_review import run_static_recovery_review
 from .static_stale_state_review import run_static_stale_state_review
 from .static_terminal_state_review import run_static_terminal_state_review
 from .static_transfer_review import run_static_transfer_review
-from .static_untrusted_git_review import run_static_untrusted_git_review
-from .static_webhook_delivery_review import run_static_webhook_delivery_review
 
 
 def _safe_text(root: Path, relative: str) -> str:
@@ -142,9 +139,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     python_cancellation = run_static_python_cancellation_review(root_path, changed)
     terminal_state = run_static_terminal_state_review(root_path, changed)
     external_integrity = run_static_external_integrity_review(root_path, changed)
-    untrusted_git = run_static_untrusted_git_review(root_path, changed)
-    persistent_queue = run_static_persistent_queue_review(root_path, changed)
-    webhook_delivery = run_static_webhook_delivery_review(root_path, changed)
     for result in (
         recovery,
         stale_state,
@@ -165,9 +159,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         python_cancellation,
         terminal_state,
         external_integrity,
-        untrusted_git,
-        persistent_queue,
-        webhook_delivery,
     ):
         findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
 
@@ -176,7 +167,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v17",
+        "schema_version": "sergeant.static-status-review.v16",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -206,8 +197,5 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_python_cancellation_review": python_cancellation,
         "static_terminal_state_review": terminal_state,
         "static_external_integrity_review": external_integrity,
-        "static_untrusted_git_review": untrusted_git,
-        "static_persistent_queue_review": persistent_queue,
-        "static_webhook_delivery_review": webhook_delivery,
         "executed_project_code": False,
     }
