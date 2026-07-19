@@ -172,7 +172,7 @@ def _remote_local_ordering(path: str, text: str) -> list[dict[str, Any]]:
                     continue
                 helper_line = _line(text, body_offset + awaited.end() + helper_call.start())
                 for shared, (_, declaration_line) in declarations.items():
-                    if not re.search(rf"\b{re.escape(shared)}\s*(?:\.|\[)", helper_body):
+                    if not re.search(rf"\b{re.escape(shared)}\s*(?:\?\.|\.|\[)", helper_body):
                         continue
                     if re.search(rf"\b{re.escape(shared)}\s*=", before):
                         continue
