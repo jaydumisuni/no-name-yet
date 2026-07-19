@@ -1,0 +1,81 @@
+name: Apply Transfer 12 Learned Lineage
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/apply-transfer-12-learned-lineage.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: train/model-free-core-campaign-2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Replace historical replacement with provenance-locked Kernl case
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/model-free-core-transfer-12-learned.yml')
+          text = path.read_text(encoding='utf-8')
+
+          old_checkout = '''          git init transfer-12-learned/bozpicks
+          git -C transfer-12-learned/bozpicks remote add origin https://github.com/elaris-xyz/bozPicks.git
+          git -C transfer-12-learned/bozpicks fetch --depth=1 origin 0241560a8eccf4070519dc8e8a878c1ed1633a62
+          git -C transfer-12-learned/bozpicks checkout --detach FETCH_HEAD
+          test "$(git -C transfer-12-learned/bozpicks rev-parse HEAD)" = "0241560a8eccf4070519dc8e8a878c1ed1633a62"
+          test -f 'transfer-12-learned/bozpicks/apps/web/src/app/api/markets/[id]/predict/route.ts'
+          test -f transfer-12-learned/bozpicks/apps/web/src/lib/vault.ts
+'''
+          new_checkout = '''          sparse_checkout \\
+            gabrielassisxyz/kernl \\
+            422b365f6404013887b1d7d7ac74c60cb9790fbd \\
+            transfer-12-learned/kernl \\
+            '/cmd/kernl/project.go'
+'''
+          assert old_checkout in text
+          text = text.replace(old_checkout, new_checkout, 1)
+
+          old_case = '''              {
+                  "case_id": "transfer-12-c-learned",
+                  "repository": "elaris-xyz/bozPicks",
+                  "source_pr": None,
+                  "checkout_path": "transfer-12-learned/bozpicks",
+                  "changed_files": [
+                      "apps/web/src/app/api/markets/[id]/predict/route.ts",
+                      "apps/web/src/lib/vault.ts",
+                  ],
+              },
+'''
+          new_case = '''              {
+                  "case_id": "transfer-12-c-learned",
+                  "repository": "gabrielassisxyz/kernl",
+                  "source_pr": 109,
+                  "checkout_path": "transfer-12-learned/kernl",
+                  "changed_files": ["cmd/kernl/project.go"],
+              },
+'''
+          assert old_case in text
+          text = text.replace(old_case, new_case, 1)
+          text = text.replace(
+              'Learned closure for the canonical transfer-12 first-pass failures.',
+              'Learned closure for the provenance-locked transfer-12 first-pass failures.',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm .github/workflows/apply-transfer-12-learned-lineage.yml
+          git config user.name "Sergeant Constructor"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/model-free-core-transfer-12-learned.yml .github/workflows/apply-transfer-12-learned-lineage.yml
+          git commit -m "Align transfer 12 learned lane with frozen lineage"
+          git push origin HEAD:train/model-free-core-campaign-2
