@@ -25,6 +25,7 @@ from .static_python_cancellation_review import run_static_python_cancellation_re
 from .static_recovery_review import run_static_recovery_review
 from .static_stale_state_review import run_static_stale_state_review
 from .static_terminal_state_review import run_static_terminal_state_review
+from .static_transfer_9_review import run_static_transfer_9_review
 from .static_transfer_review import run_static_transfer_review
 
 
@@ -139,6 +140,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     python_cancellation = run_static_python_cancellation_review(root_path, changed)
     terminal_state = run_static_terminal_state_review(root_path, changed)
     external_integrity = run_static_external_integrity_review(root_path, changed)
+    transfer_9 = run_static_transfer_9_review(root_path, changed)
     for result in (
         recovery,
         stale_state,
@@ -159,6 +161,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         python_cancellation,
         terminal_state,
         external_integrity,
+        transfer_9,
     ):
         findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
 
@@ -167,7 +170,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v16",
+        "schema_version": "sergeant.static-status-review.v17",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -197,5 +200,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_python_cancellation_review": python_cancellation,
         "static_terminal_state_review": terminal_state,
         "static_external_integrity_review": external_integrity,
+        "static_transfer_9_review": transfer_9,
         "executed_project_code": False,
     }
