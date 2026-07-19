@@ -11,11 +11,13 @@ from .static_async_epoch_review import run_static_async_epoch_review
 from .static_async_lifecycle_review import run_static_async_lifecycle_review
 from .static_async_publication_review import run_static_async_publication_review
 from .static_await_state_review import run_static_await_state_review
+from .static_component_async_review import run_static_component_async_review
 from .static_core_contract_review import run_static_core_contract_review
 from .static_dart_provider_lifetime_review import run_static_dart_provider_lifetime_review
 from .static_js_auth_chrome_review import run_static_js_auth_chrome_review
 from .static_js_controller_epoch_review import run_static_js_controller_epoch_review
 from .static_js_remote_state_review import run_static_js_remote_state_review
+from .static_python_cancellation_review import run_static_python_cancellation_review
 from .static_recovery_review import run_static_recovery_review
 from .static_stale_state_review import run_static_stale_state_review
 from .static_transfer_review import run_static_transfer_review
@@ -125,6 +127,8 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     js_controller_epoch = run_static_js_controller_epoch_review(root_path, changed)
     async_publication = run_static_async_publication_review(root_path, changed)
     dart_provider_lifetime = run_static_dart_provider_lifetime_review(root_path, changed)
+    component_async = run_static_component_async_review(root_path, changed)
+    python_cancellation = run_static_python_cancellation_review(root_path, changed)
     for result in (
         recovery,
         stale_state,
@@ -138,6 +142,8 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         js_controller_epoch,
         async_publication,
         dart_provider_lifetime,
+        component_async,
+        python_cancellation,
     ):
         findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
 
@@ -146,7 +152,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v13",
+        "schema_version": "sergeant.static-status-review.v14",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -169,5 +175,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_js_controller_epoch_review": js_controller_epoch,
         "static_async_publication_review": async_publication,
         "static_dart_provider_lifetime_review": dart_provider_lifetime,
+        "static_component_async_review": component_async,
+        "static_python_cancellation_review": python_cancellation,
         "executed_project_code": False,
     }
