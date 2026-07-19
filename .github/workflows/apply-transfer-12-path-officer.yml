@@ -1,0 +1,65 @@
+name: Apply Transfer 12 Path Officer
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/apply-transfer-12-path-officer.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: train/model-free-core-campaign-2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Wire URL path officer and remove constructor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("main_review/static_status_review.py")
+          text = path.read_text(encoding="utf-8")
+
+          import_marker = "from .static_transfer_9_review import run_static_transfer_9_review\n"
+          import_line = "from .static_url_path_contract_review import run_static_url_path_contract_review\n"
+          if import_line not in text:
+              assert import_marker in text
+              text = text.replace(import_marker, import_marker + import_line, 1)
+
+          run_marker = "    transfer_12 = run_static_transfer_12_review(root_path, changed)\n"
+          run_line = "    url_path_contract = run_static_url_path_contract_review(root_path, changed)\n"
+          if run_line not in text:
+              assert run_marker in text
+              text = text.replace(run_marker, run_marker + run_line, 1)
+
+          tuple_marker = "        transfer_12,\n"
+          tuple_line = "        url_path_contract,\n"
+          if tuple_line not in text:
+              assert tuple_marker in text
+              text = text.replace(tuple_marker, tuple_marker + tuple_line, 1)
+
+          return_marker = '        "static_transfer_12_review": transfer_12,\n'
+          return_line = '        "static_url_path_contract_review": url_path_contract,\n'
+          if return_line not in text:
+              assert return_marker in text
+              text = text.replace(return_marker, return_marker + return_line, 1)
+
+          text = text.replace('"schema_version": "sergeant.static-status-review.v23"', '"schema_version": "sergeant.static-status-review.v24"')
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          rm .github/workflows/apply-transfer-12-path-officer.yml
+          git config user.name "Sergeant Constructor"
+          git config user.email "actions@users.noreply.github.com"
+          git add main_review/static_status_review.py .github/workflows/apply-transfer-12-path-officer.yml
+          git commit -m "Connect URL path contract officer"
+          git push origin HEAD:train/model-free-core-campaign-2
