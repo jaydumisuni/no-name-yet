@@ -1,0 +1,131 @@
+name: Model-Free Core Transfer 12 Replacement
+# Effective reviewer freeze: 39ae2d53f531adb588a956dbf6c13b17e9604d84
+# Re-runs only the malformed bozPicks fixture from transfer 12.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-12-replacement.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout immutable Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          ref: 39ae2d53f531adb588a956dbf6c13b17e9604d84
+          path: sergeant-reviewer
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout exact bozPicks defective revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p targets
+          git init targets/bozpicks
+          git -C targets/bozpicks remote add origin https://github.com/elaris-xyz/bozPicks.git
+          git -C targets/bozpicks fetch --depth=1 origin 0241560a8eccf4070519dc8e8a878c1ed1633a62
+          git -C targets/bozpicks checkout --detach FETCH_HEAD
+          test "$(git -C targets/bozpicks rev-parse HEAD)" = "0241560a8eccf4070519dc8e8a878c1ed1633a62"
+          test -f 'targets/bozpicks/apps/web/src/app/api/markets/[id]/predict/route.ts'
+          test -f targets/bozpicks/apps/web/src/lib/vault.ts
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-12-replacement-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install immutable Sergeant package
+        run: python -m pip install ./sergeant-reviewer
+
+      - name: Build opaque replacement manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-12-replacement
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-12-replacement",
+              "purpose": "Replacement execution for the malformed third fixture from transfer 12. Expected roots and later fixes remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation_replacement",
+                  "reviewer_code_checked_out_at": "39ae2d53f531adb588a956dbf6c13b17e9604d84",
+                  "replaces_invalid_case": "model-free-core-transfer-12/transfer-12-c",
+              },
+              "cases": [
+                  {
+                      "case_id": "transfer-12-c-replacement",
+                      "repository": "elaris-xyz/bozPicks",
+                      "source_pr": None,
+                      "defective_ref": "0241560a8eccf4070519dc8e8a878c1ed1633a62",
+                      "checkout_path": "targets/bozpicks",
+                      "changed_files": [
+                          "apps/web/src/app/api/markets/[id]/predict/route.ts",
+                          "apps/web/src/lib/vault.ts",
+                      ],
+                      "workspace_policy": "static_first",
+                  }
+              ],
+          }
+          Path("build/model-free-core-transfer-12-replacement/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run pinned normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python sergeant-reviewer/scripts/run_static_training_set.py \
+            build/model-free-core-transfer-12-replacement/runtime-manifest.json \
+            --output build/model-free-core-transfer-12-replacement/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-12-replacement/frozen-summary.json
+
+      - name: Publish immutable replacement summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — transfer 12 replacement"
+            echo
+            echo "Workflow head: \`${GITHUB_SHA}\`"
+            echo
+            echo "Reviewer checkout: \`39ae2d53f531adb588a956dbf6c13b17e9604d84\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-transfer-12-replacement/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable replacement report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-12-replacement
+          path: build/model-free-core-transfer-12-replacement/
+          if-no-files-found: error
+          retention-days: 90
