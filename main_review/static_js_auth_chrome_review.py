@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from .static_js_auth_transition_review import run_static_js_auth_transition_review
+
 _SOURCE_SUFFIXES = {".js", ".jsx", ".ts", ".tsx"}
 _MOUNT_CHROME_RE = re.compile(
     r"(?:export\s+)?function\s+(?P<name>mount(?:Topbar|Header|Nav|Menu|Chrome)[A-Za-z0-9_$]*)"
@@ -131,8 +133,6 @@ def _chrome_mounts(texts: dict[str, str]) -> list[tuple[str, str, int]]:
             if closing is None:
                 continue
             body = text[opening + 1 : closing]
-            # The mount must actually publish markup or attach long-lived
-            # listeners; a similarly named utility function is not enough.
             if not re.search(r"(?:innerHTML\s*=|replaceChild\s*\(|addEventListener\s*\()", body):
                 continue
             mounts.append((path, match.group("name"), _line(text, match.start())))
@@ -264,6 +264,13 @@ def run_static_js_auth_chrome_review(
             )
             break
 
+    transition = run_static_js_auth_transition_review(root_path, changed)
+    findings.extend(
+        dict(item)
+        for item in transition.get("findings", [])
+        if isinstance(item, dict)
+    )
+
     unique: dict[tuple[str, str, int], dict[str, Any]] = {}
     for finding in findings:
         unique[
@@ -274,10 +281,11 @@ def run_static_js_auth_chrome_review(
             )
         ] = finding
     return {
-        "schema_version": "sergeant.static-js-auth-chrome-review.v1",
+        "schema_version": "sergeant.static-js-auth-chrome-review.v2",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
         "readable_changed_files": readable,
+        "static_js_auth_transition_review": transition,
         "executed_project_code": False,
     }
