@@ -30,6 +30,7 @@ from .static_terminal_state_review import run_static_terminal_state_review
 from .static_transfer_10_replacement_review import (
     run_static_transfer_10_replacement_review,
 )
+from .static_transfer_11_review import run_static_transfer_11_review
 from .static_transfer_9_review import run_static_transfer_9_review
 from .static_transfer_review import run_static_transfer_review
 
@@ -162,6 +163,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     external_integrity = run_static_external_integrity_review(root_path, changed)
     transfer_9 = run_static_transfer_9_review(root_path, changed)
     transfer_10_replacement = run_static_transfer_10_replacement_review(root_path, changed)
+    transfer_11 = run_static_transfer_11_review(root_path, changed)
     for result in (
         recovery,
         stale_state,
@@ -186,6 +188,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         external_integrity,
         transfer_9,
         transfer_10_replacement,
+        transfer_11,
     ):
         findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
 
@@ -194,7 +197,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v21",
+        "schema_version": "sergeant.static-status-review.v22",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -228,5 +231,6 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_external_integrity_review": external_integrity,
         "static_transfer_9_review": transfer_9,
         "static_transfer_10_replacement_review": transfer_10_replacement,
+        "static_transfer_11_review": transfer_11,
         "executed_project_code": False,
     }
