@@ -1,0 +1,204 @@
+name: Model-Free Core Transfer 16
+# Reviewer frozen before target selection: c4545144c02b86290a1f3fa149647fff69fdc955
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-16.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin immutable Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach c4545144c02b86290a1f3fa149647fff69fdc955
+          test "$(git rev-parse HEAD)" = "c4545144c02b86290a1f3fa149647fff69fdc955"
+          test -e main_review/static_transfer_15_review.py
+          test ! -e main_review/static_transfer_16_review.py
+
+      - name: Checkout exact defective and fixing lineages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sparse_lineage_checkout() {
+            local repository="$1"
+            local defective="$2"
+            local fixing="$3"
+            local destination="$4"
+            shift 4
+
+            git init "$destination"
+            git -C "$destination" remote add origin "https://github.com/${repository}.git"
+            git -C "$destination" config core.sparseCheckout true
+            : > "$destination/.git/info/sparse-checkout"
+            for pattern in "$@"; do
+              printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"
+            done
+
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$fixing"
+            git -C "$destination" cat-file -e "${defective}^{commit}"
+            git -C "$destination" cat-file -e "${fixing}^{commit}"
+            git -C "$destination" merge-base --is-ancestor "$defective" "$fixing"
+            git -C "$destination" checkout --detach "$defective"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$defective"
+          }
+
+          sparse_lineage_checkout \
+            AltairaLabs/PromptKit \
+            2eab152b5d1c2d51dd2376983b4e37b1dbf557e3 \
+            5bcb128715113aa89742ddd84adc2b35a0e26930 \
+            transfer-16/promptkit \
+            '/runtime/pipeline/stage/stages_speech.go'
+
+          sparse_lineage_checkout \
+            LadybirdBrowser/ladybird \
+            94a55b0e9045b1e96307c5e4f0242309c589ecd4 \
+            5a804c40e2f94f7dad607ced2ec984ff9dd2c10d \
+            transfer-16/ladybird \
+            '/Libraries/LibRequests/Request.cpp' \
+            '/Libraries/LibRequests/RequestClient.cpp'
+
+          sparse_lineage_checkout \
+            PerryTS/perry \
+            e7626a10204867d576c6a63e4f3eb2f4f6becb2d \
+            09e7cf853779889ff03c854f361a9beaeaa8d625 \
+            transfer-16/perry \
+            '/crates/perry-runtime/src/promise/then.rs'
+
+          for file in \
+            transfer-16/promptkit/runtime/pipeline/stage/stages_speech.go \
+            transfer-16/ladybird/Libraries/LibRequests/Request.cpp \
+            transfer-16/ladybird/Libraries/LibRequests/RequestClient.cpp \
+            transfer-16/perry/crates/perry-runtime/src/promise/then.rs; do
+            test -f "$file"
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-16-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque frozen manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-16
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-16",
+              "purpose": "Sixteenth untouched transfer validation across three new repositories and ecosystems. Expected roots and fixing evidence remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "provenance_required": True,
+                  "provenance_contract": "sergeant.training-provenance.v1",
+                  "reviewer_code_frozen_before_target_selection": "c4545144c02b86290a1f3fa149647fff69fdc955",
+              },
+              "cases": [
+                  {
+                      "case_id": "transfer-16-a",
+                      "repository": "AltairaLabs/PromptKit",
+                      "source_pr": None,
+                      "checkout_path": "transfer-16/promptkit",
+                      "defective_ref": "2eab152b5d1c2d51dd2376983b4e37b1dbf557e3",
+                      "fixing_ref": "5bcb128715113aa89742ddd84adc2b35a0e26930",
+                      "changed_files": ["runtime/pipeline/stage/stages_speech.go"],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-16-b",
+                      "repository": "LadybirdBrowser/ladybird",
+                      "source_pr": None,
+                      "checkout_path": "transfer-16/ladybird",
+                      "defective_ref": "94a55b0e9045b1e96307c5e4f0242309c589ecd4",
+                      "fixing_ref": "5a804c40e2f94f7dad607ced2ec984ff9dd2c10d",
+                      "changed_files": [
+                          "Libraries/LibRequests/Request.cpp",
+                          "Libraries/LibRequests/RequestClient.cpp"
+                      ],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-16-c",
+                      "repository": "PerryTS/perry",
+                      "source_pr": None,
+                      "checkout_path": "transfer-16/perry",
+                      "defective_ref": "e7626a10204867d576c6a63e4f3eb2f4f6becb2d",
+                      "fixing_ref": "09e7cf853779889ff03c854f361a9beaeaa8d625",
+                      "changed_files": ["crates/perry-runtime/src/promise/then.rs"],
+                      "workspace_policy": "static_first",
+                  },
+              ],
+          }
+          Path("build/model-free-core-transfer-16/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run pinned normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-16/runtime-manifest.json \
+            --output build/model-free-core-transfer-16/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-16/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — transfer 16"
+            echo
+            echo "Workflow event head: \`${GITHUB_SHA}\`"
+            echo
+            echo "Frozen reviewer head: \`c4545144c02b86290a1f3fa149647fff69fdc955\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-transfer-16/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-16
+          path: build/model-free-core-transfer-16/
+          if-no-files-found: error
+          retention-days: 90
