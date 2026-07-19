@@ -1,0 +1,172 @@
+name: Model-Free Core Transfer 12 Learned Closure
+# Historical fresh score remains 0/3. This workflow proves only learned closure.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-12-learned.yml"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  learned-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout exact Sergeant event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout provenance-locked defective revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sparse_checkout() {
+            local repository="$1"
+            local ref="$2"
+            local destination="$3"
+            shift 3
+
+            git init "$destination"
+            git -C "$destination" remote add origin "https://github.com/${repository}.git"
+            git -C "$destination" config core.sparseCheckout true
+            : > "$destination/.git/info/sparse-checkout"
+            for pattern in "$@"; do
+              printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"
+            done
+            git -C "$destination" fetch --depth=1 --filter=blob:none origin "$ref"
+            git -C "$destination" checkout --detach FETCH_HEAD
+            test "$(git -C "$destination" rev-parse HEAD)" = "$ref"
+          }
+
+          sparse_checkout \
+            rootlyhq/rootly-cli \
+            826a2f537c1d722d32cd1ed8f613cf5be2fc1fcd \
+            transfer-12-learned/rootly-cli \
+            '/internal/api/client.go'
+
+          sparse_checkout \
+            VincentShipsIt/macsweep.dev \
+            015475aa3b231fb6adf1cc570e1cd10285f74f32 \
+            transfer-12-learned/macsweep \
+            '/MacSweep/Sources/Core/Services/LoginItemEnumerator.swift'
+
+          sparse_checkout \
+            gabrielassisxyz/kernl \
+            422b365f6404013887b1d7d7ac74c60cb9790fbd \
+            transfer-12-learned/kernl \
+            '/cmd/kernl/project.go'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-12-learned-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install exact Sergeant event head
+        run: python -m pip install .
+
+      - name: Build learned-closure manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-12-learned
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-12-learned",
+              "purpose": "Learned closure for the provenance-locked transfer-12 first-pass failures. Historical fresh score remains unchanged.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "learned_closure",
+                  "historical_first_pass": "0/3",
+              },
+              "cases": [
+                  {
+                      "case_id": "transfer-12-a-learned",
+                      "repository": "rootlyhq/rootly-cli",
+                      "source_pr": 46,
+                      "checkout_path": "transfer-12-learned/rootly-cli",
+                      "defective_ref": "826a2f537c1d722d32cd1ed8f613cf5be2fc1fcd",
+                      "changed_files": ["internal/api/client.go"],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-12-b-learned",
+                      "repository": "VincentShipsIt/macsweep.dev",
+                      "source_pr": 255,
+                      "checkout_path": "transfer-12-learned/macsweep",
+                      "defective_ref": "015475aa3b231fb6adf1cc570e1cd10285f74f32",
+                      "changed_files": ["MacSweep/Sources/Core/Services/LoginItemEnumerator.swift"],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-12-c-learned",
+                      "repository": "gabrielassisxyz/kernl",
+                      "source_pr": 109,
+                      "checkout_path": "transfer-12-learned/kernl",
+                      "defective_ref": "422b365f6404013887b1d7d7ac74c60cb9790fbd",
+                      "changed_files": ["cmd/kernl/project.go"],
+                      "workspace_policy": "static_first",
+                  },
+              ],
+          }
+          Path("build/model-free-core-transfer-12-learned/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review learned closure
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-12-learned/runtime-manifest.json \
+            --output build/model-free-core-transfer-12-learned/learned-result.json \
+            2>&1 | tee build/model-free-core-transfer-12-learned/learned-summary.json
+
+      - name: Publish learned closure summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — transfer 12 learned closure"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo "Historical fresh result: \`0/3\` (unchanged)"
+            echo
+            echo '```json'
+            cat build/model-free-core-transfer-12-learned/learned-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable learned reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-12-learned
+          path: build/model-free-core-transfer-12-learned/
+          if-no-files-found: error
+          retention-days: 90
