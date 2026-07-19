@@ -1,0 +1,185 @@
+name: Model-Free Core Transfer 10 Replacement
+# Reviewer frozen before target selection: 035ad42ad247f0dc6c9e01bea1b23fadc3c7403e
+# Replaces invalid transfer-10 fixtures whose frozen commits did not touch the reviewed files.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-10-replacement.yml"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout frozen Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Sparse checkout exact defective revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sparse_checkout() {
+            local repository="$1"
+            local ref="$2"
+            local destination="$3"
+            shift 3
+
+            git init "$destination"
+            git -C "$destination" remote add origin "https://github.com/${repository}.git"
+            git -C "$destination" config core.sparseCheckout true
+            : > "$destination/.git/info/sparse-checkout"
+            for pattern in "$@"; do
+              printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"
+            done
+            git -C "$destination" fetch --depth=1 --filter=blob:none origin "$ref"
+            git -C "$destination" checkout --detach FETCH_HEAD
+            test "$(git -C "$destination" rev-parse HEAD)" = "$ref"
+          }
+
+          sparse_checkout \
+            rjmurillo/ai-agents \
+            475961c465647f1f0874d7c4d5b71b7ad4a0a468 \
+            transfer-10-replacement/ai-agents \
+            '/.claude/skills/memory/scripts/extract_session_episode.py'
+
+          sparse_checkout \
+            kimtos-labs/kimtos-core \
+            5dce20d55081376cf6a8741ccea39fe865e35eb9 \
+            transfer-10-replacement/kimtos-core \
+            '/www-backend/src/billing/billing-provider.interface.ts' \
+            '/www-backend/src/billing/billing.service.ts' \
+            '/www-backend/src/billing/stripe.provider.ts'
+
+          sparse_checkout \
+            joachimBrindeau/elementor-framework \
+            1bc48a926f8c218c0001100b42fc2df109c23c20 \
+            transfer-10-replacement/elementor-framework \
+            '/includes/atomic/normalize.php'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-10-replacement-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-10-replacement
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          cases = [
+              {
+                  "case_id": "transfer-10r-a",
+                  "repository": "rjmurillo/ai-agents",
+                  "source_pr": 3249,
+                  "checkout_path": "transfer-10-replacement/ai-agents",
+                  "changed_files": [
+                      ".claude/skills/memory/scripts/extract_session_episode.py"
+                  ],
+              },
+              {
+                  "case_id": "transfer-10r-b",
+                  "repository": "kimtos-labs/kimtos-core",
+                  "source_pr": 837,
+                  "checkout_path": "transfer-10-replacement/kimtos-core",
+                  "changed_files": [
+                      "www-backend/src/billing/billing-provider.interface.ts",
+                      "www-backend/src/billing/billing.service.ts",
+                      "www-backend/src/billing/stripe.provider.ts",
+                  ],
+              },
+              {
+                  "case_id": "transfer-10r-c",
+                  "repository": "joachimBrindeau/elementor-framework",
+                  "source_pr": 22,
+                  "checkout_path": "transfer-10-replacement/elementor-framework",
+                  "changed_files": [
+                      "includes/atomic/normalize.php"
+                  ],
+              },
+          ]
+          for case in cases:
+              case["defective_ref"] = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              case["workspace_policy"] = "static_first"
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-10-replacement",
+              "purpose": "Replacement tenth untouched transfer validation using verified fixing-PR base revisions. Expected roots and fixing diffs remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "reviewer_code_frozen_before_target_selection": "035ad42ad247f0dc6c9e01bea1b23fadc3c7403e",
+                  "invalidated_predecessor": "model-free-core-transfer-10",
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-transfer-10-replacement/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review on untouched revisions
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-10-replacement/runtime-manifest.json \
+            --output build/model-free-core-transfer-10-replacement/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-10-replacement/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — transfer 10 replacement"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-transfer-10-replacement/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-10-replacement
+          path: build/model-free-core-transfer-10-replacement/
+          if-no-files-found: error
+          retention-days: 90
