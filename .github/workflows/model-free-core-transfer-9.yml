@@ -1,0 +1,163 @@
+name: Model-Free Core Transfer 9
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-9.yml"
+      - "scripts/run_static_training_set.py"
+      - "main_review/**"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout frozen Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout transfer case A
+        uses: actions/checkout@v4
+        with:
+          repository: sharpemu/sharpemu
+          ref: d7f6e3f578b0d0d290eb2c5b3bfacd388e52a51a
+          path: transfer-9/sharpemu
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout transfer case B
+        uses: actions/checkout@v4
+        with:
+          repository: andrii-su/organon
+          ref: ec4936b926dfcfab7dfabb21d1bbf2f7fee4b333
+          path: transfer-9/organon
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout transfer case C
+        uses: actions/checkout@v4
+        with:
+          repository: Open-iFunny/ifunny-go
+          ref: c673f20a3b863166d1cc49d2d74ed4f0e589c837
+          path: transfer-9/ifunny-go
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-9-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-9
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          cases = [
+              {
+                  "case_id": "transfer-9-a",
+                  "repository": "sharpemu/sharpemu",
+                  "source_pr": None,
+                  "checkout_path": "transfer-9/sharpemu",
+                  "changed_files": [
+                      "src/SharpEmu.Libs/Kernel/KernelMemoryCompatExports.cs"
+                  ],
+              },
+              {
+                  "case_id": "transfer-9-b",
+                  "repository": "andrii-su/organon",
+                  "source_pr": None,
+                  "checkout_path": "transfer-9/organon",
+                  "changed_files": [
+                      "crates/organon-cli/src/search.rs",
+                      "crates/organon-mcp/src/lib.rs"
+                  ],
+              },
+              {
+                  "case_id": "transfer-9-c",
+                  "repository": "Open-iFunny/ifunny-go",
+                  "source_pr": None,
+                  "checkout_path": "transfer-9/ifunny-go",
+                  "changed_files": ["client.go"],
+              },
+          ]
+          for case in cases:
+              case["defective_ref"] = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              case["workspace_policy"] = "static_first"
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-9",
+              "purpose": "Ninth untouched transfer validation across three new repositories and ecosystems. Expected roots and later fixes remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "reviewer_code_frozen_before_target_selection": "fd88cc89836a74f284c2f8ff660067299c25e783"
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-transfer-9/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review on untouched revisions
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-9/runtime-manifest.json \
+            --output build/model-free-core-transfer-9/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-9/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — transfer 9"
+            echo
+            echo "Exact Sergeant head: \`${GITHUB_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-transfer-9/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-9
+          path: build/model-free-core-transfer-9/
+          if-no-files-found: error
+          retention-days: 90
