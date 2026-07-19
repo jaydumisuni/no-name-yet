@@ -81,6 +81,22 @@ def _infer_go_variable_type(text: str, variable: str, before_offset: int) -> str
     return max(candidates, key=lambda item: item[0])[1]
 
 
+def _is_test_source(path: str) -> bool:
+    candidate = Path(path)
+    parts = {part.lower() for part in candidate.parts}
+    name = candidate.name.lower()
+    return (
+        bool(parts & {"test", "tests", "testing", "fixtures"})
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+        or name.endswith("_test.go")
+        or name.endswith(".test.ts")
+        or name.endswith(".test.tsx")
+        or name.endswith(".spec.ts")
+        or name.endswith(".spec.tsx")
+    )
+
+
 def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> dict[str, Any]:
     root_path = Path(root).resolve()
     changed = sorted({str(item) for item in changed_files if str(item)})
@@ -172,7 +188,8 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     transfer_11 = run_static_transfer_11_review(root_path, changed)
     transfer_12 = run_static_transfer_12_review(root_path, changed)
     transfer_13 = run_static_transfer_13_review(root_path, changed)
-    transfer_14 = run_static_transfer_14_review(root_path, changed)
+    transfer_14_changed = [path for path in changed if not _is_test_source(path)]
+    transfer_14 = run_static_transfer_14_review(root_path, transfer_14_changed)
     selector_continuity = run_static_selector_continuity_review(root_path, changed)
     preawait_durability = run_static_preawait_durability_review(root_path, changed)
     url_path_contract = run_static_url_path_contract_review(root_path, changed)
@@ -215,7 +232,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v27",
+        "schema_version": "sergeant.static-status-review.v28",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
