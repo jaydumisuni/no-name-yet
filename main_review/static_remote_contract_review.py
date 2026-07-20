@@ -13,6 +13,7 @@ from .static_transfer_23_review import run_static_transfer_23_review
 from .static_transfer_24_review import run_static_transfer_24_review
 from .static_transfer_25_review import run_static_transfer_25_review
 from .static_transfer_26_review import run_static_transfer_26_review
+from .static_transfer_27_review import run_static_transfer_27_review
 
 
 _DART_SUFFIXES = {".dart"}
@@ -80,10 +81,7 @@ def _finding(path: str, line_start: int, variable: str) -> dict[str, Any]:
     }
 
 
-def run_static_remote_contract_review(
-    root: str | Path,
-    changed_files: Iterable[str],
-) -> dict[str, Any]:
+def run_static_remote_contract_review(root: str | Path, changed_files: Iterable[str]) -> dict[str, Any]:
     root_path = Path(root).resolve()
     changed = sorted({str(item) for item in changed_files if str(item)})
     readable: list[str] = []
@@ -102,8 +100,7 @@ def run_static_remote_contract_review(
             guard = _empty_list_guard(variable).search(window)
             if guard is None:
                 continue
-            line_start = _line(text, assignment.end() + guard.start())
-            findings.append(_finding(path, line_start, variable))
+            findings.append(_finding(path, _line(text, assignment.end() + guard.start()), variable))
             break
 
     protocol_lifecycle = run_static_protocol_lifecycle_review(root_path, changed)
@@ -113,6 +110,7 @@ def run_static_remote_contract_review(
     transfer_24 = run_static_transfer_24_review(root_path, changed)
     transfer_25 = run_static_transfer_25_review(root_path, changed)
     transfer_26 = run_static_transfer_26_review(root_path, changed)
+    transfer_27 = run_static_transfer_27_review(root_path, changed)
     for result in (
         protocol_lifecycle,
         transfer_21,
@@ -121,22 +119,13 @@ def run_static_remote_contract_review(
         transfer_24,
         transfer_25,
         transfer_26,
+        transfer_27,
     ):
-        findings.extend(
-            dict(item)
-            for item in result.get("findings", [])
-            if isinstance(item, dict)
-        )
+        findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
 
     unique: dict[tuple[str, str, int], dict[str, Any]] = {}
     for finding in findings:
-        unique[
-            (
-                str(finding.get("root_cause")),
-                str(finding.get("path")),
-                int(finding.get("line_start") or 0),
-            )
-        ] = finding
+        unique[(str(finding.get("root_cause")), str(finding.get("path")), int(finding.get("line_start") or 0))] = finding
 
     return {
         "schema_version": "sergeant.static-remote-contract-review.v7",
@@ -150,5 +139,6 @@ def run_static_remote_contract_review(
         "static_transfer_24_review": transfer_24,
         "static_transfer_25_review": transfer_25,
         "static_transfer_26_review": transfer_26,
+        "static_transfer_27_review": transfer_27,
         "executed_project_code": False,
     }
