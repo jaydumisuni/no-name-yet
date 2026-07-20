@@ -34,6 +34,30 @@ class DevicePage {
     assert ROOT in _roots(result)
 
 
+def test_unrelated_manual_board_change_does_not_prove_install_consistency(tmp_path: Path) -> None:
+    source = tmp_path / "device.ts"
+    source.write_text(
+        '''
+class DevicePage {
+  private _yaml = "";
+  private get _device() { return this._devices.find((d) => d.configuration === this.id); }
+  private _firmwareDialog!: FirmwareInstallDialog;
+  private install() {
+    this._firmwareDialog.open(this.id, this._device?.board_id);
+  }
+  private openManualBoardPicker() {
+    this.dispatchEvent(new CustomEvent("request-change-board"));
+  }
+}
+''',
+        encoding="utf-8",
+    )
+
+    result = run_static_transfer_18_review(tmp_path, ["device.ts"])
+
+    assert ROOT in _roots(result)
+
+
 def test_yaml_board_mismatch_guard_and_reselect_are_clean(tmp_path: Path) -> None:
     source = tmp_path / "device.ts"
     source.write_text(
