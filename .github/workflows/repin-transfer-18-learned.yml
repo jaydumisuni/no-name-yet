@@ -32,6 +32,8 @@ jobs:
           old = "47efd3fcda521f9b58913d93e8317e689454830d"
           new = "d13761c5d24910558420678938117b7c4522ba68"
           count = text.count(old)
+          if count == 0 and text.count(new) >= 2:
+              raise SystemExit(0)
           if count < 2:
               raise SystemExit(f"expected at least two reviewer pins, found {count}")
           path.write_text(text.replace(old, new), encoding="utf-8")
@@ -55,4 +57,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/model-free-core-transfer-18-learned.yml .github/workflows/repin-transfer-18-learned.yml
           git commit -m "Repin transfer 18 learned closure"
-          git push origin HEAD:train/model-free-core-campaign-2
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin train/model-free-core-campaign-2 && git push origin HEAD:train/model-free-core-campaign-2; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          echo "Unable to push repin after five rebase attempts" >&2
+          exit 1
