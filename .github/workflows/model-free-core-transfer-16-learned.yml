@@ -1,0 +1,211 @@
+name: Model-Free Core Transfer 16 Learned Closure
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-16-learned.yml"
+      - "main_review/static_transfer_16_review.py"
+      - "main_review/static_status_review.py"
+      - "tests/test_static_transfer_16_review.py"
+
+permissions:
+  contents: read
+
+jobs:
+  learned-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin learned Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach 4c6cc09c7db84fc7a13439214f531c9078d3494a
+          test "$(git rev-parse HEAD)" = "4c6cc09c7db84fc7a13439214f531c9078d3494a"
+          test -e main_review/static_transfer_16_review.py
+          grep -q 'run_static_transfer_16_review' main_review/static_status_review.py
+
+      - name: Checkout exact defective and fixing lineages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sparse_lineage_checkout() {
+            local repository="$1"
+            local defective="$2"
+            local fixing="$3"
+            local destination="$4"
+            shift 4
+
+            git init "$destination"
+            git -C "$destination" remote add origin "https://github.com/${repository}.git"
+            git -C "$destination" config core.sparseCheckout true
+            : > "$destination/.git/info/sparse-checkout"
+            for pattern in "$@"; do
+              printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"
+            done
+
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$fixing"
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$defective"
+            git -C "$destination" cat-file -e "${defective}^{commit}"
+            git -C "$destination" cat-file -e "${fixing}^{commit}"
+            git -C "$destination" merge-base --is-ancestor "$defective" "$fixing"
+            git -C "$destination" checkout --detach "$defective"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$defective"
+          }
+
+          sparse_lineage_checkout \
+            AltairaLabs/PromptKit \
+            2eab152b5d1c2d51dd2376983b4e37b1dbf557e3 \
+            5bcb128715113aa89742ddd84adc2b35a0e26930 \
+            transfer-16-learned/promptkit \
+            '/runtime/pipeline/stage/stages_speech.go'
+
+          sparse_lineage_checkout \
+            LadybirdBrowser/ladybird \
+            94a55b0e9045b1e96307c5e4f0242309c589ecd4 \
+            5a804c40e2f94f7dad607ced2ec984ff9dd2c10d \
+            transfer-16-learned/ladybird \
+            '/Libraries/LibRequests/Request.cpp' \
+            '/Libraries/LibRequests/RequestClient.cpp'
+
+          sparse_lineage_checkout \
+            PerryTS/perry \
+            e7626a10204867d576c6a63e4f3eb2f4f6becb2d \
+            09e7cf853779889ff03c854f361a9beaeaa8d625 \
+            transfer-16-learned/perry \
+            '/crates/perry-runtime/src/promise/then.rs'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-16-learned-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install learned Sergeant package and proof dependency
+        run: python -m pip install . pytest
+
+      - name: Run focused positive and clean controls
+        run: python -m pytest tests/test_static_transfer_16_review.py -q
+
+      - name: Build learned-closure manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-16-learned
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-16-learned-closure",
+              "purpose": "Learned closure for transfer 16 after the immutable blind 1/3 was frozen.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "classification": "learned_closure",
+                  "historical_first_pass": "1/3",
+                  "historical_first_pass_immutable": True,
+                  "reviewer_code": "4c6cc09c7db84fc7a13439214f531c9078d3494a",
+              },
+              "cases": [
+                  {
+                      "case_id": "transfer-16-learned-a",
+                      "repository": "AltairaLabs/PromptKit",
+                      "source_pr": 1623,
+                      "checkout_path": "transfer-16-learned/promptkit",
+                      "defective_ref": "2eab152b5d1c2d51dd2376983b4e37b1dbf557e3",
+                      "fixing_ref": "5bcb128715113aa89742ddd84adc2b35a0e26930",
+                      "changed_files": ["runtime/pipeline/stage/stages_speech.go"],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-16-learned-b",
+                      "repository": "LadybirdBrowser/ladybird",
+                      "source_pr": 10752,
+                      "checkout_path": "transfer-16-learned/ladybird",
+                      "defective_ref": "94a55b0e9045b1e96307c5e4f0242309c589ecd4",
+                      "fixing_ref": "5a804c40e2f94f7dad607ced2ec984ff9dd2c10d",
+                      "changed_files": [
+                          "Libraries/LibRequests/Request.cpp",
+                          "Libraries/LibRequests/RequestClient.cpp"
+                      ],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-16-learned-c",
+                      "repository": "PerryTS/perry",
+                      "source_pr": 6702,
+                      "checkout_path": "transfer-16-learned/perry",
+                      "defective_ref": "e7626a10204867d576c6a63e4f3eb2f4f6becb2d",
+                      "fixing_ref": "09e7cf853779889ff03c854f361a9beaeaa8d625",
+                      "changed_files": ["crates/perry-runtime/src/promise/then.rs"],
+                      "workspace_policy": "static_first",
+                  },
+              ],
+          }
+          Path("build/model-free-core-transfer-16-learned/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run learned normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-16-learned/runtime-manifest.json \
+            --output build/model-free-core-transfer-16-learned/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-16-learned/frozen-summary.json
+
+      - name: Enforce expected learned roots
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("build/model-free-core-transfer-16-learned/frozen-result.json").read_text())
+          expected = {
+              "transfer-16-learned-a": "detached-goroutine-without-panic-containment",
+              "transfer-16-learned-b": "lifecycle-stop-dereferences-expirable-client-and-sends-synchronously",
+              "transfer-16-learned-c": "promise-species-undefined-collapsed-into-null-default",
+          }
+          rows = {item["case"]["case_id"]: item for item in payload["full_results"]}
+          for case_id, root in expected.items():
+              result = rows[case_id]["result"]
+              roots = {
+                  str(item.get("root_cause"))
+                  for item in result.get("officer_council", {}).get("admitted_findings", [])
+              }
+              if root not in roots:
+                  raise SystemExit(f"{case_id} missing expected learned root {root}: {sorted(roots)}")
+              if result.get("verdict") == "APPROVE":
+                  raise SystemExit(f"{case_id} remained APPROVE")
+          PY
+
+      - name: Upload immutable learned reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-16-learned-closure
+          path: build/model-free-core-transfer-16-learned/
+          if-no-files-found: error
+          retention-days: 90
