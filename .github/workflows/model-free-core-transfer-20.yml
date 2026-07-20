@@ -1,0 +1,318 @@
+name: Model-Free Core Transfer 20
+# Reviewer frozen before automated candidate selection: 9a4ed0aab1bbbaa9b96779c366c25e85360457c1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-20.yml"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin immutable Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach 9a4ed0aab1bbbaa9b96779c366c25e85360457c1
+          test "$(git rev-parse HEAD)" = "9a4ed0aab1bbbaa9b96779c366c25e85360457c1"
+          grep -q 'sergeant.static-status-review.v33' main_review/static_status_review.py
+          test ! -e main_review/static_transfer_20_review.py
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Select three opaque merged lineages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/model-free-core-transfer-20
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import time
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          token = os.environ.get("GH_TOKEN", "")
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "sergeant-transfer-20-selector",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          if token:
+              headers["Authorization"] = f"Bearer {token}"
+
+          def api(path: str) -> object:
+              request = urllib.request.Request(f"https://api.github.com{path}", headers=headers)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.loads(response.read().decode("utf-8"))
+
+          def search(query: str) -> list[dict]:
+              encoded = urllib.parse.quote(query)
+              payload = api(f"/search/issues?q={encoded}&sort=updated&order=desc&per_page=30")
+              return list(payload.get("items", [])) if isinstance(payload, dict) else []
+
+          def pr_files(repository: str, number: int) -> list[dict]:
+              owner, name = repository.split("/", 1)
+              payload = api(f"/repos/{owner}/{name}/pulls/{number}/files?per_page=100")
+              return list(payload) if isinstance(payload, list) else []
+
+          excluded_parts = {
+              "test", "tests", "testing", "fixture", "fixtures", "docs", "doc",
+              ".github", "examples", "example", "bench", "benches", "snapshot", "snapshots",
+          }
+          excluded_names = {
+              "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "cargo.lock", "poetry.lock",
+          }
+
+          lanes = [
+              {
+                  "lane": "python",
+                  "repos": ["pydantic/pydantic", "fastapi/fastapi", "encode/httpx"],
+                  "suffixes": {".py"},
+              },
+              {
+                  "lane": "rust",
+                  "repos": ["astral-sh/ruff", "tokio-rs/tokio", "BurntSushi/ripgrep"],
+                  "suffixes": {".rs"},
+              },
+              {
+                  "lane": "typescript",
+                  "repos": ["vitejs/vite", "axios/axios", "microsoft/TypeScript"],
+                  "suffixes": {".ts", ".tsx", ".js", ".jsx"},
+              },
+          ]
+
+          def eligible_source_files(rows: list[dict], suffixes: set[str]) -> list[str]:
+              selected: list[str] = []
+              for row in rows:
+                  if not isinstance(row, dict) or row.get("status") != "modified":
+                      continue
+                  filename = str(row.get("filename") or "")
+                  path = Path(filename)
+                  if path.name.lower() in excluded_names:
+                      continue
+                  lowered_parts = {part.lower() for part in path.parts}
+                  if lowered_parts & excluded_parts:
+                      continue
+                  if path.suffix.lower() not in suffixes:
+                      continue
+                  selected.append(filename)
+              return sorted(dict.fromkeys(selected))
+
+          chosen: list[dict] = []
+          used_repositories: set[str] = set()
+
+          for lane in lanes:
+              selected = None
+              for repository in lane["repos"]:
+                  if repository in used_repositories:
+                      continue
+                  queries = [
+                      f"repo:{repository} is:pr is:merged label:bug",
+                      f"repo:{repository} is:pr is:merged in:title fix",
+                  ]
+                  issue_rows: list[dict] = []
+                  seen_numbers: set[int] = set()
+                  for query in queries:
+                      for item in search(query):
+                          number = int(item.get("number") or 0)
+                          if number and number not in seen_numbers:
+                              issue_rows.append(item)
+                              seen_numbers.add(number)
+                      if issue_rows:
+                          break
+
+                  owner, name = repository.split("/", 1)
+                  for item in issue_rows:
+                      number = int(item.get("number") or 0)
+                      if not number:
+                          continue
+                      pr = api(f"/repos/{owner}/{name}/pulls/{number}")
+                      if not isinstance(pr, dict) or not pr.get("merged_at"):
+                          continue
+                      base = str((pr.get("base") or {}).get("sha") or "")
+                      head = str((pr.get("head") or {}).get("sha") or "")
+                      if not base or not head or base == head:
+                          continue
+                      rows = pr_files(repository, number)
+                      source_files = eligible_source_files(rows, set(lane["suffixes"]))
+                      if not (1 <= len(source_files) <= 4):
+                          continue
+                      compare = api(f"/repos/{owner}/{name}/compare/{base}...{head}")
+                      if not isinstance(compare, dict):
+                          continue
+                      merge_base = str((compare.get("merge_base_commit") or {}).get("sha") or "")
+                      status = str(compare.get("status") or "")
+                      ahead_by = int(compare.get("ahead_by") or 0)
+                      if merge_base != base or status != "ahead" or ahead_by < 1:
+                          continue
+                      selected = {
+                          "lane": lane["lane"],
+                          "repository": repository,
+                          "source_pr": number,
+                          "defective_ref": base,
+                          "fixing_ref": head,
+                          "changed_files": source_files,
+                      }
+                      break
+                  if selected is not None:
+                      break
+                  time.sleep(0.2)
+
+              if selected is None:
+                  raise SystemExit(f"No provenance-valid opaque candidate found for lane {lane['lane']}")
+              used_repositories.add(str(selected["repository"]))
+              chosen.append(selected)
+
+          if len(chosen) != 3:
+              raise SystemExit("Expected exactly three opaque candidates")
+
+          output = {
+              "schema_version": "sergeant.opaque-candidate-selection.v1",
+              "reviewer_frozen_before_selection": "9a4ed0aab1bbbaa9b96779c366c25e85360457c1",
+              "titles_bodies_and_patches_persisted": False,
+              "cases": chosen,
+          }
+          Path("build/model-free-core-transfer-20/opaque-selection.json").write_text(
+              json.dumps(output, indent=2) + "\n", encoding="utf-8"
+          )
+          for row in chosen:
+              print(f"selected lane={row['lane']} repository={row['repository']} pr={row['source_pr']} files={len(row['changed_files'])}")
+          PY
+
+      - name: Checkout selected defective snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import subprocess
+          from pathlib import Path
+
+          source = Path("build/model-free-core-transfer-20/opaque-selection.json")
+          payload = json.loads(source.read_text(encoding="utf-8"))
+          cases = payload.get("cases", [])
+
+          for index, case in enumerate(cases, start=1):
+              repository = str(case["repository"])
+              defective = str(case["defective_ref"])
+              fixing = str(case["fixing_ref"])
+              destination = Path("transfer-20") / f"case-{index}"
+              destination.mkdir(parents=True, exist_ok=False)
+              subprocess.run(["git", "init", str(destination)], check=True)
+              subprocess.run(["git", "-C", str(destination), "remote", "add", "origin", f"https://github.com/{repository}.git"], check=True)
+              subprocess.run(["git", "-C", str(destination), "config", "core.sparseCheckout", "true"], check=True)
+              sparse = destination / ".git" / "info" / "sparse-checkout"
+              sparse.write_text("".join(f"/{path}\n" for path in case["changed_files"]), encoding="utf-8")
+              subprocess.run(["git", "-C", str(destination), "fetch", "--no-tags", "--filter=blob:none", "origin", fixing], check=True)
+              subprocess.run(["git", "-C", str(destination), "fetch", "--no-tags", "--filter=blob:none", "origin", defective], check=True)
+              subprocess.run(["git", "-C", str(destination), "merge-base", "--is-ancestor", defective, fixing], check=True)
+              subprocess.run(["git", "-C", str(destination), "checkout", "--detach", defective], check=True)
+              actual = subprocess.check_output(["git", "-C", str(destination), "rev-parse", "HEAD"], text=True).strip()
+              if actual != defective:
+                  raise SystemExit(f"checkout identity mismatch for {repository}")
+              for relative in case["changed_files"]:
+                  if not (destination / relative).is_file():
+                      raise SystemExit(f"selected source file missing at defective ref: {repository}:{relative}")
+              case["checkout_path"] = str(destination)
+              case["case_id"] = f"transfer-20-{chr(96 + index)}"
+              case["workspace_policy"] = "static_first"
+
+          payload["cases"] = cases
+          source.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-20-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          selection = json.loads(Path("build/model-free-core-transfer-20/opaque-selection.json").read_text(encoding="utf-8"))
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-20",
+              "purpose": "Twentieth untouched transfer validation selected by an opaque automated lineage qualifier. PR titles, bodies, patches and expected roots remain outside Sergeant input and the persisted selection packet.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "provenance_required": True,
+                  "provenance_contract": "sergeant.training-provenance.v1",
+                  "reviewer_code_frozen_before_target_selection": "9a4ed0aab1bbbaa9b96779c366c25e85360457c1",
+                  "opaque_selector": "sergeant.opaque-candidate-selection.v1"
+              },
+              "cases": [
+                  {
+                      "case_id": row["case_id"],
+                      "repository": row["repository"],
+                      "source_pr": row["source_pr"],
+                      "checkout_path": row["checkout_path"],
+                      "defective_ref": row["defective_ref"],
+                      "fixing_ref": row["fixing_ref"],
+                      "changed_files": row["changed_files"],
+                      "workspace_policy": "static_first"
+                  }
+                  for row in selection["cases"]
+              ]
+          }
+          Path("build/model-free-core-transfer-20/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Run pinned normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-20/runtime-manifest.json \
+            --output build/model-free-core-transfer-20/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-20/frozen-summary.json
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-20
+          path: build/model-free-core-transfer-20/
+          if-no-files-found: error
+          retention-days: 90
