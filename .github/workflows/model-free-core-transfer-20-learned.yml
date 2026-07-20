@@ -1,0 +1,193 @@
+name: Model-Free Core Transfer 20 Learned Closure
+# Historical 0/3 frozen before teaching. Learned reviewer: bd75abb1ad30fdfc3d665d26462d226d46a5d966
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-20-learned.yml"
+      - "main_review/static_transfer_20_review.py"
+      - "main_review/static_status_review.py"
+      - "tests/test_static_transfer_20_review.py"
+
+permissions:
+  contents: read
+
+jobs:
+  learned-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin learned Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach bd75abb1ad30fdfc3d665d26462d226d46a5d966
+          test "$(git rev-parse HEAD)" = "bd75abb1ad30fdfc3d665d26462d226d46a5d966"
+          test -e main_review/static_transfer_20_review.py
+          grep -q 'sergeant.static-status-review.v34' main_review/static_status_review.py
+
+      - name: Checkout exact defective and fixing lineages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sparse_lineage_checkout() {
+            local repository="$1"
+            local defective="$2"
+            local fixing="$3"
+            local destination="$4"
+            shift 4
+            git init "$destination"
+            git -C "$destination" remote add origin "https://github.com/${repository}.git"
+            git -C "$destination" config core.sparseCheckout true
+            : > "$destination/.git/info/sparse-checkout"
+            for pattern in "$@"; do printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"; done
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$fixing"
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$defective"
+            git -C "$destination" cat-file -e "${defective}^{commit}"
+            git -C "$destination" cat-file -e "${fixing}^{commit}"
+            git -C "$destination" merge-base --is-ancestor "$defective" "$fixing"
+            git -C "$destination" checkout --detach "$defective"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$defective"
+          }
+
+          sparse_lineage_checkout \
+            pydantic/pydantic \
+            652a61ce4f9d7d76eaada31535807a485ece0e21 \
+            1ed622869e619b0f1b3c1ee7b6251c576e3bf926 \
+            transfer-20/pydantic \
+            '/pydantic/json_schema.py'
+
+          sparse_lineage_checkout \
+            astral-sh/ruff \
+            0177a7e0d2c4a3805afa1960f106d72878766cbc \
+            fbc7eb8f119a26f4e3785d98afe5d352722f70d3 \
+            transfer-20/ruff \
+            '/crates/ruff_linter/src/rules/pyupgrade/rules/pep695/non_pep695_type_alias.rs'
+
+          sparse_lineage_checkout \
+            vitejs/vite \
+            b59a73f76f5557492d83d097bb33b3dd02f27d51 \
+            03e05fb771207a0371c4fbb5084e8efce65d6b75 \
+            transfer-20/vite \
+            '/packages/vite/src/node/plugins/css.ts' \
+            '/packages/vite/src/node/plugins/html.ts' \
+            '/playground/chunk-importmap/__tests__/chunk-importmap.spec.ts' \
+            '/playground/chunk-importmap/index.js'
+
+          for file in \
+            transfer-20/pydantic/pydantic/json_schema.py \
+            transfer-20/ruff/crates/ruff_linter/src/rules/pyupgrade/rules/pep695/non_pep695_type_alias.rs \
+            transfer-20/vite/packages/vite/src/node/plugins/css.ts \
+            transfer-20/vite/packages/vite/src/node/plugins/html.ts \
+            transfer-20/vite/playground/chunk-importmap/__tests__/chunk-importmap.spec.ts \
+            transfer-20/vite/playground/chunk-importmap/index.js; do
+            test -f "$file"
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-20-learned-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install learned Sergeant package
+        run: python -m pip install .
+
+      - name: Run focused transfer 20 controls
+        run: python -m pytest -q tests/test_static_transfer_20_review.py tests/test_pr_review_static_invariant_integration.py
+
+      - name: Build learned closure manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-20-learned
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-20-learned",
+              "purpose": "Learned closure only. Transfer 20 historical fresh result remains 0/3.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "classification": "learned_closure",
+                  "historical_fresh_score_immutable": True,
+                  "reviewer_code": "bd75abb1ad30fdfc3d665d26462d226d46a5d966"
+              },
+              "cases": [
+                  {
+                      "case_id": "transfer-20-a",
+                      "repository": "pydantic/pydantic",
+                      "source_pr": 13428,
+                      "checkout_path": "transfer-20/pydantic",
+                      "defective_ref": "652a61ce4f9d7d76eaada31535807a485ece0e21",
+                      "fixing_ref": "1ed622869e619b0f1b3c1ee7b6251c576e3bf926",
+                      "changed_files": ["pydantic/json_schema.py"],
+                      "workspace_policy": "static_first"
+                  },
+                  {
+                      "case_id": "transfer-20-b",
+                      "repository": "astral-sh/ruff",
+                      "source_pr": 26888,
+                      "checkout_path": "transfer-20/ruff",
+                      "defective_ref": "0177a7e0d2c4a3805afa1960f106d72878766cbc",
+                      "fixing_ref": "fbc7eb8f119a26f4e3785d98afe5d352722f70d3",
+                      "changed_files": ["crates/ruff_linter/src/rules/pyupgrade/rules/pep695/non_pep695_type_alias.rs"],
+                      "workspace_policy": "static_first"
+                  },
+                  {
+                      "case_id": "transfer-20-c",
+                      "repository": "vitejs/vite",
+                      "source_pr": 22947,
+                      "checkout_path": "transfer-20/vite",
+                      "defective_ref": "b59a73f76f5557492d83d097bb33b3dd02f27d51",
+                      "fixing_ref": "03e05fb771207a0371c4fbb5084e8efce65d6b75",
+                      "changed_files": [
+                          "packages/vite/src/node/plugins/css.ts",
+                          "packages/vite/src/node/plugins/html.ts",
+                          "playground/chunk-importmap/__tests__/chunk-importmap.spec.ts",
+                          "playground/chunk-importmap/index.js"
+                      ],
+                      "workspace_policy": "static_first"
+                  }
+              ]
+          }
+          Path("build/model-free-core-transfer-20-learned/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Run learned normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-20-learned/runtime-manifest.json \
+            --output build/model-free-core-transfer-20-learned/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-20-learned/frozen-summary.json
+
+      - name: Upload immutable learned reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-20-learned
+          path: build/model-free-core-transfer-20-learned/
+          if-no-files-found: error
+          retention-days: 90
