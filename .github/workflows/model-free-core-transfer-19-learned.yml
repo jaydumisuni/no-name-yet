@@ -103,16 +103,27 @@ jobs:
       - name: Install learned Sergeant package
         run: python -m pip install . pytest
 
+      - name: Prepare learned evidence directory
+        run: mkdir -p build/model-free-core-transfer-19-learned
+
       - name: Run transfer 19 officer controls
-        run: python -m pytest -q tests/test_static_transfer_19_review.py
-
-      - name: Run canonical pr-review integration controls
-        run: python -m pytest -q tests/test_pr_review_static_invariant_integration.py
-
-      - name: Build learned closure manifest
         shell: bash
         run: |
-          mkdir -p build/model-free-core-transfer-19-learned
+          set -o pipefail
+          python -m pytest -q tests/test_static_transfer_19_review.py \
+            2>&1 | tee build/model-free-core-transfer-19-learned/officer-controls.txt
+
+      - name: Run canonical pr-review integration controls
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -q tests/test_pr_review_static_invariant_integration.py \
+            2>&1 | tee build/model-free-core-transfer-19-learned/integration-controls.txt
+
+      - name: Build learned closure manifest
+        if: success()
+        shell: bash
+        run: |
           python - <<'PY'
           import json
           from pathlib import Path
@@ -165,6 +176,7 @@ jobs:
           PY
 
       - name: Run learned normal pr-review
+        if: success()
         shell: bash
         run: |
           set -o pipefail
