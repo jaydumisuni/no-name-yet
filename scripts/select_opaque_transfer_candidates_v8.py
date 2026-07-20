@@ -16,7 +16,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-import select_opaque_transfer_candidates as base
+try:
+    from . import select_opaque_transfer_candidates as base
+except ImportError:  # Direct CLI execution from scripts/.
+    import select_opaque_transfer_candidates as base
 
 _BASE_QUALIFIES = base._qualifies
 
@@ -26,26 +29,12 @@ _CAPABILITY_TITLE_RE = re.compile(
     re.I,
 )
 _CAPABILITY_PHRASES = (
-    "add support for",
-    "adds support for",
-    "adding support for",
-    "support for a new",
-    "support a new",
-    "new feature",
-    "feature request",
-    "enable support",
-    "enables support",
-    "allow users to",
-    "allows users to",
-    "introduce support",
-    "introduces support",
-    "implement support",
-    "implements support",
-    "not currently supported",
-    "previously unsupported",
-    "newly supported",
-    "expose a new",
-    "provide a new",
+    "add support for", "adds support for", "adding support for",
+    "support for a new", "support a new", "new feature", "feature request",
+    "enable support", "enables support", "allow users to", "allows users to",
+    "introduce support", "introduces support", "implement support",
+    "implements support", "not currently supported", "previously unsupported",
+    "newly supported", "expose a new", "provide a new",
 )
 _PREEXISTING_DEFECT_RE = re.compile(
     r"\b(?:bug|regression|crash|panic|incorrect|wrong|broken|not working|does not work|"
@@ -68,11 +57,7 @@ def _has_preexisting_defect_evidence(title: str, body: str) -> bool:
     return bool(_PREEXISTING_DEFECT_RE.search(f"{title}\n{body}"))
 
 
-def _qualifies_v8(
-    pr: dict[str, Any],
-    rows: list[dict[str, Any]],
-    source_files: list[str],
-) -> bool:
+def _qualifies_v8(pr: dict[str, Any], rows: list[dict[str, Any]], source_files: list[str]) -> bool:
     if not _BASE_QUALIFIES(pr, rows, source_files):
         return False
     title = str(pr.get("title") or "")
@@ -82,13 +67,7 @@ def _qualifies_v8(
     return True
 
 
-def select(
-    *,
-    reviewer: str,
-    set_id: str,
-    lanes: list[dict[str, Any]],
-    output: Path,
-) -> None:
+def select(*, reviewer: str, set_id: str, lanes: list[dict[str, Any]], output: Path) -> None:
     original = base._qualifies
     base._qualifies = _qualifies_v8
     try:
@@ -114,12 +93,7 @@ def main() -> int:
     lanes = json.loads(Path(args.lanes_json).read_text(encoding="utf-8"))
     if not isinstance(lanes, list) or len(lanes) != 3:
         raise SystemExit("lanes JSON must contain exactly three lanes")
-    select(
-        reviewer=args.reviewer,
-        set_id=args.set_id,
-        lanes=lanes,
-        output=Path(args.output),
-    )
+    select(reviewer=args.reviewer, set_id=args.set_id, lanes=lanes, output=Path(args.output))
     return 0
 
 
