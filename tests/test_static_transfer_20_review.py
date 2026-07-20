@@ -185,6 +185,7 @@ export function getImportMap(bundle, config) {
 export function cssPostPlugin(config) {
   return {
     renderChunk(code, chunk: RenderedChunk) {
+      // Emit the extracted CSS sidecar for this rendered chunk.
       const chunkCSS = collectCss(chunk)
       this.emitFile({ type: "asset", name: chunk.fileName, source: chunkCSS })
       if (config.build.chunkImportMap) {
@@ -235,7 +236,7 @@ export function cssPostPlugin(config) {
       chunkCssReferences.set(chunk.fileName, referenceId)
       if (config.build.chunkImportMap) {
         const importMap = getImportMap(this.getBundle(), config)
-        importMap.content.imports[chunk.fileName.replace(/\\.js$/, ".css")] =
+        importMap.content.imports[chunk.fileName.replace(/\.js$/, ".css")] =
           this.getFileName(referenceId)
       }
     },
