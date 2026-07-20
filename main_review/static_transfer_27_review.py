@@ -143,15 +143,36 @@ def _cpp_operand_order_findings(path: str, text: str) -> list[dict[str, Any]]:
     return findings
 
 
+def _first_release_call(
+    text: str,
+    argument_pattern: str,
+    *,
+    start: int = 0,
+) -> re.Match[str] | None:
+    call_pattern = re.compile(
+        rf"(?P<call>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*{argument_pattern}",
+        re.I | re.M,
+    )
+    for match in call_pattern.finditer(text, start):
+        if "release" in match.group("call").lower():
+            return match
+    return None
+
+
 def _java_lock_ownership_findings(path: str, text: str) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    trackers = sorted(set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*(?:Acquired|Held|Locked)[A-Za-z0-9_]*)\b", text)))
+    trackers = sorted(
+        set(
+            re.findall(
+                r"\b([A-Za-z_][A-Za-z0-9_]*(?:Acquired|Held|Locked)[A-Za-z0-9_]*)\b",
+                text,
+            )
+        )
+    )
     for tracker in trackers:
-        subset_release = re.search(
-            r"(?P<call>[A-Za-z_][A-Za-z0-9_]*(?:release|Release)[A-Za-z0-9_]*)\s*\(\s*"
-            r"(?P<subset>[A-Za-z_][A-Za-z0-9_]*(?:nonRemote|released|completed|local)[A-Za-z0-9_]*)",
+        subset_release = _first_release_call(
             text,
-            re.I,
+            r"(?P<subset>[A-Za-z_][A-Za-z0-9_]*(?:nonRemote|released|completed|local)[A-Za-z0-9_]*)",
         )
         if subset_release is None:
             continue
@@ -164,17 +185,17 @@ def _java_lock_ownership_findings(path: str, text: str) -> list[dict[str, Any]]:
             after,
             re.M,
         )
-        later_full_release = re.search(
-            rf"(?:release|Release)[A-Za-z0-9_]*\s*\(\s*{re.escape(tracker)}\s*\.\s*keySet\s*\(",
-            text[subset_release.end() :],
-            re.M,
+        later_full_release = _first_release_call(
+            text,
+            rf"{re.escape(tracker)}\s*\.\s*keySet\s*\(",
+            start=subset_release.end(),
         )
         if removal is not None or later_full_release is None:
             continue
 
         catch_without_finally = re.search(
             r"catch\s*\([^)]*\)\s*\{(?P<body>[\s\S]{0,1000}?(?:handle|record|metric)[\s\S]{0,600}?"
-            r"(?:release|Release)[A-Za-z0-9_]*\s*\([^}]+)\}",
+            r"[A-Za-z_][A-Za-z0-9_]*release[A-Za-z0-9_]*\s*\([^}]+)\}",
             text,
             re.I | re.M,
         )
@@ -226,7 +247,10 @@ def _python_duration_equivalence_findings(path: str, text: str) -> list[dict[str
         return []
     warning_gate = re.search(r"if\s+not\s+isinstance\s*\(\s*freq\s*,\s*Tick\s*\)\s*:", text)
     range_gate = re.search(r"if\s+isinstance\s*\(\s*freq\s*,\s*Tick\s*\)\s*:", text)
-    calendar_fallback = re.search(r"first\s*=\s*first\.normalize\s*\(\s*\)[\s\S]{0,500}?last\s*=\s*last\.normalize", text)
+    calendar_fallback = re.search(
+        r"first\s*=\s*first\.normalize\s*\(\s*\)[\s\S]{0,500}?last\s*=\s*last\.normalize",
+        text,
+    )
     if warning_gate is None or range_gate is None or calendar_fallback is None:
         return []
     day_equivalence = re.search(
@@ -268,7 +292,10 @@ def _python_duration_equivalence_findings(path: str, text: str) -> list[dict[str
     ]
 
 
-def run_static_transfer_27_review(root: str | Path, changed_files: Iterable[str]) -> dict[str, Any]:
+def run_static_transfer_27_review(
+    root: str | Path,
+    changed_files: Iterable[str],
+) -> dict[str, Any]:
     root_path = Path(root).resolve()
     changed = sorted({str(item) for item in changed_files if str(item)})
     readable: list[str] = []
@@ -290,7 +317,13 @@ def run_static_transfer_27_review(root: str | Path, changed_files: Iterable[str]
 
     unique: dict[tuple[str, str, int], dict[str, Any]] = {}
     for finding in findings:
-        unique[(str(finding.get("root_cause")), str(finding.get("path")), int(finding.get("line_start") or 0))] = finding
+        unique[
+            (
+                str(finding.get("root_cause")),
+                str(finding.get("path")),
+                int(finding.get("line_start") or 0),
+            )
+        ] = finding
     return {
         "schema_version": "sergeant.static-transfer-27-review.v1",
         "mode": "model_free_static",
