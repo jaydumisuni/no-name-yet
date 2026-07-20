@@ -18,6 +18,8 @@ from typing import Any
 
 import select_opaque_transfer_candidates as base
 
+_BASE_QUALIFIES = base._qualifies
+
 _CAPABILITY_TITLE_RE = re.compile(
     r"^\s*(?:feat(?:ure)?|add|introduce|implement|enable|allow|support|expose|provide)"
     r"(?:\b|\s*[:(])",
@@ -71,7 +73,7 @@ def _qualifies_v8(
     rows: list[dict[str, Any]],
     source_files: list[str],
 ) -> bool:
-    if not base._qualifies(pr, rows, source_files):
+    if not _BASE_QUALIFIES(pr, rows, source_files):
         return False
     title = str(pr.get("title") or "")
     body = str(pr.get("body") or "")
