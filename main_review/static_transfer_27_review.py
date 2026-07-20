@@ -172,7 +172,7 @@ def _java_lock_ownership_findings(path: str, text: str) -> list[dict[str, Any]]:
     for tracker in trackers:
         subset_release = _first_release_call(
             text,
-            r"(?P<subset>[A-Za-z_][A-Za-z0-9_]*(?:nonRemote|released|completed|local)[A-Za-z0-9_]*)",
+            r"(?P<subset>(?:nonRemote|released|completed|local)[A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*(?:nonRemote|released|completed|local)[A-Za-z0-9_]*)",
         )
         if subset_release is None:
             continue
