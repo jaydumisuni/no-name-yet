@@ -103,8 +103,11 @@ jobs:
       - name: Install learned Sergeant package
         run: python -m pip install . pytest
 
-      - name: Run focused transfer 19 controls
-        run: python -m pytest -q tests/test_static_transfer_19_review.py tests/test_pr_review_static_invariant_integration.py
+      - name: Run transfer 19 officer controls
+        run: python -m pytest -q tests/test_static_transfer_19_review.py
+
+      - name: Run canonical pr-review integration controls
+        run: python -m pytest -q tests/test_pr_review_static_invariant_integration.py
 
       - name: Build learned closure manifest
         shell: bash
