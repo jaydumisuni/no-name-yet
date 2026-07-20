@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from scripts.select_opaque_transfer_candidates_v8 import _qualifies_v8
 
+# Evidence-only trigger for the isolated transfer-27 child PR.
+
 
 def _rows() -> list[dict]:
     return [
