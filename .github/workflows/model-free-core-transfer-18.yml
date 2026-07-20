@@ -1,0 +1,197 @@
+name: Model-Free Core Transfer 18
+# Reviewer frozen before target selection: d136e1cc64c01ed2640852d9a1fb69fa18a594ee
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-18.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin immutable Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach d136e1cc64c01ed2640852d9a1fb69fa18a594ee
+          test "$(git rev-parse HEAD)" = "d136e1cc64c01ed2640852d9a1fb69fa18a594ee"
+          test -e main_review/static_transfer_17_review.py
+          grep -q 'sergeant.static-status-review.v31' main_review/static_status_review.py
+          test ! -e main_review/static_transfer_18_review.py
+
+      - name: Checkout exact defective and fixing lineages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sparse_lineage_checkout() {
+            local repository="$1"
+            local defective="$2"
+            local fixing="$3"
+            local destination="$4"
+            shift 4
+            git init "$destination"
+            git -C "$destination" remote add origin "https://github.com/${repository}.git"
+            git -C "$destination" config core.sparseCheckout true
+            : > "$destination/.git/info/sparse-checkout"
+            for pattern in "$@"; do printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"; done
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$fixing"
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$defective"
+            git -C "$destination" cat-file -e "${defective}^{commit}"
+            git -C "$destination" cat-file -e "${fixing}^{commit}"
+            git -C "$destination" merge-base --is-ancestor "$defective" "$fixing"
+            git -C "$destination" checkout --detach "$defective"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$defective"
+          }
+
+          sparse_lineage_checkout \
+            esphome/device-builder-frontend \
+            9a068fb43c4ad33530e718a50c7ee3c1def9670f \
+            610f0763924d444f964ed43f02e7d19877913497 \
+            transfer-18/esphome \
+            '/src/components/firmware-install-dialog.ts' \
+            '/src/components/firmware-install-dialog/install-flow.ts' \
+            '/src/components/firmware-install-dialog/renderers.ts' \
+            '/src/pages/dashboard.ts' \
+            '/src/pages/device.ts'
+
+          sparse_lineage_checkout \
+            quanwangniuniu/marketing-simplified \
+            f7daeb0f049589e5c4c70253be523446a05fd15a \
+            2892dbbfb24b86aa1b6a94f8038955b2faf11831 \
+            transfer-18/marketing \
+            '/frontend/src/lib/api.ts' \
+            '/frontend/src/app/(project)/profile/page.tsx'
+
+          sparse_lineage_checkout \
+            HarperFast/harper \
+            0528567226259eb6b59e707338c1e871515f0e1e \
+            a2ab425cf066beb6c62a59719d5397ad1cae29d5 \
+            transfer-18/harper \
+            '/resources/defineResource.ts'
+
+          for file in \
+            transfer-18/esphome/src/components/firmware-install-dialog.ts \
+            transfer-18/esphome/src/components/firmware-install-dialog/install-flow.ts \
+            transfer-18/esphome/src/components/firmware-install-dialog/renderers.ts \
+            transfer-18/esphome/src/pages/dashboard.ts \
+            transfer-18/esphome/src/pages/device.ts \
+            transfer-18/marketing/frontend/src/lib/api.ts \
+            'transfer-18/marketing/frontend/src/app/(project)/profile/page.tsx' \
+            transfer-18/harper/resources/defineResource.ts; do
+            test -f "$file"
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-18-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque frozen manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-18
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-18",
+              "purpose": "Eighteenth untouched transfer validation across three new repositories and contract classes. Expected roots and fixing evidence remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "provenance_required": True,
+                  "provenance_contract": "sergeant.training-provenance.v1",
+                  "reviewer_code_frozen_before_target_selection": "d136e1cc64c01ed2640852d9a1fb69fa18a594ee"
+              },
+              "cases": [
+                  {
+                      "case_id": "transfer-18-a",
+                      "repository": "esphome/device-builder-frontend",
+                      "source_pr": 1286,
+                      "checkout_path": "transfer-18/esphome",
+                      "defective_ref": "9a068fb43c4ad33530e718a50c7ee3c1def9670f",
+                      "fixing_ref": "610f0763924d444f964ed43f02e7d19877913497",
+                      "changed_files": [
+                          "src/components/firmware-install-dialog.ts",
+                          "src/components/firmware-install-dialog/install-flow.ts",
+                          "src/components/firmware-install-dialog/renderers.ts",
+                          "src/pages/dashboard.ts",
+                          "src/pages/device.ts"
+                      ],
+                      "workspace_policy": "static_first"
+                  },
+                  {
+                      "case_id": "transfer-18-b",
+                      "repository": "quanwangniuniu/marketing-simplified",
+                      "source_pr": 756,
+                      "checkout_path": "transfer-18/marketing",
+                      "defective_ref": "f7daeb0f049589e5c4c70253be523446a05fd15a",
+                      "fixing_ref": "2892dbbfb24b86aa1b6a94f8038955b2faf11831",
+                      "changed_files": [
+                          "frontend/src/lib/api.ts",
+                          "frontend/src/app/(project)/profile/page.tsx"
+                      ],
+                      "workspace_policy": "static_first"
+                  },
+                  {
+                      "case_id": "transfer-18-c",
+                      "repository": "HarperFast/harper",
+                      "source_pr": 1825,
+                      "checkout_path": "transfer-18/harper",
+                      "defective_ref": "0528567226259eb6b59e707338c1e871515f0e1e",
+                      "fixing_ref": "a2ab425cf066beb6c62a59719d5397ad1cae29d5",
+                      "changed_files": ["resources/defineResource.ts"],
+                      "workspace_policy": "static_first"
+                  }
+              ]
+          }
+          Path("build/model-free-core-transfer-18/runtime-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Run pinned normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-18/runtime-manifest.json \
+            --output build/model-free-core-transfer-18/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-18/frozen-summary.json
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-18
+          path: build/model-free-core-transfer-18/
+          if-no-files-found: error
+          retention-days: 90
