@@ -1,10 +1,13 @@
-"""Static review for remote response contract violations hidden as empty data."""
+"""Static review for remote and cross-layer contract violations."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
 from typing import Any, Iterable
+
+from .static_transfer_21_review import run_static_transfer_21_review
+
 
 _DART_SUFFIXES = {".dart"}
 _REMOTE_ASSIGNMENT_RE = re.compile(
@@ -97,11 +100,29 @@ def run_static_remote_contract_review(
             findings.append(_finding(path, line_start, variable))
             break
 
+    transfer_21 = run_static_transfer_21_review(root_path, changed)
+    findings.extend(
+        dict(item)
+        for item in transfer_21.get("findings", [])
+        if isinstance(item, dict)
+    )
+
+    unique: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for finding in findings:
+        unique[
+            (
+                str(finding.get("root_cause")),
+                str(finding.get("path")),
+                int(finding.get("line_start") or 0),
+            )
+        ] = finding
+
     return {
-        "schema_version": "sergeant.static-remote-contract-review.v1",
+        "schema_version": "sergeant.static-remote-contract-review.v2",
         "mode": "model_free_static",
-        "finding_count": len(findings),
-        "findings": findings,
+        "finding_count": len(unique),
+        "findings": list(unique.values()),
         "readable_changed_files": readable,
+        "static_transfer_21_review": transfer_21,
         "executed_project_code": False,
     }
