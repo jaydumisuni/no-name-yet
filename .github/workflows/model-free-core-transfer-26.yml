@@ -1,0 +1,227 @@
+name: Model-Free Core Transfer 26
+# Reviewer frozen before opaque behavioral-defect selection: d8597615a4b597f00fc8d9ed86d6022c8445e827
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-26.yml"
+      - ".github/transfer-lanes/transfer-26.json"
+      - "scripts/select_opaque_transfer_candidates.py"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+      REVIEWER_SHA: d8597615a4b597f00fc8d9ed86d6022c8445e827
+      SET_ID: model-free-core-transfer-26
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify frozen reviewer exists before selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${REVIEWER_SHA}^{commit}"
+          test "$(git rev-parse HEAD)" != "${REVIEWER_SHA}"
+          test -e scripts/select_opaque_transfer_candidates.py
+          test -e .github/transfer-lanes/transfer-26.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Select three opaque behavioral defect lineages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/model-free-core-transfer-26
+          python scripts/select_opaque_transfer_candidates.py \
+            --reviewer "${REVIEWER_SHA}" \
+            --set-id "${SET_ID}" \
+            --lanes-json .github/transfer-lanes/transfer-26.json \
+            --output build/model-free-core-transfer-26/opaque-selection.json
+
+      - name: Pin canonical Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach "${REVIEWER_SHA}"
+          test "$(git rev-parse HEAD)" = "${REVIEWER_SHA}"
+          test -e main_review/static_transfer_25_review.py
+          grep -q 'sergeant.static-transfer-25-review.v1' main_review/static_transfer_25_review.py
+          grep -q 'sergeant.static-remote-contract-review.v6' main_review/static_remote_contract_review.py
+          grep -q 'sergeant.static-status-review.v34' main_review/static_status_review.py
+          test ! -e main_review/static_transfer_26_review.py
+
+      - name: Checkout selected defective snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          source = Path("build/model-free-core-transfer-26/opaque-selection.json")
+          payload = json.loads(source.read_text(encoding="utf-8"))
+          cases = payload.get("cases", [])
+          if len(cases) != 3:
+              raise SystemExit("Expected exactly three selected cases")
+
+          for index, case in enumerate(cases, start=1):
+              repository = str(case["repository"])
+              defective = str(case["defective_ref"])
+              fixing = str(case["fixing_ref"])
+              destination = Path("transfer-26") / f"case-{index}"
+              destination.mkdir(parents=True, exist_ok=False)
+              subprocess.run(["git", "init", str(destination)], check=True)
+              subprocess.run(
+                  [
+                      "git", "-C", str(destination), "remote", "add", "origin",
+                      f"https://github.com/{repository}.git",
+                  ],
+                  check=True,
+              )
+              subprocess.run(
+                  ["git", "-C", str(destination), "config", "core.sparseCheckout", "true"],
+                  check=True,
+              )
+              sparse = destination / ".git" / "info" / "sparse-checkout"
+              sparse.write_text(
+                  "".join(f"/{path}\n" for path in case["changed_files"]),
+                  encoding="utf-8",
+              )
+              for ref in (fixing, defective):
+                  subprocess.run(
+                      [
+                          "git", "-C", str(destination), "fetch", "--no-tags",
+                          "--filter=blob:none", "origin", ref,
+                      ],
+                      check=True,
+                  )
+              subprocess.run(
+                  [
+                      "git", "-C", str(destination), "merge-base",
+                      "--is-ancestor", defective, fixing,
+                  ],
+                  check=True,
+              )
+              subprocess.run(
+                  ["git", "-C", str(destination), "checkout", "--detach", defective],
+                  check=True,
+              )
+              actual = subprocess.check_output(
+                  ["git", "-C", str(destination), "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              if actual != defective:
+                  raise SystemExit(f"checkout identity mismatch for {repository}")
+              for relative in case["changed_files"]:
+                  if not (destination / relative).is_file():
+                      raise SystemExit(
+                          f"production source missing at defective ref: {repository}:{relative}"
+                      )
+              case["checkout_path"] = str(destination)
+              case["case_id"] = f"transfer-26-{chr(96 + index)}"
+              case["workspace_policy"] = "static_first"
+
+          payload["cases"] = cases
+          source.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-26-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque runtime manifest
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          reviewer = os.environ["REVIEWER_SHA"]
+          source = Path("build/model-free-core-transfer-26/opaque-selection.json")
+          selection = json.loads(source.read_text(encoding="utf-8"))
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-26",
+              "purpose": (
+                  "Twenty-sixth untouched transfer validation selected opaquely from "
+                  "behavior-qualified production source across C, Haskell and Clojure ecosystems."
+              ),
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "provenance_required": True,
+                  "provenance_contract": "sergeant.training-provenance.v1",
+                  "reviewer_code_frozen_before_target_selection": reviewer,
+                  "opaque_selector": "sergeant.opaque-candidate-selection.v7",
+                  "production_source_only": True,
+                  "behavioral_defect_qualification": True,
+                  "nontrivial_bidirectional_executable_change_required": True,
+              },
+              "cases": selection["cases"],
+          }
+          Path("build/model-free-core-transfer-26/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run frozen normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-26/runtime-manifest.json \
+            --output build/model-free-core-transfer-26/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-26/frozen-summary.json
+
+      - name: Publish frozen transfer summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Model-free Sergeant core — transfer 26"
+            echo
+            echo "Workflow event head: \`${GITHUB_SHA}\`"
+            echo "Frozen reviewer: \`${REVIEWER_SHA}\`"
+            echo
+            echo '```json'
+            cat build/model-free-core-transfer-26/frozen-summary.json 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable first-pass reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-26
+          path: build/model-free-core-transfer-26/
+          if-no-files-found: error
+          retention-days: 90
