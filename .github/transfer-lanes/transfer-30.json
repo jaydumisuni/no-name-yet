@@ -1,0 +1,35 @@
+[
+  {
+    "lane": "perl",
+    "repos": [
+      "Perl/perl5",
+      "mojolicious/mojo",
+      "Perl-Critic/Perl-Critic",
+      "libwww-perl/libwww-perl",
+      "Perl-Toolchain-Gang/ExtUtils-MakeMaker"
+    ],
+    "suffixes": [".pl", ".pm"]
+  },
+  {
+    "lane": "fsharp",
+    "repos": [
+      "dotnet/fsharp",
+      "fsprojects/FSharpPlus",
+      "giraffe-fsharp/Giraffe",
+      "fsprojects/FSharp.Data",
+      "fsprojects/Paket"
+    ],
+    "suffixes": [".fs", ".fsi", ".fsx"]
+  },
+  {
+    "lane": "nim",
+    "repos": [
+      "nim-lang/Nim",
+      "nim-lang/nimble",
+      "status-im/nim-chronos",
+      "nim-lang/fusion",
+      "nim-lang/packages"
+    ],
+    "suffixes": [".nim"]
+  }
+]
