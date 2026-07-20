@@ -127,7 +127,7 @@ def _board_authority_findings(path: str, text: str) -> list[dict[str, Any]]:
         return []
     consistency = re.search(
         r"readPlatformBoard|parseYaml[^\n]*(?:board|variant)|board(?:Mismatch|Disagree|Matches)|"
-        r"request-change-board|board_reselect|yaml[^\n]{0,120}board_id|board_id[^\n]{0,120}yaml",
+        r"yaml[^\n]{0,120}board_id|board_id[^\n]{0,120}yaml",
         text,
         re.I,
     )
