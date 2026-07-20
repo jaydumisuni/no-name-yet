@@ -1,5 +1,5 @@
 name: Model-Free Core Transfer 19 Learned Closure
-# Learned reviewer frozen after transfer 19's provenance-corrected 0/3 was preserved: 5a313794dada725ea18d5c089b5179fbbed526f2
+# Learned reviewer frozen after transfer 19's provenance-corrected 0/3 was preserved: 9a4ed0aab1bbbaa9b96779c366c25e85360457c1
 
 on:
   workflow_dispatch:
@@ -33,8 +33,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git checkout --detach 5a313794dada725ea18d5c089b5179fbbed526f2
-          test "$(git rev-parse HEAD)" = "5a313794dada725ea18d5c089b5179fbbed526f2"
+          git checkout --detach 9a4ed0aab1bbbaa9b96779c366c25e85360457c1
+          test "$(git rev-parse HEAD)" = "9a4ed0aab1bbbaa9b96779c366c25e85360457c1"
           test -e main_review/static_transfer_19_review.py
           grep -q 'sergeant.static-status-review.v33' main_review/static_status_review.py
 
@@ -117,13 +117,13 @@ jobs:
           manifest = {
               "schema_version": "sergeant.review-training.v1",
               "set_id": "model-free-core-transfer-19-learned",
-              "purpose": "Learned closure only. Transfer 19 is excluded from fresh scoring because fixing descriptions were opened during provenance repair before the first valid artifact.",
+              "purpose": "Learned closure only. Transfer 19's first provenance-valid 0/3 artifact remains the immutable fresh score.",
               "rules": {
                   "models_enabled": False,
                   "workspace_default": "none",
                   "classification": "learned_closure",
                   "historical_fresh_score_immutable": True,
-                  "reviewer_code": "5a313794dada725ea18d5c089b5179fbbed526f2"
+                  "reviewer_code": "9a4ed0aab1bbbaa9b96779c366c25e85360457c1"
               },
               "cases": [
                   {
