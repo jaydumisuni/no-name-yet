@@ -1,0 +1,207 @@
+name: Model-Free Core Transfer 17
+# Reviewer frozen before target selection: c15bf956317c39b135d88303aae9fad73089cf2a
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-17.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin immutable Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach c15bf956317c39b135d88303aae9fad73089cf2a
+          test "$(git rev-parse HEAD)" = "c15bf956317c39b135d88303aae9fad73089cf2a"
+          test -e main_review/static_transfer_16_review.py
+          grep -q 'run_static_transfer_16_review' main_review/static_status_review.py
+          test ! -e main_review/static_transfer_17_review.py
+
+      - name: Checkout exact defective and fixing lineages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sparse_lineage_checkout() {
+            local repository="$1"
+            local defective="$2"
+            local fixing="$3"
+            local destination="$4"
+            shift 4
+
+            git init "$destination"
+            git -C "$destination" remote add origin "https://github.com/${repository}.git"
+            git -C "$destination" config core.sparseCheckout true
+            : > "$destination/.git/info/sparse-checkout"
+            for pattern in "$@"; do
+              printf '%s\n' "$pattern" >> "$destination/.git/info/sparse-checkout"
+            done
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$fixing"
+            git -C "$destination" fetch --no-tags --filter=blob:none origin "$defective"
+            git -C "$destination" cat-file -e "${defective}^{commit}"
+            git -C "$destination" cat-file -e "${fixing}^{commit}"
+            git -C "$destination" merge-base --is-ancestor "$defective" "$fixing"
+            git -C "$destination" checkout --detach "$defective"
+            test "$(git -C "$destination" rev-parse HEAD)" = "$defective"
+          }
+
+          sparse_lineage_checkout \
+            mindroom-ai/mindroom \
+            354df4aa8cb8186aa72bf5b5271b34ab92d7a4c9 \
+            904f490124211c24c5bf585bbbb096a834900337 \
+            transfer-17/mindroom \
+            '/src/mindroom/matrix/cache/event_cache.py' \
+            '/src/mindroom/matrix/cache/postgres_event_cache.py' \
+            '/src/mindroom/matrix/cache/postgres_event_cache_events.py' \
+            '/src/mindroom/matrix/cache/postgres_event_cache_threads.py' \
+            '/src/mindroom/matrix/cache/sqlite_event_cache.py' \
+            '/src/mindroom/matrix/cache/sqlite_event_cache_events.py' \
+            '/src/mindroom/matrix/cache/sqlite_event_cache_threads.py'
+
+          sparse_lineage_checkout \
+            casosorg/kine \
+            63703e5525a5d64df088b73eba8e8552609c684f \
+            aad974da506091a5cc633e89eef84a45360b4c74 \
+            transfer-17/kine \
+            '/pkg/drivers/generic/generic.go' \
+            '/pkg/logstructured/sqllog/sql.go'
+
+          sparse_lineage_checkout \
+            uakihir0/planetlink \
+            e04a46925891d83650a7661bd35a817af40d9f13 \
+            a94eb150f6993e7cf95297016aa36751145a3ccd \
+            transfer-17/planetlink \
+            '/tumblr/src/commonMain/kotlin/work/socialhub/planetlink/tumblr/action/TumblrMapper.kt'
+
+          for file in \
+            transfer-17/mindroom/src/mindroom/matrix/cache/event_cache.py \
+            transfer-17/mindroom/src/mindroom/matrix/cache/postgres_event_cache_events.py \
+            transfer-17/mindroom/src/mindroom/matrix/cache/sqlite_event_cache_events.py \
+            transfer-17/kine/pkg/drivers/generic/generic.go \
+            transfer-17/kine/pkg/logstructured/sqllog/sql.go \
+            transfer-17/planetlink/tumblr/src/commonMain/kotlin/work/socialhub/planetlink/tumblr/action/TumblrMapper.kt; do
+            test -f "$file"
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-17-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install .
+
+      - name: Build opaque frozen manifest
+        shell: bash
+        run: |
+          mkdir -p build/model-free-core-transfer-17
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-17",
+              "purpose": "Seventeenth untouched transfer validation across three new repositories and ecosystems. Expected roots and fixing evidence remain outside Sergeant input.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
+                  "classification": "untouched_transfer_validation",
+                  "provenance_required": True,
+                  "provenance_contract": "sergeant.training-provenance.v1",
+                  "reviewer_code_frozen_before_target_selection": "c15bf956317c39b135d88303aae9fad73089cf2a",
+              },
+              "cases": [
+                  {
+                      "case_id": "transfer-17-a",
+                      "repository": "mindroom-ai/mindroom",
+                      "source_pr": 1590,
+                      "checkout_path": "transfer-17/mindroom",
+                      "defective_ref": "354df4aa8cb8186aa72bf5b5271b34ab92d7a4c9",
+                      "fixing_ref": "904f490124211c24c5bf585bbbb096a834900337",
+                      "changed_files": [
+                          "src/mindroom/matrix/cache/event_cache.py",
+                          "src/mindroom/matrix/cache/postgres_event_cache.py",
+                          "src/mindroom/matrix/cache/postgres_event_cache_events.py",
+                          "src/mindroom/matrix/cache/postgres_event_cache_threads.py",
+                          "src/mindroom/matrix/cache/sqlite_event_cache.py",
+                          "src/mindroom/matrix/cache/sqlite_event_cache_events.py",
+                          "src/mindroom/matrix/cache/sqlite_event_cache_threads.py"
+                      ],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-17-b",
+                      "repository": "casosorg/kine",
+                      "source_pr": 1,
+                      "checkout_path": "transfer-17/kine",
+                      "defective_ref": "63703e5525a5d64df088b73eba8e8552609c684f",
+                      "fixing_ref": "aad974da506091a5cc633e89eef84a45360b4c74",
+                      "changed_files": [
+                          "pkg/drivers/generic/generic.go",
+                          "pkg/logstructured/sqllog/sql.go"
+                      ],
+                      "workspace_policy": "static_first",
+                  },
+                  {
+                      "case_id": "transfer-17-c",
+                      "repository": "uakihir0/planetlink",
+                      "source_pr": 120,
+                      "checkout_path": "transfer-17/planetlink",
+                      "defective_ref": "e04a46925891d83650a7661bd35a817af40d9f13",
+                      "fixing_ref": "a94eb150f6993e7cf95297016aa36751145a3ccd",
+                      "changed_files": [
+                          "tumblr/src/commonMain/kotlin/work/socialhub/planetlink/tumblr/action/TumblrMapper.kt"
+                      ],
+                      "workspace_policy": "static_first",
+                  },
+              ],
+          }
+          Path("build/model-free-core-transfer-17/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run pinned normal pr-review
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-17/runtime-manifest.json \
+            --output build/model-free-core-transfer-17/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-17/frozen-summary.json
+
+      - name: Upload immutable transfer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-17
+          path: build/model-free-core-transfer-17/
+          if-no-files-found: error
+          retention-days: 90
