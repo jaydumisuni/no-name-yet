@@ -40,6 +40,7 @@ from .static_transfer_15_review import run_static_transfer_15_review
 from .static_transfer_16_review import run_static_transfer_16_review
 from .static_transfer_17_review import run_static_transfer_17_review
 from .static_transfer_18_review import run_static_transfer_18_review
+from .static_transfer_19_review import run_static_transfer_19_review
 from .static_transfer_9_review import run_static_transfer_9_review
 from .static_transfer_review import run_static_transfer_review
 from .static_url_path_contract_review import run_static_url_path_contract_review
@@ -198,6 +199,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
     transfer_16 = run_static_transfer_16_review(root_path, transfer_14_changed)
     transfer_17 = run_static_transfer_17_review(root_path, transfer_14_changed)
     transfer_18 = run_static_transfer_18_review(root_path, transfer_14_changed)
+    transfer_19 = run_static_transfer_19_review(root_path, transfer_14_changed)
     selector_continuity = run_static_selector_continuity_review(root_path, changed)
     preawait_durability = run_static_preawait_durability_review(root_path, changed)
     url_path_contract = run_static_url_path_contract_review(root_path, changed)
@@ -233,6 +235,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         transfer_16,
         transfer_17,
         transfer_18,
+        transfer_19,
         selector_continuity,
         preawait_durability,
         url_path_contract,
@@ -244,7 +247,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         unique[(str(finding.get("root_cause")), str(finding.get("path")))] = finding
 
     return {
-        "schema_version": "sergeant.static-status-review.v32",
+        "schema_version": "sergeant.static-status-review.v33",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -286,6 +289,7 @@ def run_static_status_review(root: str | Path, changed_files: Iterable[str]) -> 
         "static_transfer_16_review": transfer_16,
         "static_transfer_17_review": transfer_17,
         "static_transfer_18_review": transfer_18,
+        "static_transfer_19_review": transfer_19,
         "static_selector_continuity_review": selector_continuity,
         "static_preawait_durability_review": preawait_durability,
         "static_url_path_contract_review": url_path_contract,
