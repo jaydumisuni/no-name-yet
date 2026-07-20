@@ -1,0 +1,169 @@
+name: Model-Free Core Transfer 25 Learned Closure
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-25-learned.yml"
+      - "main_review/static_transfer_25_review.py"
+      - "main_review/static_remote_contract_review.py"
+      - "tests/test_static_transfer_25_review.py"
+
+permissions:
+  contents: read
+
+jobs:
+  learned-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout learned Sergeant reviewer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prove transfer 25 officer is connected
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e main_review/static_transfer_25_review.py
+          grep -q 'sergeant.static-transfer-25-review.v1' main_review/static_transfer_25_review.py
+          grep -q 'sergeant.static-remote-contract-review.v6' main_review/static_remote_contract_review.py
+          grep -q 'run_static_transfer_25_review' main_review/static_remote_contract_review.py
+
+      - name: Checkout Elixir defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: elixir-lang/elixir
+          ref: 2429df6a6ade3a1784d24a63c2c3e68b6a80b465
+          path: transfer-25/elixir
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            lib/elixir/lib/module/types/apply.ex
+
+      - name: Checkout Scala defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: scala/scala3
+          ref: 7983fe7dad09ec37abbf03a804da3c5f8122e79c
+          path: transfer-25/scala3
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            repl/src/dotty/tools/repl/ReplDriver.scala
+
+      - name: Checkout Kong defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: Kong/kong
+          ref: 6a785d2ac6e48f6a607383c19f5cd8ad5cac4a51
+          path: transfer-25/kong
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            kong/tools/queue.lua
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-25-learned-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install learned Sergeant package
+        run: python -m pip install .
+
+      - name: Build learned closure manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/model-free-core-transfer-25-learned
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          reviewer = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          cases = [
+              {
+                  "case_id": "transfer-25-a",
+                  "repository": "elixir-lang/elixir",
+                  "source_pr": 15610,
+                  "checkout_path": "transfer-25/elixir",
+                  "defective_ref": "2429df6a6ade3a1784d24a63c2c3e68b6a80b465",
+                  "fixing_ref": "d61719bf8e824892ca1cbccab5c21bf5ff571f1a",
+                  "changed_files": ["lib/elixir/lib/module/types/apply.ex"],
+              },
+              {
+                  "case_id": "transfer-25-b",
+                  "repository": "scala/scala3",
+                  "source_pr": 26536,
+                  "checkout_path": "transfer-25/scala3",
+                  "defective_ref": "7983fe7dad09ec37abbf03a804da3c5f8122e79c",
+                  "fixing_ref": "770a6c05a4c012f58c8bacb73f0c0068b8bbd52f",
+                  "changed_files": ["repl/src/dotty/tools/repl/ReplDriver.scala"],
+              },
+              {
+                  "case_id": "transfer-25-c",
+                  "repository": "Kong/kong",
+                  "source_pr": 10721,
+                  "checkout_path": "transfer-25/kong",
+                  "defective_ref": "6a785d2ac6e48f6a607383c19f5cd8ad5cac4a51",
+                  "fixing_ref": "eaba1d4f6d7300d7a787ff5ca4f469dedd431da6",
+                  "changed_files": ["kong/tools/queue.lua"],
+              },
+          ]
+          for case in cases:
+              case["workspace_policy"] = "static_first"
+              actual = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              if actual != case["defective_ref"]:
+                  raise SystemExit(f"defective revision mismatch: {case['repository']}")
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-25-learned",
+              "purpose": "Learned closure only. Transfer 25's immutable 0/3 first pass remains the fresh score.",
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "classification": "learned_closure",
+                  "historical_fresh_score_immutable": True,
+                  "reviewer_code": reviewer,
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-transfer-25-learned/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review learned closure
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-25-learned/runtime-manifest.json \
+            --output build/model-free-core-transfer-25-learned/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-25-learned/frozen-summary.json
+
+      - name: Upload immutable learned reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-25-learned
+          path: build/model-free-core-transfer-25-learned/
+          if-no-files-found: error
+          retention-days: 90
