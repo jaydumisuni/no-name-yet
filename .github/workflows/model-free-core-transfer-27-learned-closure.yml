@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Pin current learned Sergeant reviewer
+      - name: Pin learned reviewer
         shell: bash
         run: |
           set -euo pipefail
@@ -45,14 +45,12 @@ jobs:
       - name: Install control dependency
         run: python -m pip install pytest
 
-      - name: Prepare evidence directory
-        shell: bash
-        run: mkdir -p build/model-free-core-transfer-27-learned
-
-      - name: Prove selector and officer controls
+      - name: Prepare evidence and prove controls
         shell: bash
         run: |
+          set -euo pipefail
           set -o pipefail
+          mkdir -p build/model-free-core-transfer-27-learned
           python -m pytest -q \
             tests/test_opaque_selector_v8.py \
             tests/test_static_transfer_27_review.py \
@@ -67,34 +65,34 @@ jobs:
           from pathlib import Path
 
           cases = [
-              {
-                  "repository": "llvm/llvm-project",
-                  "defective": "6ed829baa3861adbe053c16878fbae74b9c1e9d6",
-                  "fixing": "0113b250ebb4af79a1c5342cc423a49383f08921",
-                  "files": ["llvm/lib/Transforms/InstCombine/InstCombineVectorOps.cpp"],
-              },
-              {
-                  "repository": "apache/kafka",
-                  "defective": "260a39724d3d82a11957ea4689f5ca8f00e60ad3",
-                  "fixing": "8de50bdb0814fd8af169dd4619bf622fb655a8c9",
-                  "files": ["core/src/main/java/kafka/server/share/DelayedShareFetch.java"],
-              },
-              {
-                  "repository": "pandas-dev/pandas",
-                  "defective": "d982e59797d94f7f7bb3e6ed8b1f2a23fe6601b0",
-                  "fixing": "afd641a4bf4f0393fd4020159330c3c874267d43",
-                  "files": ["pandas/core/generic.py", "pandas/core/resample.py"],
-              },
+              (
+                  "llvm/llvm-project",
+                  "6ed829baa3861adbe053c16878fbae74b9c1e9d6",
+                  "0113b250ebb4af79a1c5342cc423a49383f08921",
+                  ["llvm/lib/Transforms/InstCombine/InstCombineVectorOps.cpp"],
+              ),
+              (
+                  "apache/kafka",
+                  "260a39724d3d82a11957ea4689f5ca8f00e60ad3",
+                  "8de50bdb0814fd8af169dd4619bf622fb655a8c9",
+                  ["core/src/main/java/kafka/server/share/DelayedShareFetch.java"],
+              ),
+              (
+                  "pandas-dev/pandas",
+                  "d982e59797d94f7f7bb3e6ed8b1f2a23fe6601b0",
+                  "afd641a4bf4f0393fd4020159330c3c874267d43",
+                  ["pandas/core/generic.py", "pandas/core/resample.py"],
+              ),
           ]
 
-          for index, case in enumerate(cases, start=1):
+          for index, (repository, defective, fixing, files) in enumerate(cases, start=1):
               destination = Path("transfer-27-learned") / f"case-{index}"
               destination.mkdir(parents=True, exist_ok=False)
               subprocess.run(["git", "init", str(destination)], check=True)
               subprocess.run(
                   [
                       "git", "-C", str(destination), "remote", "add", "origin",
-                      f"https://github.com/{case['repository']}.git",
+                      f"https://github.com/{repository}.git",
                   ],
                   check=True,
               )
@@ -102,12 +100,11 @@ jobs:
                   ["git", "-C", str(destination), "config", "core.sparseCheckout", "true"],
                   check=True,
               )
-              sparse = destination / ".git" / "info" / "sparse-checkout"
-              sparse.write_text(
-                  "".join(f"/{path}\n" for path in case["files"]),
+              (destination / ".git" / "info" / "sparse-checkout").write_text(
+                  "".join(f"/{path}\n" for path in files),
                   encoding="utf-8",
               )
-              for ref in (case["fixing"], case["defective"]):
+              for ref in (fixing, defective):
                   subprocess.run(
                       [
                           "git", "-C", str(destination), "fetch", "--no-tags",
@@ -116,26 +113,20 @@ jobs:
                       check=True,
                   )
               subprocess.run(
-                  [
-                      "git", "-C", str(destination), "merge-base", "--is-ancestor",
-                      case["defective"], case["fixing"],
-                  ],
+                  ["git", "-C", str(destination), "merge-base", "--is-ancestor", defective, fixing],
                   check=True,
               )
               subprocess.run(
-                  ["git", "-C", str(destination), "checkout", "--detach", case["defective"]],
+                  ["git", "-C", str(destination), "checkout", "--detach", defective],
                   check=True,
               )
-              actual = subprocess.check_output(
+              if subprocess.check_output(
                   ["git", "-C", str(destination), "rev-parse", "HEAD"], text=True
-              ).strip()
-              if actual != case["defective"]:
-                  raise SystemExit(f"checkout identity mismatch for {case['repository']}")
-              for relative in case["files"]:
+              ).strip() != defective:
+                  raise SystemExit(f"checkout identity mismatch for {repository}")
+              for relative in files:
                   if not (destination / relative).is_file():
-                      raise SystemExit(
-                          f"requested source missing: {case['repository']}:{relative}"
-                      )
+                      raise SystemExit(f"requested source missing: {repository}:{relative}")
           PY
 
       - name: Configure isolated provider state
@@ -145,7 +136,7 @@ jobs:
       - name: Install pinned Sergeant package
         run: python -m pip install .
 
-      - name: Build learned runtime manifest
+      - name: Build learned-only manifest
         shell: bash
         run: |
           python - <<'PY'
@@ -165,10 +156,9 @@ jobs:
                   "expected_defects_visible_to_sergeant": False,
                   "runtime_is_confirmation_not_discovery": True,
                   "classification": "learned_closure_only",
-                  "provenance_required": True,
-                  "provenance_contract": "sergeant.training-provenance.v1",
                   "frozen_first_pass_run": 29768558691,
                   "frozen_first_pass_artifact": 8471827745,
+                  "frozen_first_pass_digest": "sha256:b865b7cf4a8d9cede2973c90cf9932642903ab7e5ed11bceb33969efd92106d0",
                   "reviewer_code": "dae6766767e57927c47a367bb6bf9fad045fc08d",
               },
               "cases": [
@@ -204,8 +194,10 @@ jobs:
                   },
               ],
           }
-          target = Path("build/model-free-core-transfer-27-learned/runtime-manifest.json")
-          target.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          Path("build/model-free-core-transfer-27-learned/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
           PY
 
       - name: Run normal pr-review learned closure
