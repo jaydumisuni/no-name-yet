@@ -1,0 +1,58 @@
+name: Repin Transfer 18 Learned Closure
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/repin-transfer-18-learned.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout training branch
+        uses: actions/checkout@v4
+        with:
+          ref: train/model-free-core-campaign-2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Repin learned reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/model-free-core-transfer-18-learned.yml")
+          text = path.read_text(encoding="utf-8")
+          old = "47efd3fcda521f9b58913d93e8317e689454830d"
+          new = "d13761c5d24910558420678938117b7c4522ba68"
+          count = text.count(old)
+          if count < 2:
+              raise SystemExit(f"expected at least two reviewer pins, found {count}")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
+
+      - name: Verify new reviewer and controls
+        run: |
+          python -m pip install . pytest
+          grep -q 'sergeant.static-status-review.v32' main_review/static_status_review.py
+          python -m pytest \
+            tests/test_static_transfer_18_board_review.py \
+            tests/test_static_transfer_18_auth_review.py \
+            tests/test_static_transfer_18_thenable_review.py -q
+
+      - name: Remove constructor and commit repin
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/repin-transfer-18-learned.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/model-free-core-transfer-18-learned.yml .github/workflows/repin-transfer-18-learned.yml
+          git commit -m "Repin transfer 18 learned closure"
+          git push origin HEAD:train/model-free-core-campaign-2
