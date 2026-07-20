@@ -101,7 +101,7 @@ jobs:
         run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-19-learned-usage.json" >> "$GITHUB_ENV"
 
       - name: Install learned Sergeant package
-        run: python -m pip install .
+        run: python -m pip install . pytest
 
       - name: Run focused transfer 19 controls
         run: python -m pytest -q tests/test_static_transfer_19_review.py tests/test_pr_review_static_invariant_integration.py
