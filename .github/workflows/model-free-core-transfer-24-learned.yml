@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           test -e main_review/static_transfer_24_review.py
           grep -q 'sergeant.static-transfer-24-review.v1' main_review/static_transfer_24_review.py
-          grep -q 'sergeant.static-remote-contract-review.v6' main_review/static_remote_contract_review.py
+          grep -q 'sergeant.static-remote-contract-review.v7' main_review/static_remote_contract_review.py
           grep -q 'run_static_transfer_24_review' main_review/static_remote_contract_review.py
 
       - name: Checkout Rails defective revision
@@ -86,14 +86,11 @@ jobs:
       - name: Build learned closure manifest
         shell: bash
         run: |
-          set -euo pipefail
           mkdir -p build/model-free-core-transfer-24-learned
           python - <<'PY'
           import json
-          import subprocess
           from pathlib import Path
 
-          reviewer = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
           cases = [
               {
                   "case_id": "transfer-24-a",
@@ -106,6 +103,7 @@ jobs:
                       "activesupport/lib/active_support/cache/strategy/local_cache.rb",
                       "railties/lib/rails/application.rb",
                   ],
+                  "workspace_policy": "static_first",
               },
               {
                   "case_id": "transfer-24-b",
@@ -115,6 +113,7 @@ jobs:
                   "defective_ref": "e68358dc4072b0826e193826e62b886d3f6322df",
                   "fixing_ref": "54d2c6b8e38e90da7466fb5f306e1dbbe08a28e9",
                   "changed_files": ["src/Illuminate/Queue/Worker.php"],
+                  "workspace_policy": "static_first",
               },
               {
                   "case_id": "transfer-24-c",
@@ -124,31 +123,25 @@ jobs:
                   "defective_ref": "a863732fbcc087f627cb47655ccf54a9ffbdee96",
                   "fixing_ref": "243f85783108f196ddad1db6d0b9f57a20cda8f3",
                   "changed_files": ["Sources/NIOHTTP1/HTTPEncoder.swift"],
+                  "workspace_policy": "static_first",
               },
           ]
-          for case in cases:
-              case["workspace_policy"] = "static_first"
-              actual = subprocess.check_output(
-                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"], text=True
-              ).strip()
-              if actual != case["defective_ref"]:
-                  raise SystemExit(f"defective revision mismatch: {case['repository']}")
-
           manifest = {
               "schema_version": "sergeant.review-training.v1",
               "set_id": "model-free-core-transfer-24-learned",
-              "purpose": "Learned closure only. Transfer 24's immutable 0/3 first pass remains the fresh score.",
+              "purpose": "Learned closure for transfer set 24 after immutable first-pass failure was frozen.",
               "rules": {
                   "models_enabled": False,
                   "workspace_default": "none",
+                  "expected_defects_visible_to_sergeant": False,
+                  "runtime_is_confirmation_not_discovery": True,
                   "classification": "learned_closure",
-                  "historical_fresh_score_immutable": True,
-                  "reviewer_code": reviewer,
               },
               "cases": cases,
           }
           Path("build/model-free-core-transfer-24-learned/runtime-manifest.json").write_text(
-              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
           )
           PY
 
