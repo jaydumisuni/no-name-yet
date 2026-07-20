@@ -1,5 +1,6 @@
 name: Model-Free Core Transfer 28
 # Reviewer frozen before opaque behavioral-defect selection: dae6766767e57927c47a367bb6bf9fad045fc08d
+# Isolated evidence trigger: first valid transfer-28 artifact only.
 
 on:
   workflow_dispatch:
