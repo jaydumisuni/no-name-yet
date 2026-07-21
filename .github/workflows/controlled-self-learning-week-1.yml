@@ -17,46 +17,40 @@ on:
       - "tests/test_hermes_learning.py"
       - "tests/test_self_learning_queue.py"
 
-permissions:
-  contents: write
-  pull-requests: write
-  models: read
+permissions: {}
 
 concurrency:
   group: controlled-self-learning-week-1-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
-jobs:
-  controlled-round:
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    env:
-      WEEK_ID: week-1-run-${{ github.run_number }}
-      AUTHORITY_HEAD: ${{ github.event.pull_request.head.sha }}
-      TARGET_BRANCH: train/adaptive-curriculum-on-integrity
-      SERGEANT_LEARNING_BACKEND: ${{ vars.SERGEANT_LEARNING_BACKEND || 'github_models' }}
-      SERGEANT_TEACHER_MODEL: ${{ vars.SERGEANT_TEACHER_MODEL || 'openai/gpt-4.1' }}
-      SERGEANT_PROSECUTOR_MODEL: ${{ vars.SERGEANT_PROSECUTOR_MODEL || 'openai/gpt-4.1' }}
-      SERGEANT_DEFENDER_MODEL: ${{ vars.SERGEANT_DEFENDER_MODEL || 'openai/gpt-4.1' }}
-      SERGEANT_HERMES_TEACHER_URL: ${{ vars.SERGEANT_HERMES_TEACHER_URL }}
-      SERGEANT_HERMES_PROSECUTOR_URL: ${{ vars.SERGEANT_HERMES_PROSECUTOR_URL }}
-      SERGEANT_HERMES_DEFENDER_URL: ${{ vars.SERGEANT_HERMES_DEFENDER_URL }}
-      SERGEANT_HERMES_TEACHER_KEY: ${{ secrets.SERGEANT_HERMES_TEACHER_KEY }}
-      SERGEANT_HERMES_PROSECUTOR_KEY: ${{ secrets.SERGEANT_HERMES_PROSECUTOR_KEY }}
-      SERGEANT_HERMES_DEFENDER_KEY: ${{ secrets.SERGEANT_HERMES_DEFENDER_KEY }}
-      GITHUB_TOKEN: ${{ github.token }}
-      GH_TOKEN: ${{ github.token }}
-      SERGEANT_LLM_ENABLED: "false"
-      SERGEANT_CPL_ENABLED: "false"
-      SERGEANT_CPL_POLICY: "disabled"
+env:
+  WEEK_ID: week-1-run-${{ github.run_number }}
+  AUTHORITY_HEAD: ${{ github.event.pull_request.head.sha }}
+  TARGET_BRANCH: train/adaptive-curriculum-on-integrity
+  SERGEANT_LLM_ENABLED: "false"
+  SERGEANT_CPL_ENABLED: "false"
+  SERGEANT_CPL_POLICY: "disabled"
 
+jobs:
+  validate:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'jaydumisuni'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      candidate_count: ${{ steps.collect.outputs.candidate_count }}
+      ready: ${{ steps.authorize.outputs.ready }}
     steps:
-      - name: Checkout exact training head
+      - name: Checkout exact training head without persisted credentials
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -68,7 +62,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e . pytest
 
-      - name: Prove adaptive and learning contracts
+      - name: Prove adaptive and learning contracts without provider secrets
         run: |
           python -m pytest -q \
             tests/test_adaptive_curriculum.py \
@@ -77,9 +71,11 @@ jobs:
             tests/test_opaque_selector_pagination.py \
             tests/test_run_static_training_set_provenance.py
 
-      - name: Collect sanitized GitHub learning candidates
+      - name: Collect sanitized GitHub learning candidates with read-only token
         id: collect
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p "build/${WEEK_ID}"
@@ -93,8 +89,73 @@ jobs:
           count="$(jq -r '.candidate_count' "build/${WEEK_ID}/candidates.json")"
           echo "candidate_count=${count}" >> "$GITHUB_OUTPUT"
 
-      - name: Run frozen blind reviews and isolated learning workers
-        if: steps.collect.outputs.candidate_count != '0'
+      - name: Verify explicit owner authorization gate
+        id: authorize
+        shell: bash
+        run: |
+          set -euo pipefail
+          labels='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          if jq -e 'index("self-learning-authorized") != null' <<<"${labels}" >/dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload validation packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-learning-validation-${{ env.WEEK_ID }}
+          path: build/${{ env.WEEK_ID }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  learn:
+    needs: validate
+    if: >-
+      needs.validate.result == 'success' &&
+      needs.validate.outputs.ready == 'true' &&
+      needs.validate.outputs.candidate_count != '0'
+    environment: sergeant-self-learning-week-1
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      models: read
+    env:
+      SERGEANT_LEARNING_BACKEND: ${{ vars.SERGEANT_LEARNING_BACKEND || 'github_models' }}
+      SERGEANT_TEACHER_MODEL: ${{ vars.SERGEANT_TEACHER_MODEL || 'openai/gpt-4.1' }}
+      SERGEANT_PROSECUTOR_MODEL: ${{ vars.SERGEANT_PROSECUTOR_MODEL || 'openai/gpt-4.1' }}
+      SERGEANT_DEFENDER_MODEL: ${{ vars.SERGEANT_DEFENDER_MODEL || 'openai/gpt-4.1' }}
+      SERGEANT_HERMES_TEACHER_URL: ${{ vars.SERGEANT_HERMES_TEACHER_URL }}
+      SERGEANT_HERMES_PROSECUTOR_URL: ${{ vars.SERGEANT_HERMES_PROSECUTOR_URL }}
+      SERGEANT_HERMES_DEFENDER_URL: ${{ vars.SERGEANT_HERMES_DEFENDER_URL }}
+      SERGEANT_HERMES_TEACHER_KEY: ${{ secrets.SERGEANT_HERMES_TEACHER_KEY }}
+      SERGEANT_HERMES_PROSECUTOR_KEY: ${{ secrets.SERGEANT_HERMES_PROSECUTOR_KEY }}
+      SERGEANT_HERMES_DEFENDER_KEY: ${{ secrets.SERGEANT_HERMES_DEFENDER_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout exact validated head without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install frozen Sergeant package
+        run: python -m pip install -e .
+
+      - name: Download validated candidate packet
+        uses: actions/download-artifact@v4
+        with:
+          name: self-learning-validation-${{ env.WEEK_ID }}
+          path: build/${{ env.WEEK_ID }}
+
+      - name: Run frozen blind reviews and bounded isolated workers
         shell: bash
         run: |
           set -euo pipefail
@@ -107,8 +168,7 @@ jobs:
             --count 3 \
             2>&1 | tee "build/${WEEK_ID}/round.log"
 
-      - name: Export bounded GitHub learning proposals
-        if: steps.collect.outputs.candidate_count != '0'
+      - name: Export bounded proposals without raw fixing patches
         shell: bash
         run: |
           set -euo pipefail
@@ -121,25 +181,57 @@ jobs:
             exit 1
           fi
 
-      - name: Upload immutable round evidence
+      - name: Upload immutable learning evidence and bounded proposals
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: controlled-self-learning-${{ env.WEEK_ID }}
-          path: build/${{ env.WEEK_ID }}/
+          path: |
+            build/${{ env.WEEK_ID }}/
+            learning/proposals/${{ env.WEEK_ID }}/
           if-no-files-found: error
           retention-days: 90
 
-      - name: Open draft proposal PR without merge authority
-        if: steps.collect.outputs.candidate_count != '0'
+  publish:
+    needs:
+      - validate
+      - learn
+    if: >-
+      needs.validate.outputs.ready == 'true' &&
+      needs.learn.result == 'success'
+    environment: sergeant-self-learning-week-1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout exact authorized head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Download bounded proposal artifact only
+        uses: actions/download-artifact@v4
+        with:
+          name: controlled-self-learning-${{ env.WEEK_ID }}
+          path: downloaded
+
+      - name: Publish a draft proposal PR without merge authority
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          proposal_count="$(jq -r '.proposal_count' "learning/proposals/${WEEK_ID}/index.json")"
+          source_dir="downloaded/learning/proposals/${WEEK_ID}"
+          proposal_count="$(jq -r '.proposal_count' "${source_dir}/index.json")"
           if [ "${proposal_count}" -eq 0 ]; then
             echo "No council-complete proposal to publish"
             exit 0
           fi
+          mkdir -p "learning/proposals/${WEEK_ID}"
+          cp -a "${source_dir}/." "learning/proposals/${WEEK_ID}/"
           branch="learning/${WEEK_ID}-${GITHUB_RUN_ID}"
           git config user.name "Sergeant Learning Bot"
           git config user.email "sergeant-learning@users.noreply.github.com"
