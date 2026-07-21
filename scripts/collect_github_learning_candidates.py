@@ -11,8 +11,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from scripts import select_opaque_transfer_candidates as base
-from scripts.select_opaque_transfer_candidates_v8 import _qualifies_v8
+try:
+    from scripts import select_opaque_transfer_candidates as base
+    from scripts.select_opaque_transfer_candidates_v8 import _qualifies_v8
+except ImportError:  # Direct execution as python scripts/<name>.py.
+    import select_opaque_transfer_candidates as base
+    from select_opaque_transfer_candidates_v8 import _qualifies_v8
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 LIFECYCLE_WORDS = {
