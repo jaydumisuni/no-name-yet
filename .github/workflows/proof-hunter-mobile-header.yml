@@ -34,6 +34,13 @@ jobs:
           test -x /usr/bin/google-chrome
           /usr/bin/google-chrome --version
 
+      - name: Prove real mobile touch opens the sidebar
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          HUNTER_REVIEW_URL: https://9f8e699b-hunter-ui-review.thetechguy712.workers.dev/portal
+          PROOF_DIR: artifacts/hunter-mobile-touch-sidebar
+        run: node tools/proof_hunter_mobile_touch_sidebar.mjs
+
       - name: Render and exercise exact Hunter mobile preview
         env:
           CHROME_PATH: /usr/bin/google-chrome
@@ -46,6 +53,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hunter-mobile-header-proof
-          path: artifacts/hunter-mobile-header
+          path: artifacts
           if-no-files-found: error
           retention-days: 14
