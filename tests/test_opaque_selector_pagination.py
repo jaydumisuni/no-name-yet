@@ -52,11 +52,22 @@ def test_exact_full_page_requires_followup_page(monkeypatch) -> None:
     assert len(rows) == 100
 
 
-def test_malformed_file_page_fails_closed(monkeypatch) -> None:
+def test_non_list_file_page_fails_closed(monkeypatch) -> None:
     monkeypatch.setattr(selector, "_api", lambda path, headers: {"message": "unexpected"})
 
     with pytest.raises(selector.IncompletePullRequestFileList, match="non-list"):
         selector._pr_files("example/project", 79, {})
+
+
+def test_malformed_row_inside_file_page_fails_closed(monkeypatch) -> None:
+    monkeypatch.setattr(
+        selector,
+        "_api",
+        lambda path, headers: [{"filename": "src/valid.py"}, "invalid"],
+    )
+
+    with pytest.raises(selector.IncompletePullRequestFileList, match="malformed PR file rows"):
+        selector._pr_files("example/project", 80, {})
 
 
 def test_github_three_thousand_file_boundary_fails_closed(monkeypatch) -> None:
@@ -70,4 +81,4 @@ def test_github_three_thousand_file_boundary_fails_closed(monkeypatch) -> None:
     )
 
     with pytest.raises(selector.IncompletePullRequestFileList, match="3000-file boundary"):
-        selector._pr_files("example/project", 80, {})
+        selector._pr_files("example/project", 81, {})
