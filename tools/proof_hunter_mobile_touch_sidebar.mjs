@@ -60,13 +60,13 @@ async function waitFor(expression, label, attempts = 100) {
 async function point(selector) {
   return evalJs(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;const r=e.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;const h=document.elementFromPoint(x,y);return{x,y,width:r.width,height:r.height,visible:getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&r.width>0&&r.height>0,hit:h===e||!!h?.closest?.(${JSON.stringify(selector)}),hitId:h?.id||'',hitClass:h?.className||''}})()`);
 }
-async function touch(selector) {
+async function touch(selector, settle = 90) {
   const p = await point(selector);
   if (!p?.visible || !p.hit || p.width < 28 || p.height < 28) throw new Error(`Not a usable touch target: ${selector} ${JSON.stringify(p)}`);
   await cdp("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: p.x, y: p.y, radiusX: 6, radiusY: 6, force: 1, id: 1 }] });
-  await sleep(60);
+  await sleep(45);
   await cdp("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  await sleep(500);
+  await sleep(settle);
   return p;
 }
 async function screenshot(name) {
@@ -74,10 +74,23 @@ async function screenshot(name) {
   await writeFile(join(outDir, name), Buffer.from(r.data, "base64"));
 }
 async function state(stage) {
-  return evalJs(`(()=>{const s=document.querySelector('#sidebar'),d=document.querySelector('#drawerScrim'),m=document.querySelector('#mobileMenu');const sr=s?.getBoundingClientRect(),dr=d?.getBoundingClientRect();const cs=s?getComputedStyle(s):null,cd=d?getComputedStyle(d):null;const probe=sr?document.elementFromPoint(Math.min(120,sr.right-10),Math.min(150,sr.bottom-10)):null;return{stage:${JSON.stringify(stage)},ready:document.readyState,sidebarClass:s?.className||'',sidebarOpen:!!s?.classList.contains('open'),sidebarVisible:!!s&&cs.display!=='none'&&cs.visibility!=='hidden'&&Number(cs.opacity||1)>0&&sr.width>200&&sr.right>200,sidebarRect:sr?{left:sr.left,right:sr.right,width:sr.width,height:sr.height}:null,sidebarHit:!!probe?.closest?.('#sidebar'),scrimOpen:!!d?.classList.contains('open'),scrimVisible:!!d&&cd.display!=='none'&&cd.visibility!=='hidden'&&dr.width>0&&dr.height>0,menuExpanded:m?.getAttribute('aria-expanded')||'',htmlClass:document.documentElement.className,touchAudit:globalThis.__HUNTER_MOBILE_SIDEBAR_TOUCH_AUDIT__||null,marker:globalThis.__HUNTER_MOBILE_SIDEBAR_TOUCH_FIX_WIRED__||null}})()`);
+  return evalJs(`(()=>{const s=document.querySelector('#sidebar'),d=document.querySelector('#drawerScrim'),m=document.querySelector('#mobileMenu'),c=document.querySelector('#content'),n=s?.querySelector('.nav-scroll');const sr=s?.getBoundingClientRect(),dr=d?.getBoundingClientRect();const cs=s?getComputedStyle(s):null,cd=d?getComputedStyle(d):null;const probe=sr?document.elementFromPoint(Math.min(120,sr.right-10),Math.min(150,sr.bottom-10)):null;return{stage:${JSON.stringify(stage)},ready:document.readyState,sidebarClass:s?.className||'',sidebarOpen:!!s?.classList.contains('open'),sidebarVisible:!!s&&cs.display!=='none'&&cs.visibility!=='hidden'&&Number(cs.opacity||1)>0&&sr.width>200&&sr.right>200,sidebarRect:sr?{left:sr.left,right:sr.right,width:sr.width,height:sr.height}:null,sidebarHit:!!probe?.closest?.('#sidebar'),scrimOpen:!!d?.classList.contains('open'),scrimVisible:!!d&&cd.display!=='none'&&cd.visibility!=='hidden'&&dr.width>0&&dr.height>0,menuExpanded:m?.getAttribute('aria-expanded')||'',windowY:window.scrollY||0,contentTop:c?.scrollTop||0,sidebarTop:s?.scrollTop||0,navTop:n?.scrollTop||0,scrollEvents:globalThis.__SRG_HUNTER_SCROLL_EVENTS__||[],activePage:document.querySelector('.page.active')?.id||'',htmlClass:document.documentElement.className,touchAudit:globalThis.__HUNTER_MOBILE_SIDEBAR_TOUCH_AUDIT__||null,marker:globalThis.__HUNTER_MOBILE_SIDEBAR_TOUCH_FIX_WIRED__||null}})()`);
+}
+function validateOpen(before, after, label) {
+  const failures = [];
+  if (!after.sidebarOpen) failures.push("sidebar lacks open class");
+  if (!after.sidebarVisible) failures.push("sidebar is not visibly rendered");
+  if (!after.sidebarHit) failures.push("sidebar is not the topmost layer");
+  if (!after.scrimOpen || !after.scrimVisible) failures.push("drawer scrim is not open and visible");
+  if (after.menuExpanded !== "true") failures.push("menu aria-expanded is not true");
+  if (after.sidebarTop !== 0 || after.navTop !== 0) failures.push(`drawer auto-scrolled: sidebar=${after.sidebarTop}, nav=${after.navTop}`);
+  if (Math.abs(after.windowY - before.windowY) > 1 || Math.abs(after.contentTop - before.contentTop) > 1) failures.push("opening changed the underlying page scroll");
+  if (after.scrollEvents.some(event => event.top > 1)) failures.push(`a positive scroll event occurred: ${JSON.stringify(after.scrollEvents)}`);
+  if (after.touchAudit?.passed === false) failures.push(`Hunter touch audit failed: ${JSON.stringify(after.touchAudit.checks)}`);
+  if (failures.length) throw new Error(`${label}: ${failures.join("; ")}\n${JSON.stringify(after, null, 2)}`);
 }
 
-const proof = { targetUrl, viewport: { width: 390, height: 844 }, input: "Input.dispatchTouchEvent touchStart/touchEnd", startedAt: new Date().toISOString(), stages: [] };
+const proof = { targetUrl, viewport: { width: 390, height: 844 }, input: "Input.dispatchTouchEvent touchStart/touchEnd with no swipe and no scrollIntoView", startedAt: new Date().toISOString(), stages: [] };
 try {
   const tabs = await waitJson(`http://127.0.0.1:${debugPort}/json/list`);
   const target = tabs.find(t => t.type === "page") || tabs[0];
@@ -96,24 +109,28 @@ try {
   await cdp("Page.navigate", { url: targetUrl });
   await waitFor("document.readyState==='complete'", "page load");
   await waitFor("!!document.querySelector('#mobileMenu')&&!!globalThis.__HUNTER_MOBILE_SIDEBAR__", "mobile sidebar runtime");
-  await sleep(500);
+  await sleep(350);
+  await evalJs(`(()=>{globalThis.__SRG_HUNTER_SCROLL_EVENTS__=[];const watch=(name,e)=>e?.addEventListener('scroll',()=>globalThis.__SRG_HUNTER_SCROLL_EVENTS__.push({name,top:name==='window'?(window.scrollY||0):(e.scrollTop||0),at:performance.now()}),{passive:true});watch('window',window);watch('content',document.querySelector('#content'));watch('sidebar',document.querySelector('#sidebar'));watch('nav',document.querySelector('#sidebar .nav-scroll'));return true})()`);
 
   const before = await state("before-touch"); proof.stages.push(before); await screenshot("01-before-touch.png");
-  const targetPoint = await touch("#mobileMenu"); proof.targetPoint = targetPoint;
-  const after = await state("after-touch"); proof.stages.push(after); await screenshot("02-after-touch.png");
+  const targetPoint = await touch("#mobileMenu", 70); proof.targetPoint = targetPoint;
+  const immediate = await state("immediate-after-touch"); proof.stages.push(immediate); validateOpen(before, immediate, "immediate open"); await screenshot("02-immediate-open-no-scroll.png");
+  await sleep(750);
+  const settled = await state("settled-open"); proof.stages.push(settled); validateOpen(before, settled, "settled open"); await screenshot("03-settled-open-no-scroll.png");
 
-  const failures = [];
-  if (!after.sidebarOpen) failures.push("sidebar lacks open class after real touch");
-  if (!after.sidebarVisible) failures.push("sidebar is not visibly rendered after real touch");
-  if (!after.sidebarHit) failures.push("sidebar is not the topmost layer inside its visible area");
-  if (!after.scrimOpen || !after.scrimVisible) failures.push("drawer scrim is not open and visible");
-  if (after.menuExpanded !== "true") failures.push("menu aria-expanded is not true");
-  if (failures.length) throw new Error(`${failures.join("; ")}\n${JSON.stringify(after, null, 2)}`);
+  const destination = await evalJs(`(()=>{const visible=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>28&&r.height>28&&r.top>=0&&r.bottom<=innerHeight};const items=[...document.querySelectorAll('#sidebar [data-view],#sidebar [data-unified-chat],#sidebar [data-role-accountability-route],#sidebar [data-business-custom]')].filter(visible);const preferred=items.find(e=>/Talk to Hunter|Today/i.test((e.textContent||'').replace(/\\s+/g,' ').trim()))||items[0];if(!preferred)return null;preferred.dataset.srgTouchDestination='true';return{selector:'#sidebar [data-srg-touch-destination="true"]',label:(preferred.textContent||'').replace(/\\s+/g,' ').trim(),page:preferred.dataset.view||''}})()`);
+  if (!destination) throw new Error("No already-visible sidebar destination was available without scrolling.");
+  proof.destination = destination;
+  await touch(destination.selector, 160);
+  await waitFor("!document.querySelector('#sidebar')?.classList.contains('open')&&!document.querySelector('#drawerScrim')?.classList.contains('open')", "drawer closes after destination touch");
+  const navigated = await state("destination-opened"); proof.stages.push(navigated); await screenshot("04-destination-opened.png");
+  if (navigated.sidebarOpen || navigated.scrimOpen) throw new Error("Sidebar remained open after touching a destination.");
+  if (navigated.activePage === before.activePage && destination.page) throw new Error(`Destination did not change the active page: ${destination.label}`);
 
   proof.passed = true;
   proof.completedAt = new Date().toISOString();
   await writeFile(join(outDir, "proof.json"), JSON.stringify(proof, null, 2));
-  console.log("SRG TOUCH PASS: a real mobile touch opens a visible, topmost Hunter sidebar.");
+  console.log("SRG TOUCH PASS: one real tap opens the drawer at scrollTop 0, it remains at the top, and a visible destination works without any scrolling.");
 } catch (error) {
   proof.passed = false;
   proof.error = String(error?.stack || error);
