@@ -25,10 +25,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out main
+      - name: Check out immutable release commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
@@ -68,65 +69,87 @@ jobs:
           echo "version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Create or confirm published GitHub release
+      - name: Create or confirm commit-bound GitHub release
+        id: release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.metadata.outputs.version }}
           TAG: ${{ steps.metadata.outputs.tag }}
           NOTES: ${{ steps.metadata.outputs.notes }}
+          RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+
+          TAG_EXISTS=false
+          if git show-ref --tags --verify --quiet "refs/tags/$TAG"; then
+            TAG_EXISTS=true
+            TAG_SHA=$(git rev-list -n 1 "$TAG")
+            test "$TAG_SHA" = "$RELEASE_SHA" || {
+              echo "Existing tag $TAG points to $TAG_SHA, expected proven commit $RELEASE_SHA."
+              exit 1
+            }
+          fi
+
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists."
+            test "$TAG_EXISTS" = "true" || {
+              echo "Release $TAG exists without a resolvable matching tag."
+              exit 1
+            }
+            echo "Release $TAG already exists at proven commit $RELEASE_SHA."
+            echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target main \
-            --title "Sergeant v$VERSION — Useful Model-Free Baseline" \
-            --notes-file "$NOTES"
 
-      - name: Dispatch all marketplace publishers
+          if [ "$TAG_EXISTS" = "true" ]; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "Sergeant v$VERSION — Useful Model-Free Baseline" \
+              --notes-file "$NOTES"
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$RELEASE_SHA" \
+              --title "Sergeant v$VERSION — Useful Model-Free Baseline" \
+              --notes-file "$NOTES"
+          fi
+
+          git fetch --force --tags origin
+          CREATED_TAG_SHA=$(git rev-list -n 1 "$TAG")
+          test "$CREATED_TAG_SHA" = "$RELEASE_SHA" || {
+            echo "Created tag $TAG points to $CREATED_TAG_SHA, expected $RELEASE_SHA."
+            exit 1
+          }
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Recover publishers for an existing matching release
+        if: steps.release.outputs.created == 'false'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.metadata.outputs.tag }}
-          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           gh workflow run publish-vscode-marketplace.yml \
             --repo "$GITHUB_REPOSITORY" \
-            --ref main \
+            --ref "$TAG" \
             --field release_tag="$TAG"
 
-          PYPI_EXISTS=$(python - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-
-          version = os.environ['VERSION']
-          try:
-              with urllib.request.urlopen('https://pypi.org/pypi/sergeant-reviewer/json', timeout=30) as response:
-                  data = json.load(response)
-              print('true' if data.get('releases', {}).get(version) else 'false')
-          except urllib.error.HTTPError as error:
-              if error.code == 404:
-                  print('false')
-              else:
-                  raise
-          PY
-          )
-          if [ "$PYPI_EXISTS" = "true" ]; then
-            echo "sergeant-reviewer $VERSION already exists on PyPI; no duplicate trusted publication was dispatched."
-          else
-            gh workflow run publish-pypi.yml \
-              --repo "$GITHUB_REPOSITORY" \
-              --ref "$TAG"
-          fi
+          gh workflow run publish-pypi.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$TAG" \
+            --field release_tag="$TAG"
 
           gh workflow run publish-jetbrains-marketplace.yml \
             --repo "$GITHUB_REPOSITORY" \
-            --ref main \
+            --ref "$TAG" \
             --field release_tag="$TAG"
-          echo "Dispatched Visual Studio Marketplace, Open VSX, and JetBrains publication for $TAG; PyPI used the tag-qualified trusted publisher when needed."
+
+          echo "Re-dispatched all idempotent publishers from immutable tag $TAG."
+
+      - name: Confirm first-publication dispatch path
+        if: steps.release.outputs.created == 'true'
+        run: echo "The release:published event dispatches all three publishers from the immutable release tag; duplicate manual dispatch is intentionally skipped."
