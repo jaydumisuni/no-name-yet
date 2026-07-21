@@ -4,7 +4,7 @@
     "repos": [
       "scala/scala3",
       "apache/spark",
-      "apache/incubator-pekko",
+      "apache/pekko",
       "scalameta/metals",
       "typelevel/cats",
       "zio/zio",
