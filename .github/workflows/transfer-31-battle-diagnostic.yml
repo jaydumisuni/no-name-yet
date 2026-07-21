@@ -1,0 +1,55 @@
+name: Transfer 31 Battle Diagnostic
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/transfer-31-battle-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Capture live battle failures
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          mkdir -p build/transfer-31-battle-diagnostic
+          status=0
+          for fixture in \
+            battle-tests/psf-requests-7502.json \
+            battle-tests/pallets-flask-5812.json \
+            battle-tests/django-19610.json; do
+            name="$(basename "${fixture}" .json)"
+            main-review battle-compare "${fixture}" --token-env GITHUB_TOKEN --pretty \
+              > "build/transfer-31-battle-diagnostic/${name}.stdout" \
+              2> "build/transfer-31-battle-diagnostic/${name}.stderr"
+            code=$?
+            printf '%s\n' "${code}" > "build/transfer-31-battle-diagnostic/${name}.exit-code"
+            if [ "${code}" -ne 0 ]; then status="${code}"; fi
+          done
+          exit "${status}"
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transfer-31-battle-diagnostic
+          path: build/transfer-31-battle-diagnostic/
+          if-no-files-found: error
+          retention-days: 30
