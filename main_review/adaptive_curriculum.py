@@ -210,8 +210,7 @@ def human_equivalent_workers(candidate: Mapping[str, Any]) -> int:
 def _candidate_rank(candidate: Mapping[str, Any], target_tier: int) -> tuple[Any, ...]:
     tier = repository_difficulty(candidate)
     return (
-        abs(tier - target_tier),
-        0 if tier >= target_tier else 1,
+        tier - target_tier,
         -float(candidate.get("defect_novelty", 0.0) or 0.0),
         -int(candidate.get("changed_files", 0) or 0),
         str(candidate.get("repository") or ""),
@@ -225,14 +224,25 @@ def select_multilingual_candidates(
     language_history: Sequence[str],
     count: int = 3,
 ) -> list[dict[str, Any]]:
-    """Choose a difficulty-matched set while enforcing language rotation."""
+    """Choose a difficulty-matched set while enforcing language rotation.
 
-    remaining = [dict(candidate) for candidate in candidates if candidate.get("provenance_complete") is True]
+    The selector fails closed rather than falling back to an easier repository.
+    Once promotion is earned, the curriculum waits for target-tier-or-harder
+    candidates.
+    """
+
+    required_tier = max(0, min(len(DIFFICULTY_TIERS) - 1, int(target_tier)))
+    remaining = [
+        dict(candidate)
+        for candidate in candidates
+        if candidate.get("provenance_complete") is True
+        and repository_difficulty(candidate) >= required_tier
+    ]
     selected: list[dict[str, Any]] = []
     history = [normalize_language(item) for item in language_history]
 
     while remaining and len(selected) < max(1, int(count)):
-        remaining.sort(key=lambda item: _candidate_rank(item, target_tier))
+        remaining.sort(key=lambda item: _candidate_rank(item, required_tier))
         index = next(
             (
                 position
@@ -291,6 +301,7 @@ def plan_curriculum_round(
             "max_rust_per_window": MAX_RUST_PER_WINDOW,
         },
         "cases": selected,
+        "candidate_shortfall": len(selected) < max(1, int(count)),
         "planned_private_count": sum(int(item["private_count"]) for item in selected),
         "authority": {
             "may_promote_lessons": False,
