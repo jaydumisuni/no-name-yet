@@ -77,6 +77,7 @@ def _blind_manifest(case: dict[str, Any], checkout: Path, reviewer: str) -> dict
             "workspace_default": "none",
             "expected_defects_visible_to_sergeant": False,
             "classification": "untouched_transfer_validation",
+            "provenance_required": True,
             "provenance_contract": "sergeant.training-provenance.v1",
             "reviewer_code_frozen_before_target_selection": reviewer,
         },
