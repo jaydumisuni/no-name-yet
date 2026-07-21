@@ -1,0 +1,35 @@
+[
+  {
+    "lane": "ocaml",
+    "repos": [
+      "ocaml/ocaml",
+      "ocaml/dune",
+      "ocaml/opam",
+      "janestreet/core",
+      "mirage/ocaml-cohttp"
+    ],
+    "suffixes": [".ml", ".mli"]
+  },
+  {
+    "lane": "julia",
+    "repos": [
+      "JuliaLang/julia",
+      "JuliaData/DataFrames.jl",
+      "FluxML/Flux.jl",
+      "JuliaPlots/Plots.jl",
+      "JuliaIO/HTTP.jl"
+    ],
+    "suffixes": [".jl"]
+  },
+  {
+    "lane": "crystal",
+    "repos": [
+      "crystal-lang/crystal",
+      "kemalcr/kemal",
+      "crystal-ameba/ameba",
+      "luckyframework/lucky",
+      "crystal-lang/crystal-db"
+    ],
+    "suffixes": [".cr"]
+  }
+]
