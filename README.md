@@ -340,7 +340,7 @@ The API key is read from the process environment. It is not returned by `cpl-sta
 
 ```bash
 sergeant app-review . --mode pull_request --files "src/app.py,tests/test_app.py" --pretty
-sergeant v2-mission . --mission-type pull_request_review --mode pull_request --files "src/app.py,tests/app.py" --pretty
+sergeant v2-mission . --mission-type pull_request_review --mode pull_request --files "src/app.py,tests/test_app.py" --pretty
 sergeant proof-suite . --pretty
 sergeant final-proof . --pretty
 sergeant verify-standard . --pretty
