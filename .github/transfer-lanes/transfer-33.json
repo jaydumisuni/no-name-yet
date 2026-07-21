@@ -1,0 +1,35 @@
+[
+  {
+    "lane": "zig",
+    "repos": [
+      "ziglang/zig",
+      "oven-sh/bun",
+      "tigerbeetle/tigerbeetle",
+      "ghostty-org/ghostty",
+      "mitchellh/libxev"
+    ],
+    "suffixes": [".zig"]
+  },
+  {
+    "lane": "r",
+    "repos": [
+      "tidyverse/dplyr",
+      "r-lib/rlang",
+      "tidyverse/ggplot2",
+      "Rdatatable/data.table",
+      "tidyverse/readr"
+    ],
+    "suffixes": [".r", ".R"]
+  },
+  {
+    "lane": "erlang",
+    "repos": [
+      "erlang/otp",
+      "rabbitmq/rabbitmq-server",
+      "emqx/emqx",
+      "processone/ejabberd",
+      "ninenines/cowboy"
+    ],
+    "suffixes": [".erl", ".hrl"]
+  }
+]
