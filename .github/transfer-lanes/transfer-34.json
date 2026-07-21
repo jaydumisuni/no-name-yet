@@ -1,0 +1,35 @@
+[
+  {
+    "lane": "cpp",
+    "repos": [
+      "llvm/llvm-project",
+      "microsoft/onnxruntime",
+      "opencv/opencv",
+      "bitcoin/bitcoin",
+      "mongodb/mongo"
+    ],
+    "suffixes": [".cc", ".cpp", ".cxx", ".h", ".hpp"]
+  },
+  {
+    "lane": "java",
+    "repos": [
+      "apache/kafka",
+      "elastic/elasticsearch",
+      "quarkusio/quarkus",
+      "gradle/gradle",
+      "apache/cassandra"
+    ],
+    "suffixes": [".java"]
+  },
+  {
+    "lane": "python",
+    "repos": [
+      "pandas-dev/pandas",
+      "numpy/numpy",
+      "pytest-dev/pytest",
+      "scikit-learn/scikit-learn",
+      "ansible/ansible"
+    ],
+    "suffixes": [".py"]
+  }
+]
