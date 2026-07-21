@@ -2,10 +2,10 @@
 """Opaque transfer selector v8 with capability-addition rejection.
 
 Selector v8 reuses the proven v7 production-source, test-change, ancestry,
-prior-repository and bidirectional executable-change gates. It adds one new
-truth boundary: adding support or enabling a new capability is not a defect
-unless the candidate also contains concrete language describing a pre-existing
-behavioral contract violation.
+prior-repository and bidirectional executable-change gates. It adds two truth
+boundaries: capability additions require evidence of a pre-existing behavioral
+contract violation, and canonical Perl ``.t`` files count as changed tests
+without relaxing any production-source or executable-change requirement.
 """
 
 from __future__ import annotations
@@ -57,8 +57,31 @@ def _has_preexisting_defect_evidence(title: str, body: str) -> bool:
     return bool(_PREEXISTING_DEFECT_RE.search(f"{title}\n{body}"))
 
 
+def _rows_with_perl_test_aliases(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose canonical Perl .t changes to the proven v7 test-change gate.
+
+    The alias exists only in memory during qualification. Production paths,
+    patches and the persisted opaque packet remain unchanged.
+    """
+
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        filename = str(row.get("filename") or "")
+        if Path(filename.replace("\\", "/")).suffix.lower() != ".t":
+            normalized.append(row)
+            continue
+        if base._is_test_file(filename):
+            normalized.append(row)
+            continue
+        alias = dict(row)
+        alias["filename"] = f"tests/{Path(filename).name}"
+        normalized.append(alias)
+    return normalized
+
+
 def _qualifies_v8(pr: dict[str, Any], rows: list[dict[str, Any]], source_files: list[str]) -> bool:
-    if not _BASE_QUALIFIES(pr, rows, source_files):
+    normalized_rows = _rows_with_perl_test_aliases(rows)
+    if not _BASE_QUALIFIES(pr, normalized_rows, source_files):
         return False
     title = str(pr.get("title") or "")
     body = str(pr.get("body") or "")
@@ -80,6 +103,7 @@ def select(*, reviewer: str, set_id: str, lanes: list[dict[str, Any]], output: P
     packet["capability_addition_exclusion"] = True
     packet["preexisting_behavioral_contract_evidence_required"] = True
     packet["feature_enablement_without_defect_rejected"] = True
+    packet["canonical_perl_t_tests_recognized"] = True
     output.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
 
 
