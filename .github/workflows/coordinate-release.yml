@@ -6,6 +6,10 @@ on:
     branches: [main]
     paths:
       - .github/workflows/coordinate-release.yml
+      - docs/releases/v0.5.0.md
+      - package.json
+      - pyproject.toml
+      - adapters/jetbrains/gradle.properties
 
 permissions:
   contents: write
@@ -37,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verify coordinated versions
+      - name: Verify coordinated versions and release notes
         id: metadata
         shell: bash
         run: |
@@ -48,6 +52,7 @@ jobs:
           PY
           )
           JETBRAINS_VERSION=$(grep '^pluginVersion=' adapters/jetbrains/gradle.properties | cut -d= -f2-)
+          NOTES="docs/releases/v${NPM_VERSION}.md"
           test "$NPM_VERSION" = "$PYTHON_VERSION" || {
             echo "VS Code version '$NPM_VERSION' does not match Python version '$PYTHON_VERSION'."
             exit 1
@@ -56,8 +61,13 @@ jobs:
             echo "JetBrains version '$JETBRAINS_VERSION' does not match '$NPM_VERSION-preview'."
             exit 1
           }
+          test -s "$NOTES" || {
+            echo "Missing release notes: $NOTES"
+            exit 1
+          }
           echo "version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$NPM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
 
       - name: Create or confirm published GitHub release
         shell: bash
@@ -65,58 +75,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.metadata.outputs.version }}
           TAG: ${{ steps.metadata.outputs.tag }}
+          NOTES: ${{ steps.metadata.outputs.notes }}
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists."
             exit 0
           fi
-          cat > release-notes.md <<EOF
-          ## Sergeant $VERSION — Semantic Open-Model Review
-
-          Sergeant 0.4 adds an evidence-grounded semantic review layer while keeping Main Review and deterministic proof authoritative.
-
-          ### Provider routing
-
-          - Free Claude Code-compatible OpenAI Responses routing
-          - Local Ollama and LM Studio discovery
-          - Explicit OpenAI-compatible hosted or self-hosted endpoints
-          - Open-model preference: GLM-5.2, Qwen3-Coder-Next, Kimi K2.5, then provider fallback
-          - Preferred, required, and disabled semantic-review policies
-          - Adaptive second-model challenger for high-risk or disputed changes
-
-          ### Review quality
-
-          - Every accepted semantic blocker or major finding must identify a supplied path, valid line range, and repository evidence
-          - Unsupported high-severity model claims are rejected before consensus
-          - Dependency blast-radius and lexical risk signals are separated from demonstrated defects
-          - High-risk automation changes require explicit purpose, permissions, secrets, rollback, and proof assurance
-          - The actual Sergeant JSON verdict is now enforced as the Main Review merge gate
-
-          ### Product integration
-
-          - New sergeant pr-review command for complete deterministic-plus-semantic review
-          - New sergeant llm-status command for route and privacy inspection
-          - Shared semantic router controls in VS Code and JetBrains Command Centers
-          - One-active-mission gates remain enforced across both IDE families
-          - Coordinated VS Code and Python 0.4.0 packages plus JetBrains 0.4.0-preview
-
-          ### Proof
-
-          - Sergeant Main Review: APPROVE / PASS / zero required actions
-          - CI and clean-clone proof passed
-          - Mock FCC /v1/models and /v1/responses integration passed
-          - Grounding and hallucination-rejection tests passed
-          - Browser semantic-router, compact-layout, and duplicate-launch proof passed
-          - Python wheel/source and VSIX validation passed
-          - JetBrains compilation, ZIP packaging, and bundled-resource inspection passed
-
-          This release provides a complete configured review gate. It does not claim that any model or tool can guarantee literal 100 percent defect detection.
-          EOF
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target main \
-            --title "Sergeant v$VERSION — Semantic Open-Model Review" \
-            --notes-file release-notes.md
+            --title "Sergeant v$VERSION — Model-Free Core and Governed Learning" \
+            --notes-file "$NOTES"
 
       - name: Dispatch all marketplace publishers
         shell: bash
