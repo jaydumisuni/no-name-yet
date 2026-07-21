@@ -1,0 +1,188 @@
+name: Model-Free Core Transfer 30 Learned Closure
+# Learned reviewer frozen after transfer 30 first-pass 0/3: 67b91000284a89baa4aa7b2f28f283b5ba482f61
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-30-learned.yml"
+      - "main_review/static_transfer_30_review.py"
+      - "main_review/static_remote_contract_review.py"
+      - "tests/test_static_transfer_30_review.py"
+
+permissions:
+  contents: read
+
+jobs:
+  learned-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+      REVIEWER_SHA: 67b91000284a89baa4aa7b2f28f283b5ba482f61
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin green learned Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach "${REVIEWER_SHA}"
+          test "$(git rev-parse HEAD)" = "${REVIEWER_SHA}"
+          test -e main_review/static_transfer_30_review.py
+          grep -q 'sergeant.static-transfer-30-review.v1' main_review/static_transfer_30_review.py
+          grep -q 'sergeant.static-remote-contract-review.v10' main_review/static_remote_contract_review.py
+          grep -q 'run_static_transfer_30_review' main_review/static_remote_contract_review.py
+          grep -q 'sergeant.static-status-review.v34' main_review/static_status_review.py
+
+      - name: Checkout Mojolicious defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: mojolicious/mojo
+          ref: f0a090d89f6f965a15a6a71d637a9ba74a3fbf84
+          path: transfer-30/mojo
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            lib/Mojo/DOM/CSS.pm
+
+      - name: Checkout FSharp defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: dotnet/fsharp
+          ref: e30d14cb46f290050ac8e2bbea5e9b804b97bdde
+          path: transfer-30/fsharp
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            src/Compiler/Checking/AugmentWithHashCompare.fs
+            src/Compiler/TypedTree/TypedTreeOps.fs
+            src/Compiler/TypedTree/TypedTreeOps.fsi
+            src/FSharp.Core/prim-types.fs
+
+      - name: Checkout Nim defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: nim-lang/Nim
+          ref: a6fa3225240333dca22b4e9ff9bf58c50aa37ed4
+          path: transfer-30/nim
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            lib/system/alloc.nim
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-30-learned-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install learned Sergeant package
+        run: python -m pip install .
+
+      - name: Build learned closure manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/model-free-core-transfer-30-learned
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          reviewer = os.environ["REVIEWER_SHA"]
+          cases = [
+              {
+                  "case_id": "transfer-30-a",
+                  "repository": "mojolicious/mojo",
+                  "source_pr": 2032,
+                  "checkout_path": "transfer-30/mojo",
+                  "defective_ref": "f0a090d89f6f965a15a6a71d637a9ba74a3fbf84",
+                  "fixing_ref": "7718452d8298a5073daea5f4ef5f4d947917e43e",
+                  "changed_files": ["lib/Mojo/DOM/CSS.pm"],
+                  "workspace_policy": "static_first",
+              },
+              {
+                  "case_id": "transfer-30-b",
+                  "repository": "dotnet/fsharp",
+                  "source_pr": 14516,
+                  "checkout_path": "transfer-30/fsharp",
+                  "defective_ref": "e30d14cb46f290050ac8e2bbea5e9b804b97bdde",
+                  "fixing_ref": "10002b7fd6b0e00bae3db7d24ef5021924a7d0ec",
+                  "changed_files": [
+                      "src/Compiler/Checking/AugmentWithHashCompare.fs",
+                      "src/Compiler/TypedTree/TypedTreeOps.fs",
+                      "src/Compiler/TypedTree/TypedTreeOps.fsi",
+                      "src/FSharp.Core/prim-types.fs",
+                  ],
+                  "workspace_policy": "static_first",
+              },
+              {
+                  "case_id": "transfer-30-c",
+                  "repository": "nim-lang/Nim",
+                  "source_pr": 26017,
+                  "checkout_path": "transfer-30/nim",
+                  "defective_ref": "a6fa3225240333dca22b4e9ff9bf58c50aa37ed4",
+                  "fixing_ref": "517e03c8e8ffd6e7974331e75128f7d3c3bb66a0",
+                  "changed_files": ["lib/system/alloc.nim"],
+                  "workspace_policy": "static_first",
+              },
+          ]
+          for case in cases:
+              actual = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              if actual != case["defective_ref"]:
+                  raise SystemExit(f"defective revision mismatch: {case['repository']}")
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-30-learned",
+              "purpose": (
+                  "Learned closure for all three valid transfer-30 defects after the immutable blind 0/3 first pass."
+              ),
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "classification": "learned_closure",
+                  "historical_fresh_score_immutable": True,
+                  "historical_valid_fresh_score": "0/3",
+                  "reviewer_code": reviewer,
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-transfer-30-learned/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review learned closure
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-30-learned/runtime-manifest.json \
+            --output build/model-free-core-transfer-30-learned/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-30-learned/frozen-summary.json
+
+      - name: Upload immutable learned reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-30-learned
+          path: build/model-free-core-transfer-30-learned/
+          if-no-files-found: error
+          retention-days: 90
