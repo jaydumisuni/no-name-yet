@@ -1,5 +1,6 @@
 name: Model-Free Core Transfer 31 Learned Closure
 # Learned reviewer frozen after transfer 31 first-pass 0/3: c6af4ac0dcebd41c0e151ae5aae7fd62576402ca
+# Exact closure rerun after removal of temporary diagnostic evidence tooling.
 
 on:
   workflow_dispatch:
