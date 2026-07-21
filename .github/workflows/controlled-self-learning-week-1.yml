@@ -1,0 +1,156 @@
+name: Controlled Self-Learning Week 1
+
+on:
+  pull_request:
+    branches:
+      - fix/coderabbit-campaign-integrity
+    paths:
+      - ".github/workflows/controlled-self-learning-week-1.yml"
+      - ".github/self-learning/**"
+      - "main_review/adaptive_curriculum.py"
+      - "main_review/hermes_learning.py"
+      - "main_review/self_learning_queue.py"
+      - "scripts/collect_github_learning_candidates.py"
+      - "scripts/run_controlled_self_learning.py"
+      - "scripts/export_learning_proposals.py"
+      - "tests/test_adaptive_curriculum.py"
+      - "tests/test_hermes_learning.py"
+      - "tests/test_self_learning_queue.py"
+
+permissions:
+  contents: write
+  pull-requests: write
+  models: read
+
+concurrency:
+  group: controlled-self-learning-week-1-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  controlled-round:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      WEEK_ID: week-1-run-${{ github.run_number }}
+      AUTHORITY_HEAD: ${{ github.event.pull_request.head.sha }}
+      TARGET_BRANCH: train/adaptive-curriculum-on-integrity
+      SERGEANT_LEARNING_BACKEND: ${{ vars.SERGEANT_LEARNING_BACKEND || 'github_models' }}
+      SERGEANT_TEACHER_MODEL: ${{ vars.SERGEANT_TEACHER_MODEL || 'openai/gpt-4.1' }}
+      SERGEANT_PROSECUTOR_MODEL: ${{ vars.SERGEANT_PROSECUTOR_MODEL || 'openai/gpt-4.1' }}
+      SERGEANT_DEFENDER_MODEL: ${{ vars.SERGEANT_DEFENDER_MODEL || 'openai/gpt-4.1' }}
+      SERGEANT_HERMES_TEACHER_URL: ${{ vars.SERGEANT_HERMES_TEACHER_URL }}
+      SERGEANT_HERMES_PROSECUTOR_URL: ${{ vars.SERGEANT_HERMES_PROSECUTOR_URL }}
+      SERGEANT_HERMES_DEFENDER_URL: ${{ vars.SERGEANT_HERMES_DEFENDER_URL }}
+      SERGEANT_HERMES_TEACHER_KEY: ${{ secrets.SERGEANT_HERMES_TEACHER_KEY }}
+      SERGEANT_HERMES_PROSECUTOR_KEY: ${{ secrets.SERGEANT_HERMES_PROSECUTOR_KEY }}
+      SERGEANT_HERMES_DEFENDER_KEY: ${{ secrets.SERGEANT_HERMES_DEFENDER_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+
+    steps:
+      - name: Checkout exact training head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Sergeant and focused test runner
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+
+      - name: Prove adaptive and learning contracts
+        run: |
+          python -m pytest -q \
+            tests/test_adaptive_curriculum.py \
+            tests/test_hermes_learning.py \
+            tests/test_self_learning_queue.py \
+            tests/test_opaque_selector_pagination.py \
+            tests/test_run_static_training_set_provenance.py
+
+      - name: Collect sanitized GitHub learning candidates
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "build/${WEEK_ID}"
+          python scripts/collect_github_learning_candidates.py \
+            --reviewer "${AUTHORITY_HEAD}" \
+            --week-id "${WEEK_ID}" \
+            --pool-json .github/self-learning/week-1-pool.json \
+            --limit 12 \
+            --output "build/${WEEK_ID}/candidates.json" \
+            2>&1 | tee "build/${WEEK_ID}/collector.log"
+          count="$(jq -r '.candidate_count' "build/${WEEK_ID}/candidates.json")"
+          echo "candidate_count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Run frozen blind reviews and isolated learning workers
+        if: steps.collect.outputs.candidate_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run_controlled_self_learning.py \
+            --candidates "build/${WEEK_ID}/candidates.json" \
+            --history .github/self-learning/week-1-history.json \
+            --output-dir "build/${WEEK_ID}/round" \
+            --authority-head "${AUTHORITY_HEAD}" \
+            --target-branch "${TARGET_BRANCH}" \
+            --count 3 \
+            2>&1 | tee "build/${WEEK_ID}/round.log"
+
+      - name: Export bounded GitHub learning proposals
+        if: steps.collect.outputs.candidate_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/export_learning_proposals.py \
+            --queue "build/${WEEK_ID}/round/learning-queue.json" \
+            --output learning/proposals \
+            2>&1 | tee "build/${WEEK_ID}/proposal-export.log"
+          if grep -R -n -E '(github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]+|sk-[A-Za-z0-9]{20,})' learning/proposals; then
+            echo "credential-like material found in proposal export" >&2
+            exit 1
+          fi
+
+      - name: Upload immutable round evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: controlled-self-learning-${{ env.WEEK_ID }}
+          path: build/${{ env.WEEK_ID }}/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Open draft proposal PR without merge authority
+        if: steps.collect.outputs.candidate_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          proposal_count="$(jq -r '.proposal_count' "learning/proposals/${WEEK_ID}/index.json")"
+          if [ "${proposal_count}" -eq 0 ]; then
+            echo "No council-complete proposal to publish"
+            exit 0
+          fi
+          branch="learning/${WEEK_ID}-${GITHUB_RUN_ID}"
+          git config user.name "Sergeant Learning Bot"
+          git config user.email "sergeant-learning@users.noreply.github.com"
+          git switch -c "${branch}"
+          git add "learning/proposals/${WEEK_ID}"
+          git commit -m "Record controlled learning proposals for ${WEEK_ID}"
+          git push origin "HEAD:${branch}"
+          gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --draft \
+            --base "${TARGET_BRANCH}" \
+            --head "${branch}" \
+            --title "Learning proposals: ${WEEK_ID}" \
+            --body "Automated, evidence-bound lesson proposals from ${WEEK_ID}. No automatic promotion or merge. Negative controls and unrelated-language transfer remain mandatory before admission."
