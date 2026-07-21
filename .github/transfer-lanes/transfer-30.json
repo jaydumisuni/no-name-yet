@@ -14,7 +14,8 @@
       "metacpan/metacpan-api",
       "houseabsolute/DateTime.pm",
       "Perl-Toolchain-Gang/Module-Build",
-      "Perl-Toolchain-Gang/CPAN-Meta"
+      "Perl-Toolchain-Gang/CPAN-Meta",
+      "preaction/Yancy"
     ],
     "suffixes": [".pl", ".pm"]
   },
