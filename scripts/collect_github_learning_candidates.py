@@ -19,6 +19,7 @@ except ImportError:  # Direct execution as python scripts/<name>.py.
     from select_opaque_transfer_candidates_v8 import _qualifies_v8
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+MAX_CANDIDATES_PER_REPOSITORY = 8
 LIFECYCLE_WORDS = {
     "async", "await", "thread", "lock", "queue", "session", "runtime",
     "endpoint", "connection", "stream", "socket", "lifecycle", "state",
@@ -74,11 +75,13 @@ def _candidate_for_repo(
             if number and number not in seen:
                 seen.add(number)
                 candidates.append(item)
-        if len(candidates) >= 25:
+            if len(candidates) >= MAX_CANDIDATES_PER_REPOSITORY:
+                break
+        if len(candidates) >= MAX_CANDIDATES_PER_REPOSITORY:
             break
 
     owner, name = repository.split("/", 1)
-    for item in candidates:
+    for item in candidates[:MAX_CANDIDATES_PER_REPOSITORY]:
         number = int(item.get("number") or 0)
         if not number:
             continue
@@ -172,6 +175,7 @@ def collect(*, reviewer: str, week_id: str, pool: list[dict[str, Any]], limit: i
         "preexisting_behavioral_contract_evidence_required": True,
         "feature_enablement_without_defect_rejected": True,
         "production_source_only": True,
+        "max_candidates_per_repository": MAX_CANDIDATES_PER_REPOSITORY,
         "candidate_count": len(selected),
         "candidates": selected,
     }
@@ -183,7 +187,7 @@ def main() -> int:
     parser.add_argument("--week-id", required=True)
     parser.add_argument("--pool-json", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--limit", type=int, default=12)
+    parser.add_argument("--limit", type=int, default=6)
     args = parser.parse_args()
     pool = json.loads(args.pool_json.read_text(encoding="utf-8"))
     if not isinstance(pool, list):
@@ -192,7 +196,7 @@ def main() -> int:
         reviewer=args.reviewer,
         week_id=args.week_id,
         pool=pool,
-        limit=max(1, min(30, args.limit)),
+        limit=max(1, min(12, args.limit)),
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8")
