@@ -37,7 +37,7 @@ jobs:
       - name: Render and exercise exact Hunter mobile preview
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://6a96f6a3-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://a72f783d-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-mobile-header
         run: node tools/proof_hunter_mobile_header.mjs
 
