@@ -1,0 +1,41 @@
+[
+  {
+    "lane": "scala",
+    "repos": [
+      "scala/scala3",
+      "apache/spark",
+      "apache/pekko",
+      "scalameta/metals",
+      "typelevel/cats",
+      "zio/zio",
+      "playframework/playframework"
+    ],
+    "suffixes": [".scala"]
+  },
+  {
+    "lane": "elixir",
+    "repos": [
+      "elixir-lang/elixir",
+      "phoenixframework/phoenix",
+      "elixir-ecto/ecto",
+      "dashbitco/broadway",
+      "absinthe-graphql/absinthe",
+      "plausible/analytics",
+      "supabase/realtime"
+    ],
+    "suffixes": [".ex", ".exs"]
+  },
+  {
+    "lane": "swift",
+    "repos": [
+      "swiftlang/swift",
+      "apple/swift-nio",
+      "Alamofire/Alamofire",
+      "pointfreeco/swift-composable-architecture",
+      "vapor/vapor",
+      "realm/SwiftLint",
+      "onevcat/Kingfisher"
+    ],
+    "suffixes": [".swift"]
+  }
+]

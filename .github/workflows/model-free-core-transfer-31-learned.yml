@@ -1,0 +1,185 @@
+name: Model-Free Core Transfer 31 Learned Closure
+# Learned reviewer frozen after transfer 31 first-pass 0/3: c6af4ac0dcebd41c0e151ae5aae7fd62576402ca
+# Exact closure rerun after removal of temporary diagnostic evidence tooling.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/model-free-core-transfer-31-learned.yml"
+      - "main_review/static_transfer_31_review.py"
+      - "main_review/static_remote_contract_review.py"
+      - "tests/test_static_transfer_31_review.py"
+
+permissions:
+  contents: read
+
+jobs:
+  learned-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SERGEANT_LLM_ENABLED: "false"
+      SERGEANT_CPL_ENABLED: "false"
+      SERGEANT_CPL_POLICY: "disabled"
+      REVIEWER_SHA: c6af4ac0dcebd41c0e151ae5aae7fd62576402ca
+
+    steps:
+      - name: Checkout workflow event head
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pin learned Sergeant reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach "${REVIEWER_SHA}"
+          test "$(git rev-parse HEAD)" = "${REVIEWER_SHA}"
+          test -e main_review/static_transfer_31_review.py
+          grep -q 'sergeant.static-transfer-31-review.v1' main_review/static_transfer_31_review.py
+          grep -q 'sergeant.static-remote-contract-review.v11' main_review/static_remote_contract_review.py
+          grep -q 'run_static_transfer_31_review' main_review/static_remote_contract_review.py
+          grep -q 'sergeant.static-status-review.v34' main_review/static_status_review.py
+
+      - name: Checkout Pekko defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: apache/pekko
+          ref: 99fe5f78a68c5e78be5621ff2567db8e904dd16d
+          path: transfer-31/pekko
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            remote/src/main/scala/org/apache/pekko/remote/Endpoint.scala
+            remote/src/main/scala/org/apache/pekko/remote/Remoting.scala
+
+      - name: Checkout Phoenix defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: phoenixframework/phoenix
+          ref: eca672ec4bdc727ba2352bb07e2a1f58bda78c4d
+          path: transfer-31/phoenix
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            installer/lib/phx_new/project.ex
+
+      - name: Checkout Alamofire defective revision
+        uses: actions/checkout@v4
+        with:
+          repository: Alamofire/Alamofire
+          ref: 56ce89783d7ebd67444d09d7a0aa20ffa7aa55af
+          path: transfer-31/alamofire
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            Source/Session.swift
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure isolated provider state
+        shell: bash
+        run: echo "SERGEANT_CLOUDFLARE_USAGE_STATE=${RUNNER_TEMP}/sergeant-transfer-31-learned-usage.json" >> "$GITHUB_ENV"
+
+      - name: Install learned Sergeant package
+        run: python -m pip install .
+
+      - name: Build learned closure manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/model-free-core-transfer-31-learned
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          reviewer = os.environ["REVIEWER_SHA"]
+          cases = [
+              {
+                  "case_id": "transfer-31-a",
+                  "repository": "apache/pekko",
+                  "source_pr": 3205,
+                  "checkout_path": "transfer-31/pekko",
+                  "defective_ref": "99fe5f78a68c5e78be5621ff2567db8e904dd16d",
+                  "fixing_ref": "76fbfda043cd6ed502f308cf2f0b4594dfb6304b",
+                  "changed_files": [
+                      "remote/src/main/scala/org/apache/pekko/remote/Endpoint.scala",
+                      "remote/src/main/scala/org/apache/pekko/remote/Remoting.scala",
+                  ],
+                  "workspace_policy": "static_first",
+              },
+              {
+                  "case_id": "transfer-31-b",
+                  "repository": "phoenixframework/phoenix",
+                  "source_pr": 6633,
+                  "checkout_path": "transfer-31/phoenix",
+                  "defective_ref": "eca672ec4bdc727ba2352bb07e2a1f58bda78c4d",
+                  "fixing_ref": "b084eca6e7c2586c05381ba9883b318ff46cee73",
+                  "changed_files": ["installer/lib/phx_new/project.ex"],
+                  "workspace_policy": "static_first",
+              },
+              {
+                  "case_id": "transfer-31-c",
+                  "repository": "Alamofire/Alamofire",
+                  "source_pr": 3438,
+                  "checkout_path": "transfer-31/alamofire",
+                  "defective_ref": "56ce89783d7ebd67444d09d7a0aa20ffa7aa55af",
+                  "fixing_ref": "5f96852314c19d25550697ef14a80b49c8ac0cf0",
+                  "changed_files": ["Source/Session.swift"],
+                  "workspace_policy": "static_first",
+              },
+          ]
+          for case in cases:
+              actual = subprocess.check_output(
+                  ["git", "-C", case["checkout_path"], "rev-parse", "HEAD"],
+                  text=True,
+              ).strip()
+              if actual != case["defective_ref"]:
+                  raise SystemExit(f"defective revision mismatch: {case['repository']}")
+
+          manifest = {
+              "schema_version": "sergeant.review-training.v1",
+              "set_id": "model-free-core-transfer-31-learned",
+              "purpose": (
+                  "Learned closure for all three valid transfer-31 defects after the immutable blind 0/3 first pass."
+              ),
+              "rules": {
+                  "models_enabled": False,
+                  "workspace_default": "none",
+                  "classification": "learned_closure",
+                  "historical_fresh_score_immutable": True,
+                  "historical_valid_fresh_score": "0/3",
+                  "reviewer_code": reviewer,
+              },
+              "cases": cases,
+          }
+          Path("build/model-free-core-transfer-31-learned/runtime-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run normal pr-review learned closure
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_static_training_set.py \
+            build/model-free-core-transfer-31-learned/runtime-manifest.json \
+            --output build/model-free-core-transfer-31-learned/frozen-result.json \
+            2>&1 | tee build/model-free-core-transfer-31-learned/frozen-summary.json
+
+      - name: Upload immutable learned reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-free-core-transfer-31-learned
+          path: build/model-free-core-transfer-31-learned/
+          if-no-files-found: error
+          retention-days: 90

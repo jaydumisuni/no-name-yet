@@ -17,6 +17,7 @@ from .static_transfer_27_review import run_static_transfer_27_review
 from .static_transfer_28_review import run_static_transfer_28_review
 from .static_transfer_29_review import run_static_transfer_29_review
 from .static_transfer_30_review import run_static_transfer_30_review
+from .static_transfer_31_review import run_static_transfer_31_review
 
 
 _DART_SUFFIXES = {".dart"}
@@ -117,6 +118,7 @@ def run_static_remote_contract_review(root: str | Path, changed_files: Iterable[
     transfer_28 = run_static_transfer_28_review(root_path, changed)
     transfer_29 = run_static_transfer_29_review(root_path, changed)
     transfer_30 = run_static_transfer_30_review(root_path, changed)
+    transfer_31 = run_static_transfer_31_review(root_path, changed)
     for result in (
         protocol_lifecycle,
         transfer_21,
@@ -129,6 +131,7 @@ def run_static_remote_contract_review(root: str | Path, changed_files: Iterable[
         transfer_28,
         transfer_29,
         transfer_30,
+        transfer_31,
     ):
         findings.extend(dict(item) for item in result.get("findings", []) if isinstance(item, dict))
 
@@ -137,7 +140,7 @@ def run_static_remote_contract_review(root: str | Path, changed_files: Iterable[
         unique[(str(finding.get("root_cause")), str(finding.get("path")), int(finding.get("line_start") or 0))] = finding
 
     return {
-        "schema_version": "sergeant.static-remote-contract-review.v10",
+        "schema_version": "sergeant.static-remote-contract-review.v11",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
@@ -152,5 +155,6 @@ def run_static_remote_contract_review(root: str | Path, changed_files: Iterable[
         "static_transfer_28_review": transfer_28,
         "static_transfer_29_review": transfer_29,
         "static_transfer_30_review": transfer_30,
+        "static_transfer_31_review": transfer_31,
         "executed_project_code": False,
     }
