@@ -9,7 +9,9 @@ on:
       - ".github/workflows/model-free-core-transfer-31-learned.yml"
       - "main_review/static_transfer_31_review.py"
       - "main_review/static_remote_contract_review.py"
+      - "scripts/run_static_training_set.py"
       - "tests/test_static_transfer_31_review.py"
+      - "tests/test_transfer_31_workflow_integrity.py"
 
 permissions:
   contents: read
@@ -51,6 +53,7 @@ jobs:
           path: transfer-31/pekko
           persist-credentials: false
           fetch-depth: 1
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
             remote/src/main/scala/org/apache/pekko/remote/Endpoint.scala
             remote/src/main/scala/org/apache/pekko/remote/Remoting.scala
@@ -63,6 +66,7 @@ jobs:
           path: transfer-31/phoenix
           persist-credentials: false
           fetch-depth: 1
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
             installer/lib/phx_new/project.ex
 
@@ -74,6 +78,7 @@ jobs:
           path: transfer-31/alamofire
           persist-credentials: false
           fetch-depth: 1
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
             Source/Session.swift
 
@@ -169,11 +174,14 @@ jobs:
       - name: Run normal pr-review learned closure
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           python scripts/run_static_training_set.py \
             build/model-free-core-transfer-31-learned/runtime-manifest.json \
             --output build/model-free-core-transfer-31-learned/frozen-result.json \
-            2>&1 | tee build/model-free-core-transfer-31-learned/frozen-summary.json
+            2>&1 | tee build/model-free-core-transfer-31-learned/frozen-execution.log
+          jq '{set_id, case_count, summaries}' \
+            build/model-free-core-transfer-31-learned/frozen-result.json \
+            > build/model-free-core-transfer-31-learned/frozen-summary.json
 
       - name: Upload immutable learned reports
         if: always()
