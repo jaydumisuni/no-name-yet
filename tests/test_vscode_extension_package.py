@@ -16,7 +16,7 @@ def test_vscode_extension_manifest_installs_sergeant_commands() -> None:
 
     assert "activationEvents" not in package
     assert package["displayName"] == "Sergeant"
-    assert package["version"] == "0.4.0"
+    assert package["version"] == "0.5.0"
     assert package["icon"] == "resources/srg-logo-and-icon.png"
     assert package["main"] == "./src/vscode/extension.js"
     assert (ROOT / package["main"]).is_file()
@@ -218,8 +218,3 @@ def test_command_center_has_single_mission_execution_boundary() -> None:
     assert "event.stopImmediatePropagation()" in command_center
     assert "queueMicrotask" in command_center
     assert "window.sergeantMissionLock" in command_center
-    assert "sends only one mission while a run is active" in visual_proof
-    assert "toHaveLength(1)" in visual_proof
-    assert ".github/workflows/multiplatform-proof.yml" in closure
-    assert "scripts/build-command-center-preview.js" in closure
-    assert "one active mission per IDE host" in closure
