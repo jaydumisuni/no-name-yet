@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from main_review.external_static_review import run_external_static_review
-from main_review.training_manifest_provenance import validate_training_manifest
+from main_review.training_manifest_provenance import ProvenanceError, validate_training_manifest
+
+_FRESH_CLASSIFICATION = "untouched_transfer_validation"
 
 
 def _verdict_value(result: dict[str, Any]) -> str:
@@ -69,6 +71,23 @@ def _summary(case: dict[str, Any], result: dict[str, Any], elapsed: float) -> di
     }
 
 
+def _validate_provenance_policy(manifest: dict[str, Any], rules: dict[str, Any]) -> dict[str, Any] | None:
+    """Enforce provenance from the fresh classification, never only by opt-in."""
+
+    classification = rules.get("classification")
+    provenance_requested = rules.get("provenance_required") is True
+    if classification == _FRESH_CLASSIFICATION:
+        if not provenance_requested:
+            raise ProvenanceError(
+                "untouched transfer manifests cannot opt out of provenance; "
+                "rules.provenance_required must be true"
+            )
+        return validate_training_manifest(manifest)
+    if provenance_requested:
+        return validate_training_manifest(manifest)
+    return None
+
+
 def run_manifest(manifest_path: Path, output_path: Path) -> dict[str, Any]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     cases = manifest.get("cases")
@@ -76,9 +95,7 @@ def run_manifest(manifest_path: Path, output_path: Path) -> dict[str, Any]:
         raise ValueError("training manifest must contain at least one case")
 
     rules = manifest.get("rules") if isinstance(manifest.get("rules"), dict) else {}
-    provenance: dict[str, Any] | None = None
-    if rules.get("provenance_required") is True:
-        provenance = validate_training_manifest(manifest)
+    provenance = _validate_provenance_policy(manifest, rules)
 
     # This development lane measures the permanent model-free formation.
     os.environ["SERGEANT_LLM_ENABLED"] = "false"
