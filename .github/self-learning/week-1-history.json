@@ -1,0 +1,15 @@
+{
+  "schema_version": "sergeant.self-learning-history.v1",
+  "current_tier": 0,
+  "recent_results": [],
+  "language_history": [
+    "perl", "fsharp", "nim",
+    "scala", "elixir", "swift",
+    "ocaml", "julia", "crystal",
+    "zig", "r", "erlang",
+    "cpp", "java", "python"
+  ],
+  "accepted_lessons": 0,
+  "automatic_promotions": 0,
+  "automatic_merges": 0
+}
