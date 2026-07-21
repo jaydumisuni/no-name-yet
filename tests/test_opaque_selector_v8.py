@@ -52,3 +52,25 @@ def test_plain_behavioral_regression_can_qualify() -> None:
     }
 
     assert _qualifies_v8(pr, _rows(), ["src/runtime.py"])
+
+
+def test_canonical_perl_t_file_satisfies_changed_test_gate_without_mutating_rows() -> None:
+    rows = [
+        {
+            "filename": "lib/Example.pm",
+            "status": "modified",
+            "patch": "@@\n-my $value = legacy();\n-my $result = consume($value);\n-my $state = finalize($result);\n+my $value = replacement();\n+my $result = consume($value);\n+my $state = finalize($result);\n",
+        },
+        {
+            "filename": "t/example.t",
+            "status": "modified",
+            "patch": "@@\n-is $old, 1;\n+is $new, 1;\n",
+        },
+    ]
+    pr = {
+        "title": "Fix stale cache after retry",
+        "body": "A regression returns the wrong cached value after a failed request is retried.",
+    }
+
+    assert _qualifies_v8(pr, rows, ["lib/Example.pm"])
+    assert rows[1]["filename"] == "t/example.t"
