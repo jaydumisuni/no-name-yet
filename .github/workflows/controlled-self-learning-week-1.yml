@@ -122,16 +122,10 @@ jobs:
       contents: read
       models: read
     env:
-      SERGEANT_LEARNING_BACKEND: ${{ vars.SERGEANT_LEARNING_BACKEND || 'github_models' }}
-      SERGEANT_TEACHER_MODEL: ${{ vars.SERGEANT_TEACHER_MODEL || 'openai/gpt-4.1' }}
-      SERGEANT_PROSECUTOR_MODEL: ${{ vars.SERGEANT_PROSECUTOR_MODEL || 'openai/gpt-4.1' }}
-      SERGEANT_DEFENDER_MODEL: ${{ vars.SERGEANT_DEFENDER_MODEL || 'openai/gpt-4.1' }}
-      SERGEANT_HERMES_TEACHER_URL: ${{ vars.SERGEANT_HERMES_TEACHER_URL }}
-      SERGEANT_HERMES_PROSECUTOR_URL: ${{ vars.SERGEANT_HERMES_PROSECUTOR_URL }}
-      SERGEANT_HERMES_DEFENDER_URL: ${{ vars.SERGEANT_HERMES_DEFENDER_URL }}
-      SERGEANT_HERMES_TEACHER_KEY: ${{ secrets.SERGEANT_HERMES_TEACHER_KEY }}
-      SERGEANT_HERMES_PROSECUTOR_KEY: ${{ secrets.SERGEANT_HERMES_PROSECUTOR_KEY }}
-      SERGEANT_HERMES_DEFENDER_KEY: ${{ secrets.SERGEANT_HERMES_DEFENDER_KEY }}
+      SERGEANT_LEARNING_BACKEND: github_models
+      SERGEANT_TEACHER_MODEL: openai/gpt-4.1
+      SERGEANT_PROSECUTOR_MODEL: openai/gpt-4.1
+      SERGEANT_DEFENDER_MODEL: openai/gpt-4.1
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout exact validated head without persisted credentials
