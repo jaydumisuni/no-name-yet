@@ -14,10 +14,33 @@
       "blind_findings": 0,
       "worker_errors": 0,
       "rejected_proposals": 3,
+      "council_complete_proposals": 0,
       "accepted_proposals": 0,
       "automatic_promotions": 0,
       "automatic_merges": 0,
       "artifact_digest": "sha256:76300275f3e25aefe542d65c45bc767c767d075e28d98295bdcbc2dc176d12ea"
+    },
+    {
+      "round_id": "week-1-run-14",
+      "authority_head": "bdc91c6b423ab97fe518bbb880edb44945ff2e25",
+      "selected_languages": ["go", "swift", "ocaml"],
+      "selected_repositories": ["prometheus/prometheus", "realm/realm-swift", "ocaml/dune"],
+      "confirmed_defects": 0,
+      "confirmed_defects_found": 0,
+      "false_positives": 0,
+      "provenance_complete": true,
+      "evidence_integrity": true,
+      "blind_findings": 0,
+      "worker_errors": 0,
+      "rejected_proposals": 1,
+      "council_complete_proposals": 2,
+      "accepted_proposals": 0,
+      "automatic_promotions": 0,
+      "automatic_merges": 0,
+      "publication_mode": "owner_controlled",
+      "artifact_size_bytes": 296921,
+      "artifact_digest": "sha256:dda5754907094077d8015d1dc8e399ef2800cd8919d894188462e1f7c847e2ca",
+      "durable_copy": "private:Sergeant Durable Evidence"
     }
   ],
   "language_history": [
@@ -26,7 +49,8 @@
     "ocaml", "julia", "crystal",
     "zig", "r", "erlang",
     "cpp", "java", "python",
-    "swift", "python", "julia"
+    "swift", "python", "julia",
+    "go", "swift", "ocaml"
   ],
   "accepted_lessons": 0,
   "automatic_promotions": 0,
