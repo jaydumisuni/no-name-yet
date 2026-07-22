@@ -78,6 +78,13 @@ jobs:
           PROOF_DIR: artifacts/hunter-runtime-source
         run: node tools/diagnose_hunter_runtime_source.mjs
 
+      - name: Trace regular Hunter chat menu real touch
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          HUNTER_REVIEW_URL: https://c6388088-hunter-ui-review.thetechguy712.workers.dev/portal
+          PROOF_DIR: artifacts/hunter-chat-menu-touch
+        run: node tools/diagnose_hunter_chat_menu_touch.mjs
+
       - name: Prove full mobile and desktop interface standard
         env:
           CHROME_PATH: /usr/bin/google-chrome
