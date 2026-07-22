@@ -37,14 +37,14 @@ jobs:
       - name: Prove zero Hunter runtime exceptions
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://888294ce-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://b1422f5c-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-runtime-source
         run: node tools/diagnose_hunter_runtime_source.mjs
 
       - name: Prove full mobile and desktop interface standard
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://888294ce-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://b1422f5c-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-full-standard
         run: node tools/proof_hunter_full_standard_v2.mjs
 
