@@ -19,7 +19,7 @@ concurrency:
 jobs:
   prove:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout Sergeant proof branch
         uses: actions/checkout@v4
@@ -34,19 +34,26 @@ jobs:
           test -x /usr/bin/google-chrome
           /usr/bin/google-chrome --version
 
-      - name: Prove real mobile touch opens the sidebar
+      - name: Prove one touch opens the sidebar at the top without scrolling
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://d6c4b911-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://2d103119-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-mobile-touch-sidebar
         run: node tools/proof_hunter_mobile_touch_sidebar.mjs
 
       - name: Render and exercise exact Hunter mobile preview
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://d6c4b911-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://2d103119-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-mobile-header
         run: node tools/proof_hunter_mobile_header.mjs
+
+      - name: Prove functional Hunter mobile voice mode
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          HUNTER_REVIEW_URL: https://2d103119-hunter-ui-review.thetechguy712.workers.dev/portal
+          PROOF_DIR: artifacts/hunter-mobile-voice
+        run: node tools/proof_hunter_voice_mode.mjs
 
       - name: Upload screenshots and evidence
         if: always()
