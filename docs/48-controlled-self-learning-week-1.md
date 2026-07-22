@@ -13,8 +13,10 @@ This phase converts Sergeant's proven manual curriculum into a governed automate
    - **Teacher** derives a generalized mechanism, detector proposal, positive tests, negative controls, and transfer languages.
    - **Prosecutor** builds the strongest evidence-bound defect case and rejects competing explanations.
    - **Defender** searches for clean counterexamples, overfitting, missing evidence, and false-positive risk.
-7. Save council-complete proposals to a separate draft GitHub PR.
-8. Keep promotion blocked until executable negative controls and an unrelated-language transfer both pass.
+7. Export council-complete proposals into the immutable round artifact.
+8. Validate a read-only publication handoff with zero promotion, merge, branch-write, or pull-request-write authority.
+9. Let the owner-side controller open any separate draft proposal PR after inspecting the preserved artifact.
+10. Keep promotion blocked until executable negative controls and an unrelated-language transfer both pass.
 
 ## Worker transport
 
@@ -38,18 +40,22 @@ The curriculum forbids consecutive use of the same language, limits one family t
 
 ## GitHub authority boundary
 
-Automated work may:
+The GitHub Actions learning workflow may:
 
 - collect and freeze cases;
 - run blind reviews;
-- create lesson proposals;
+- create bounded lesson proposals;
 - save evidence as GitHub artifacts;
-- open a draft proposal PR.
+- validate an owner-controlled proposal-publication handoff.
 
-Automated work may not:
+The GitHub Actions learning workflow may not:
 
+- create or push a branch;
+- open a pull request;
 - rewrite a frozen blind score;
 - auto-promote a lesson;
 - auto-merge a proposal;
 - expose fixing truth before blind freeze;
 - weaken provenance, controls, or transfer requirements.
+
+A separate owner-authorized controller may inspect a preserved artifact and open a draft proposal PR. That draft still has no promotion or merge authority.
