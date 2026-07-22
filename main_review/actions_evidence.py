@@ -10,6 +10,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 LEDGER_SCHEMA_VERSION = "sergeant.actions-evidence-ledger.v1"
+REPLAY_SCHEMA_VERSION = "sergeant.actions-recovery-replay.v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -79,6 +80,81 @@ def validate_preservation_ledger(payload: Mapping[str, Any]) -> list[str]:
 
     if payload.get("total_bytes") != total_bytes:
         errors.append("total_bytes does not match record sizes")
+    return errors
+
+
+def validate_recovery_replay(
+    ledger: Mapping[str, Any],
+    replay: Mapping[str, Any],
+) -> list[str]:
+    """Verify that downloaded durable copies exactly match the preservation ledger."""
+
+    errors = validate_preservation_ledger(ledger)
+    if replay.get("schema_version") != REPLAY_SCHEMA_VERSION:
+        errors.append("unsupported Actions recovery replay schema")
+    if replay.get("cleanup_authorized") is not False:
+        errors.append("replay must not authorize artifact cleanup")
+    if replay.get("workflow_run_deletion_authorized") is not False:
+        errors.append("replay must not authorize workflow-run deletion")
+
+    ledger_records = ledger.get("records")
+    replay_records = replay.get("records")
+    if not isinstance(ledger_records, list) or not isinstance(replay_records, list):
+        return errors + ["ledger and replay records must be lists"]
+
+    def keyed(records: Sequence[Mapping[str, Any]], label: str) -> dict[str, Mapping[str, Any]]:
+        result: dict[str, Mapping[str, Any]] = {}
+        for index, record in enumerate(records):
+            if not isinstance(record, Mapping):
+                errors.append(f"{label}[{index}] must be an object")
+                continue
+            name = record.get("name")
+            if not isinstance(name, str) or not name:
+                errors.append(f"{label}[{index}].name is required")
+                continue
+            if name in result:
+                errors.append(f"duplicate {label} name: {name}")
+                continue
+            result[name] = record
+        return result
+
+    ledger_by_name = keyed(ledger_records, "ledger_records")
+    replay_by_name = keyed(replay_records, "replay_records")
+    if set(ledger_by_name) != set(replay_by_name):
+        missing = sorted(set(ledger_by_name) - set(replay_by_name))
+        extra = sorted(set(replay_by_name) - set(ledger_by_name))
+        if missing:
+            errors.append(f"replay missing artifacts: {', '.join(missing)}")
+        if extra:
+            errors.append(f"replay contains unknown artifacts: {', '.join(extra)}")
+
+    for name in sorted(set(ledger_by_name) & set(replay_by_name)):
+        source = ledger_by_name[name]
+        recovered = replay_by_name[name]
+        if recovered.get("recovery_replay_verified") is not True:
+            errors.append(f"recovery replay not verified: {name}")
+        if recovered.get("size_bytes") != source.get("size_bytes"):
+            errors.append(f"recovery size mismatch: {name}")
+        if recovered.get("sha256") != source.get("sha256"):
+            errors.append(f"recovery digest mismatch: {name}")
+
+    verified = sum(
+        record.get("recovery_replay_verified") is True
+        for record in replay_by_name.values()
+    )
+    total_bytes = retained_bytes(replay_by_name.values())
+    if replay.get("artifact_count") != len(replay_by_name):
+        errors.append("replay artifact_count does not match records")
+    if replay.get("verified_count") != verified:
+        errors.append("replay verified_count does not match records")
+    if replay.get("failed_count") != len(replay_by_name) - verified:
+        errors.append("replay failed_count does not match records")
+    if replay.get("total_bytes") != total_bytes:
+        errors.append("replay total_bytes does not match records")
+    if replay.get("artifact_count") != ledger.get("artifact_count"):
+        errors.append("replay artifact_count does not match preservation ledger")
+    if replay.get("total_bytes") != ledger.get("total_bytes"):
+        errors.append("replay total_bytes does not match preservation ledger")
     return errors
 
 
