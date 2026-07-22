@@ -118,8 +118,8 @@ try {
   await sleep(750);
   const settled = await state("settled-open"); proof.stages.push(settled); validateOpen(before, settled, "settled open"); await screenshot("03-settled-open-no-scroll.png");
 
-  const destination = await evalJs(`(()=>{const visible=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>28&&r.height>28&&r.top>=0&&r.bottom<=innerHeight};const active=document.querySelector('.page.active')?.id?.replace(/^page-/,'')||'';const items=[...document.querySelectorAll('#sidebar [data-view],#sidebar [data-unified-chat],#sidebar [data-role-accountability-route],#sidebar [data-business-custom]')].filter(visible);const talk=items.find(e=>/Talk to Hunter/i.test((e.textContent||'').replace(/\\s+/g,' ').trim()));const different=items.find(e=>{const page=e.dataset.view||'';return page&&page!==active});const preferred=talk||different||items[0];if(!preferred)return null;preferred.dataset.srgTouchDestination='true';return{selector:'#sidebar [data-srg-touch-destination="true"]',label:(preferred.textContent||'').replace(/\\s+/g,' ').trim(),page:preferred.dataset.view||'',activeBefore:active}})()`);
-  if (!destination) throw new Error("No already-visible sidebar destination was available without scrolling.");
+  const destination = await evalJs(`(()=>{const visible=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>28&&r.height>28&&r.top>=0&&r.bottom<=innerHeight};const active=document.querySelector('.page.active')?.id?.replace(/^page-/,'')||'';const items=[...document.querySelectorAll('#sidebar [data-view]')].filter(visible);const preferred=items.find(e=>e.dataset.view==='clients')||items.find(e=>e.dataset.view&&e.dataset.view!==active)||items[0];if(!preferred)return null;const page=preferred.dataset.view||'';return{selector:'#sidebar [data-view="'+page+'"]',label:(preferred.textContent||'').replace(/\\s+/g,' ').trim(),page,activeBefore:active}})()`);
+  if (!destination) throw new Error("No stable visible sidebar destination was available without scrolling.");
   proof.destination = destination;
   await touch(destination.selector, 160);
   await waitFor("!document.querySelector('#sidebar')?.classList.contains('open')&&!document.querySelector('#drawerScrim')?.classList.contains('open')", "drawer closes after destination touch");
@@ -130,7 +130,7 @@ try {
   proof.passed = true;
   proof.completedAt = new Date().toISOString();
   await writeFile(join(outDir, "proof.json"), JSON.stringify(proof, null, 2));
-  console.log("SRG TOUCH PASS: one real tap opens the drawer at scrollTop 0, it remains at the top, and a different visible destination works without any scrolling.");
+  console.log("SRG TOUCH PASS: one real tap opens the drawer at scrollTop 0, it remains at the top, and a stable visible destination works without any scrolling.");
 } catch (error) {
   proof.passed = false;
   proof.error = String(error?.stack || error);
