@@ -1,13 +1,32 @@
 {
   "schema_version": "sergeant.self-learning-history.v1",
   "current_tier": 0,
-  "recent_results": [],
+  "recent_results": [
+    {
+      "round_id": "week-1-run-9",
+      "authority_head": "5b457753cac815410e8f77e83a2f1a57bdbd9027",
+      "selected_languages": ["swift", "python", "julia"],
+      "confirmed_defects": 0,
+      "confirmed_defects_found": 0,
+      "false_positives": 0,
+      "provenance_complete": true,
+      "evidence_integrity": true,
+      "blind_findings": 0,
+      "worker_errors": 0,
+      "rejected_proposals": 3,
+      "accepted_proposals": 0,
+      "automatic_promotions": 0,
+      "automatic_merges": 0,
+      "artifact_digest": "sha256:76300275f3e25aefe542d65c45bc767c767d075e28d98295bdcbc2dc176d12ea"
+    }
+  ],
   "language_history": [
     "perl", "fsharp", "nim",
     "scala", "elixir", "swift",
     "ocaml", "julia", "crystal",
     "zig", "r", "erlang",
-    "cpp", "java", "python"
+    "cpp", "java", "python",
+    "swift", "python", "julia"
   ],
   "accepted_lessons": 0,
   "automatic_promotions": 0,
