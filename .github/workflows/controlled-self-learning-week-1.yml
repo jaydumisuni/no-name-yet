@@ -74,24 +74,6 @@ jobs:
             tests/test_opaque_selector_pagination.py \
             tests/test_run_static_training_set_provenance.py
 
-      - name: Collect sanitized GitHub learning candidates with read-only token
-        id: collect
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p "build/${WEEK_ID}"
-          python scripts/collect_github_learning_candidates.py \
-            --reviewer "${AUTHORITY_HEAD}" \
-            --week-id "${WEEK_ID}" \
-            --pool-json .github/self-learning/week-1-pool.json \
-            --limit 6 \
-            --output "build/${WEEK_ID}/candidates.json" \
-            2>&1 | tee "build/${WEEK_ID}/collector.log"
-          count="$(jq -r '.candidate_count' "build/${WEEK_ID}/candidates.json")"
-          echo "candidate_count=${count}" >> "$GITHUB_OUTPUT"
-
       - name: Verify explicit owner and round authorization gates
         id: authorize
         shell: bash
@@ -106,6 +88,36 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "Learning skipped: explicit round commit prefix not present."
           fi
+
+      - name: Collect authorized candidates or record a zero-work packet
+        id: collect
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READY: ${{ steps.authorize.outputs.ready }}
+        run: |
+          set -euo pipefail
+          mkdir -p "build/${WEEK_ID}"
+          if [ "${READY}" != "true" ]; then
+            jq -n \
+              --arg week_id "${WEEK_ID}" \
+              --arg reviewer "${AUTHORITY_HEAD}" \
+              '{schema_version:"sergeant.learning-candidates.v1", week_id:$week_id, reviewer:$reviewer, candidate_count:0, candidates:[], collection_skipped:"round_not_authorized"}' \
+              > "build/${WEEK_ID}/candidates.json"
+            printf '%s\n' 'Candidate collection skipped: round is not explicitly authorized.' \
+              > "build/${WEEK_ID}/collector.log"
+            echo "candidate_count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python scripts/collect_github_learning_candidates.py \
+            --reviewer "${AUTHORITY_HEAD}" \
+            --week-id "${WEEK_ID}" \
+            --pool-json .github/self-learning/week-1-pool.json \
+            --limit 6 \
+            --output "build/${WEEK_ID}/candidates.json" \
+            2>&1 | tee "build/${WEEK_ID}/collector.log"
+          count="$(jq -r '.candidate_count' "build/${WEEK_ID}/candidates.json")"
+          echo "candidate_count=${count}" >> "$GITHUB_OUTPUT"
 
       - name: Upload validation packet
         uses: actions/upload-artifact@v4
