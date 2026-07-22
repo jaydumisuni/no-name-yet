@@ -37,21 +37,21 @@ jobs:
       - name: Prove one touch opens the sidebar at the top without scrolling
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://c2248167-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://0752614e-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-mobile-touch-sidebar
         run: node tools/proof_hunter_mobile_touch_sidebar.mjs
 
       - name: Render and exercise exact Hunter mobile preview
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://c2248167-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://0752614e-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-mobile-header
         run: node tools/proof_hunter_mobile_header.mjs
 
       - name: Prove functional Hunter mobile voice mode
         env:
           CHROME_PATH: /usr/bin/google-chrome
-          HUNTER_REVIEW_URL: https://c2248167-hunter-ui-review.thetechguy712.workers.dev/portal
+          HUNTER_REVIEW_URL: https://0752614e-hunter-ui-review.thetechguy712.workers.dev/portal
           PROOF_DIR: artifacts/hunter-mobile-voice
         run: node tools/proof_hunter_voice_mode.mjs
 
