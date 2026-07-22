@@ -100,11 +100,17 @@ try {
     globalThis.SpeechRecognition=SergeantSpeechRecognition;
     globalThis.webkitSpeechRecognition=SergeantSpeechRecognition;
     globalThis.__SRG_SPEECH_EVENTS__=[];
-    globalThis.SpeechSynthesisUtterance=class{constructor(text){this.text=text;this.rate=1;this.lang='en-ZM';}};
-    globalThis.speechSynthesis={
-      cancel(){globalThis.__SRG_SPEECH_EVENTS__.push({type:'cancel',at:performance.now()});},
-      speak(utterance){globalThis.__SRG_SPEECH_EVENTS__.push({type:'speak',text:utterance.text,at:performance.now()});utterance.onstart?.();setTimeout(()=>{globalThis.__SRG_SPEECH_EVENTS__.push({type:'end',at:performance.now()});utterance.onend?.();},60);}
-    };
+    const synth=globalThis.speechSynthesis;
+    const instrumentedCancel=function(){globalThis.__SRG_SPEECH_EVENTS__.push({type:'cancel',at:performance.now()});};
+    const instrumentedSpeak=function(utterance){globalThis.__SRG_SPEECH_EVENTS__.push({type:'speak',text:utterance.text,constructor:utterance?.constructor?.name||'',nativeType:utterance instanceof globalThis.SpeechSynthesisUtterance,at:performance.now()});utterance.onstart?.();setTimeout(()=>{globalThis.__SRG_SPEECH_EVENTS__.push({type:'end',at:performance.now()});utterance.onend?.();},60);};
+    try{
+      Object.defineProperty(synth,'cancel',{configurable:true,value:instrumentedCancel});
+      Object.defineProperty(synth,'speak',{configurable:true,value:instrumentedSpeak});
+    }catch{
+      const proto=Object.getPrototypeOf(synth);
+      Object.defineProperty(proto,'cancel',{configurable:true,value:instrumentedCancel});
+      Object.defineProperty(proto,'speak',{configurable:true,value:instrumentedSpeak});
+    }
   ` });
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 3, mobile: true, screenWidth: 390, screenHeight: 844 });
   await cdp("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
@@ -152,12 +158,13 @@ try {
   if (!/Reading Hunter|Finished reading/.test(read.status)) {
     throw new Error(`Read aloud did not run: ${JSON.stringify({status:read.status,latestHunterMessage:read.latestHunterMessage,speechEvents:read.speechEvents,lastAction:read.stabilityAudit?.lastAction,stability:read.stabilityAudit},null,2)}`);
   }
+  if (!read.speechEvents.some(event=>event.type==='speak'&&event.nativeType===true)) throw new Error(`Read aloud did not receive a native utterance: ${JSON.stringify(read.speechEvents)}`);
   if (!read.audit?.passed || !read.stabilityAudit?.passed) throw new Error(`Hunter voice audits failed: ${JSON.stringify({voice:read.audit,stability:read.stabilityAudit})}`);
 
   proof.passed = true;
   proof.completedAt = new Date().toISOString();
   await writeFile(join(outDir, "proof.json"), JSON.stringify(proof, null, 2));
-  console.log("SRG VOICE PASS: real touch opens Voice, transcript remains reviewable, Use text does not send, explicit Send works, and read aloud runs.");
+  console.log("SRG VOICE PASS: real touch opens Voice, transcript remains reviewable, Use text does not send, explicit Send works, and a native utterance is read aloud.");
 } catch (error) {
   proof.passed = false;
   proof.error = String(error?.stack || error);
