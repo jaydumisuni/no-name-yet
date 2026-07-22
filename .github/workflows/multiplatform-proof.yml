@@ -91,7 +91,7 @@ jobs:
         run: |
           python -m build
           python -m twine check dist/*
-      - name: Verify coordinated 0.4.0 versions
+      - name: Verify coordinated 0.4.1 versions
         run: |
           python - <<'PY'
           import json, pathlib, tomllib
@@ -102,17 +102,17 @@ jobs:
               for line in pathlib.Path('adapters/jetbrains/gradle.properties').read_text(encoding='utf-8').splitlines()
               if '=' in line
           )
-          assert npm == py == '0.4.0', (npm, py)
-          assert props['pluginVersion'] == '0.4.0-preview', props['pluginVersion']
+          assert npm == py == '0.4.1', (npm, py)
+          assert props['pluginVersion'] == '0.4.1-preview', props['pluginVersion']
           PY
       - name: Package VS Code extension
-        run: npx --yes @vscode/vsce@latest package --no-dependencies --out sergeant-reviewer-0.4.0.vsix
+        run: npx --yes @vscode/vsce@latest package --no-dependencies --out sergeant-reviewer-0.4.1.vsix
       - uses: actions/upload-artifact@v4
         with:
-          name: sergeant-0.4.0-python-vscode-ui
+          name: sergeant-0.4.1-python-vscode-ui
           path: |
             dist/*
-            sergeant-reviewer-0.4.0.vsix
+            sergeant-reviewer-0.4.1.vsix
             artifacts/*.png
           if-no-files-found: error
 
@@ -167,6 +167,6 @@ jobs:
           unzip -l "$PLUGIN_JAR" | grep -F 'sergeant-command-center-v2.js'
       - uses: actions/upload-artifact@v4
         with:
-          name: sergeant-0.4.0-jetbrains-preview
+          name: sergeant-0.4.1-jetbrains-preview
           path: adapters/jetbrains/build/distributions/*.zip
           if-no-files-found: error

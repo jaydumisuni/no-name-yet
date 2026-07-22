@@ -16,7 +16,7 @@ def test_vscode_extension_manifest_installs_sergeant_commands() -> None:
 
     assert "activationEvents" not in package
     assert package["displayName"] == "Sergeant"
-    assert package["version"] == "0.4.0"
+    assert package["version"] == "0.4.1"
     assert package["icon"] == "resources/srg-logo-and-icon.png"
     assert package["main"] == "./src/vscode/extension.js"
     assert (ROOT / package["main"]).is_file()

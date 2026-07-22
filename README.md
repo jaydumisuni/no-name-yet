@@ -229,8 +229,10 @@ The interface includes:
 Published stable package:
 
 ```bash
-python -m pip install sergeant-reviewer==0.4.0
+python -m pip install sergeant-reviewer==0.4.1
 ```
+
+0.4.1 publishes the useful model-free, standalone, GitHub-ingestion, comparison, and IDE work already merged after the original 0.4.0 tag. See [`docs/releases/v0.4.1.md`](docs/releases/v0.4.1.md).
 
 Current source development:
 
@@ -248,7 +250,7 @@ Install Sergeant from the Visual Studio Marketplace or Open VSX. For a local pac
 
 ```bash
 npx @vscode/vsce package --no-dependencies
-code --install-extension sergeant-reviewer-0.4.0.vsix --force
+code --install-extension sergeant-reviewer-0.4.1.vsix --force
 ```
 
 Open **Sergeant** from the activity bar, then use **Open Full Command Center**.
@@ -258,7 +260,7 @@ Open **Sergeant** from the activity bar, then use **Open Full Command Center**.
 The current marketplace preview targets the 2025.2 / build 252 line. Install the Sergeant CLI first:
 
 ```bash
-python -m pip install sergeant-reviewer==0.4.0
+python -m pip install sergeant-reviewer==0.4.1
 ```
 
 Set `SERGEANT_CLI` when the executable is not on the IDE process path.

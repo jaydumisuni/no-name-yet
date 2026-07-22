@@ -25,7 +25,7 @@ def test_jetbrains_plugin_bundles_shared_command_center() -> None:
     gate = (JETBRAINS_SOURCE / "SergeantMissionGate.kt").read_text(encoding="utf-8")
 
     assert 'resources.srcDir("../../resources")' in build
-    assert "pluginVersion=0.4.0-preview" in props
+    assert "pluginVersion=0.4.1-preview" in props
     assert "platformVersion=2025.2.6.2" in props
     assert "JBCefBrowser" in panel
     assert "JBCefJSQuery" in panel
