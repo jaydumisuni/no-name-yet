@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -23,6 +23,13 @@ CLI = ROOT / "scripts" / "validate_actions_evidence.py"
 
 def _ledger() -> dict:
     return json.loads(LEDGER.read_text(encoding="utf-8"))
+
+
+def _cli_env() -> dict[str, str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(ROOT) if not existing else f"{ROOT}{os.pathsep}{existing}"
+    return env
 
 
 def test_preservation_ledger_is_complete_and_deletion_is_disabled() -> None:
@@ -173,6 +180,7 @@ def test_cli_reports_invalid_json_and_non_object_roots(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, str(CLI), str(invalid)],
         cwd=ROOT,
+        env=_cli_env(),
         text=True,
         capture_output=True,
         check=False,
@@ -185,6 +193,7 @@ def test_cli_reports_invalid_json_and_non_object_roots(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, str(CLI), str(non_object)],
         cwd=ROOT,
+        env=_cli_env(),
         text=True,
         capture_output=True,
         check=False,
