@@ -57,6 +57,21 @@ On 2026-07-22, 29 available Sergeant artifacts totaling 13,772,291 bytes were co
 
 The public digest ledger is stored at `evidence/actions/2026-07-22-preservation-ledger.json`. The private recovery ledger records the corresponding Drive folders and is stored beside the durable copies.
 
+## Recovery replay
+
+Every one of the 29 durable Drive copies was subsequently downloaded again. The downloaded byte lengths and SHA-256 digests matched the preservation ledger for all 13,772,291 bytes:
+
+```text
+Artifacts replayed: 29
+Digest matches:     29
+Size matches:       29
+Failures:            0
+```
+
+The replay result is recorded at `evidence/actions/2026-07-22-recovery-replay.json` and is validated against the original preservation ledger by `validate_recovery_replay`.
+
+Successful recovery replay proves that the preserved copies can be retrieved intact. It does not prove that two different artifacts are semantically redundant, classify their learning value, or authorize deletion.
+
 ## Operational sequence
 
 ```text
@@ -72,4 +87,4 @@ Inventory
 → delete exact artifact only
 ```
 
-Until the recovery-replay stage is complete, the cleanup count remains zero.
+The recovery-replay stage is complete for these 29 items. The cleanup count remains zero because content-equivalence classification and an owner-authorized exact-artifact cleanup manifest do not exist.
