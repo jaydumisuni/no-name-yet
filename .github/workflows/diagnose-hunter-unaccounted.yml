@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - proof/hunter-mobile-header-20260721
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
