@@ -13,20 +13,28 @@ permissions:
   contents: read
 
 jobs:
-  blind-prefixed-defect:
+  compare-real-code:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      summary_b64: ${{ steps.summarize.outputs.summary_b64 }}
     steps:
       - name: Check out Sergeant benchmark branch
         uses: actions/checkout@v4
         with:
           path: Sergeant
-      - name: Check out blind Lumi target
+      - name: Check out frozen pre-fix Lumi target
         uses: actions/checkout@v4
         with:
           repository: jaydumisuni/lumi-dm
           ref: 8f63f832112a2e0772e954c3e0319109ce21b6a9
-          path: target
+          path: target-before
+      - name: Check out verified fixing commit as clean control
+        uses: actions/checkout@v4
+        with:
+          repository: jaydumisuni/lumi-dm
+          ref: a8d572258a4d53e9620970e5236ab21aa903580f
+          path: target-after
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -35,66 +43,73 @@ jobs:
         run: python -m pip install -e .
       - name: Freeze target provenance
         run: |
-          echo "target_repository=jaydumisuni/lumi-dm"
-          echo "target_commit=$(git -C target rev-parse HEAD)"
-          echo "target_file=browser-extension/security-shim.js"
-          test "$(git -C target rev-parse HEAD)" = "8f63f832112a2e0772e954c3e0319109ce21b6a9"
+          test "$(git -C target-before rev-parse HEAD)" = "8f63f832112a2e0772e954c3e0319109ce21b6a9"
+          test "$(git -C target-after rev-parse HEAD)" = "a8d572258a4d53e9620970e5236ab21aa903580f"
       - name: Record Cpl route state
         run: sergeant cpl-status --pretty
-      - name: Run blind Sergeant review
+      - name: Run Sergeant before and after the real fix
         env:
           SERGEANT_CPL_POLICY: preferred
           SERGEANT_CPL_PROVIDER: auto
           SERGEANT_CPL_DEPTH: maximum
         run: |
-          sergeant pr-review target \
-            --files "browser-extension/security-shim.js" \
-            --pretty > blind-sergeant-report.json
-          test -s blind-sergeant-report.json
-      - name: Print frozen report digest and decision evidence
+          sergeant pr-review target-before --files "browser-extension/security-shim.js" --pretty > before.json
+          sergeant pr-review target-after --files "browser-extension/security-shim.js" --pretty > after.json
+          test -s before.json
+          test -s after.json
+      - name: Build concise comparison output
+        id: summarize
         run: |
-          sha256sum blind-sergeant-report.json
           python - <<'PY'
+          import base64
+          import hashlib
           import json
+          import os
           from pathlib import Path
 
-          report = json.loads(Path("blind-sergeant-report.json").read_text())
-          verdict = report.get("verdict", {})
-          council = report.get("officer_council", {})
-          cpl = report.get("cpl_review", {})
+          def summarize(path):
+              raw = Path(path).read_bytes()
+              report = json.loads(raw)
+              verdict = report.get("verdict", {})
+              council = report.get("officer_council", {})
+              admitted = council.get("admitted_findings", [])
+              return {
+                  "sha256": hashlib.sha256(raw).hexdigest(),
+                  "verdict": verdict.get("verdict"),
+                  "confidence": verdict.get("confidence"),
+                  "required_actions": verdict.get("required_actions", []),
+                  "cpl_status": report.get("cpl_review", {}).get("status"),
+                  "formation_verdict": council.get("verdict"),
+                  "admitted_findings": [
+                      {
+                          "severity": item.get("severity"),
+                          "path": item.get("path"),
+                          "line_start": item.get("line_start"),
+                          "line_end": item.get("line_end"),
+                          "message": item.get("message"),
+                      }
+                      for item in admitted
+                  ],
+              }
 
-          print("SERGEANT_VERDICT=", verdict.get("verdict"))
-          print("SERGEANT_CONFIDENCE=", verdict.get("confidence"))
-          print("SERGEANT_REASON=", verdict.get("reason"))
-          print("SERGEANT_REQUIRED_ACTIONS=", json.dumps(verdict.get("required_actions", []), sort_keys=True))
-          print("OFFICER_COUNCIL_VERDICT=", council.get("verdict"))
-          print("OFFICER_COUNCIL_REQUIRED_ACTIONS=", json.dumps(council.get("required_actions", []), sort_keys=True))
-          print("CPL_STATUS=", cpl.get("status"))
-          print("CPL_POLICY=", cpl.get("policy"))
-          print("CPL_DECISION_VERDICT=", cpl.get("decision_verdict", cpl.get("verdict")))
-
-          sources = {
-              "officer_admitted": council.get("admitted_findings", []),
-              "officer_rejected": council.get("rejected_findings", []),
-              "capability": report.get("capability_review", {}).get("findings", []),
-              "review_intelligence": report.get("review_intelligence", {}).get("promoted_findings", []),
-              "cpl_actionable": cpl.get("actionable_findings", cpl.get("findings", [])),
+          payload = {
+              "repository": "jaydumisuni/lumi-dm",
+              "file": "browser-extension/security-shim.js",
+              "before_commit": "8f63f832112a2e0772e954c3e0319109ce21b6a9",
+              "after_commit": "a8d572258a4d53e9620970e5236ab21aa903580f",
+              "before": summarize("before.json"),
+              "after": summarize("after.json"),
           }
-          for source, findings in sources.items():
-              print(f"{source.upper()}_COUNT=", len(findings) if isinstance(findings, list) else "not-list")
-              if not isinstance(findings, list):
-                  continue
-              for index, finding in enumerate(findings, 1):
-                  if not isinstance(finding, dict):
-                      print(f"{source}[{index}]=", repr(finding))
-                      continue
-                  compact = {
-                      key: finding.get(key)
-                      for key in (
-                          "severity", "category", "root_cause", "path", "line_start",
-                          "line_end", "message", "evidence", "suggested_action", "status",
-                      )
-                      if key in finding
-                  }
-                  print(f"{source}[{index}]=", json.dumps(compact, sort_keys=True))
+          encoded = base64.b64encode(json.dumps(payload, sort_keys=True).encode()).decode()
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"summary_b64={encoded}\n")
           PY
+
+  report-result:
+    needs: compare-real-code
+    runs-on: ubuntu-latest
+    steps:
+      - name: SERGEANT REAL-CODE RESULT
+        env:
+          SUMMARY_B64: ${{ needs.compare-real-code.outputs.summary_b64 }}
+        run: echo "$SUMMARY_B64" | base64 --decode | python -m json.tool
