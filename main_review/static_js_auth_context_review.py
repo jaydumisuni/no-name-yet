@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from .static_credential_destination_review import run_static_credential_destination_review
+
 _SOURCE_SUFFIXES = {".js", ".jsx", ".ts", ".tsx"}
 _NEXT_ROUTER_IMPORT_RE = re.compile(
     r"import\s*\{[^}]*\buseRouter\b[^}]*\}\s*from\s*[\"'](?P<module>[^\"']*navigation[^\"']*)[\"']",
@@ -322,6 +324,13 @@ def run_static_js_auth_context_review(
         for path, text in texts.items():
             findings.extend(_session_query_navigation_findings(path, text, session_query))
 
+    credential_destination = run_static_credential_destination_review(root_path, changed)
+    findings.extend(
+        dict(item)
+        for item in credential_destination.get("findings", [])
+        if isinstance(item, dict)
+    )
+
     unique: dict[tuple[str, str, int], dict[str, Any]] = {}
     for finding in findings:
         unique[
@@ -332,10 +341,11 @@ def run_static_js_auth_context_review(
             )
         ] = finding
     return {
-        "schema_version": "sergeant.static-js-auth-context-review.v1",
+        "schema_version": "sergeant.static-js-auth-context-review.v2",
         "mode": "model_free_static",
         "finding_count": len(unique),
         "findings": list(unique.values()),
         "readable_changed_files": readable,
+        "static_credential_destination_review": credential_destination,
         "executed_project_code": False,
     }
