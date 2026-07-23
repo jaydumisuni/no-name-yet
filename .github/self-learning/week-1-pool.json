@@ -1,7 +1,4 @@
 [
-  {"language":"java","repos":["google/guava","apache/kafka","spring-projects/spring-framework"],"suffixes":[".java"]},
-  {"language":"swift","repos":["apple/swift-nio","realm/realm-swift","pointfreeco/swift-composable-architecture"],"suffixes":[".swift"]},
-  {"language":"julia","repos":["JuliaLang/julia","JuliaData/DataFrames.jl","SciML/DifferentialEquations.jl"],"suffixes":[".jl"]},
   {"language":"typescript","repos":["axios/axios","nestjs/nest","reduxjs/redux-toolkit"],"suffixes":[".ts",".tsx"]},
   {"language":"ocaml","repos":["ocaml/dune","mirage/ocaml-cohttp","ocaml/ocaml"],"suffixes":[".ml",".mli"]},
   {"language":"go","repos":["hashicorp/terraform","prometheus/prometheus","grafana/grafana"],"suffixes":[".go"]},
@@ -13,5 +10,8 @@
   {"language":"zig","repos":["ziglang/zig","tigerbeetle/tigerbeetle","mitchellh/libxev"],"suffixes":[".zig"]},
   {"language":"rust","repos":["tokio-rs/tokio","rust-lang/cargo","serde-rs/serde"],"suffixes":[".rs"]},
   {"language":"python","repos":["pallets/flask","encode/httpx","pydantic/pydantic"],"suffixes":[".py"]},
-  {"language":"elixir","repos":["elixir-lang/elixir","livebook-dev/livebook","dashbitco/broadway"],"suffixes":[".ex",".exs"]}
+  {"language":"elixir","repos":["elixir-lang/elixir","livebook-dev/livebook","dashbitco/broadway"],"suffixes":[".ex",".exs"]},
+  {"language":"java","repos":["google/guava","apache/kafka","spring-projects/spring-framework"],"suffixes":[".java"]},
+  {"language":"swift","repos":["apple/swift-nio","realm/realm-swift","pointfreeco/swift-composable-architecture"],"suffixes":[".swift"]},
+  {"language":"julia","repos":["JuliaLang/julia","JuliaData/DataFrames.jl","SciML/DifferentialEquations.jl"],"suffixes":[".jl"]}
 ]
