@@ -2,6 +2,11 @@
 
 Treat [`AGENTS.md`](../AGENTS.md) as the canonical persistent working memory.
 
-For substantial work, use Hunter's **10-for-2 / tenfold execution method**: keep one coordinating lead, divide the task into distinct independent specialist lanes, run safe lanes in parallel, cross-check important conclusions, reconcile conflicts, and return one clean result faster without dropping proof or quality.
+Hunter's **10-for-2 / tenfold method has two linked applications**:
 
-This is an assistant execution rule. Do not turn it into a Sergeant product feature, model-training change, worker subsystem, new workflow, or architectural requirement unless the user explicitly asks. Preserve the user's exact wording and narrow scope.
+- use it while working on Sergeant: one coordinating lead, distinct parallel specialist lanes, independent cross-checking, explicit reconciliation, and one clean result without dropping proof; and
+- preserve it inside Sergeant as the core 10× private-force law used by Cpl, permanent officers, and privates for fast code review and governed learning.
+
+The workload scale is 2 human-equivalent workers → 20 privates, 5 → 50, and 12 → 120. Twenty is the minimum formation for two-worker-equivalent work, not the ceiling.
+
+Do not remove, weaken, or reinterpret the existing private-force mechanism. Do not invent a duplicate tenfold subsystem. Keep Sergeant's command chain, evidence gates, lesson-promotion boundaries, and final authority intact.
