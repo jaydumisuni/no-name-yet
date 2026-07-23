@@ -6,12 +6,13 @@
   "cross_repository_intake_pr": 142,
   "completed_rounds": ["week-1-run-9", "week-1-run-14"],
   "remaining_controlled_rounds": 5,
-  "next_round_authorized": false,
+  "authorized_round": 3,
+  "next_round_authorized": true,
   "priority_candidates": ["learn-lumi-token-origin-20260723"],
   "accepted_lessons": 0,
   "automatic_promotions": 0,
   "automatic_merges": 0,
   "normal_review_models_enabled": false,
   "proposal_publication": "owner_controlled",
-  "notes": "The verified Lumi token-origin miss is collected as a candidate, not an accepted lesson. Each model-learning round requires the self-learning-authorized label and a final commit subject beginning START_CONTROLLED_SELF_LEARNING. Council-complete proposals remain unpromoted until executable negative controls, clean counterexamples, unrelated transfer, and hidden holdout pass."
+  "notes": "Round 3 is explicitly authorized to run the frozen Lumi token-origin candidate through blind review and isolated Teacher, Prosecutor, and Defender work. The candidate is not an accepted lesson. Council-complete proposals remain unpromoted until executable negative controls, clean counterexamples, unrelated transfer, and hidden holdout pass."
 }
