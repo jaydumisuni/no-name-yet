@@ -1,0 +1,62 @@
+name: Blind Benchmark - Lumi Token Origin
+
+on:
+  push:
+    branches:
+      - benchmark/blind-lumi-token-origin
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blind-prefixed-defect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out Sergeant benchmark branch
+        uses: actions/checkout@v4
+        with:
+          path: Sergeant
+      - name: Check out blind Lumi target
+        uses: actions/checkout@v4
+        with:
+          repository: jaydumisuni/lumi-dm
+          ref: 8f63f832112a2e0772e954c3e0319109ce21b6a9
+          path: target
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install exact Sergeant source
+        working-directory: Sergeant
+        run: python -m pip install -e .
+      - name: Freeze target provenance
+        run: |
+          echo "target_repository=jaydumisuni/lumi-dm"
+          echo "target_commit=$(git -C target rev-parse HEAD)"
+          echo "target_file=browser-extension/security-shim.js"
+          test "$(git -C target rev-parse HEAD)" = "8f63f832112a2e0772e954c3e0319109ce21b6a9"
+      - name: Record Cpl route state
+        run: sergeant cpl-status --pretty
+      - name: Run blind Sergeant review
+        env:
+          SERGEANT_CPL_POLICY: preferred
+          SERGEANT_CPL_PROVIDER: auto
+          SERGEANT_CPL_DEPTH: maximum
+        run: |
+          sergeant pr-review target \
+            --files "browser-extension/security-shim.js" \
+            --pretty | tee blind-sergeant-report.json
+          test -s blind-sergeant-report.json
+      - name: Print frozen report digest
+        run: |
+          sha256sum blind-sergeant-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("blind-sergeant-report.json").read_text())
+          print("top_level_keys=", sorted(report))
+          for key in ("verdict", "status", "summary", "findings", "required_actions", "cpl"):
+              if key in report:
+                  print(f"{key}=", json.dumps(report[key], sort_keys=True)[:12000])
+          PY
