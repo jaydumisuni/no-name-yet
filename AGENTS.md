@@ -40,6 +40,30 @@ Permanent officers own specialist doctrine and split code review or learning wor
 
 This tenfold private-force system is one of the mechanisms that gives Sergeant rapid code review and rapid learning without sacrificing proof.
 
+## Cross-repository learning memory
+
+Sergeant must consider **all useful THETECHGUY and external repository signals**, not only activity inside the Sergeant repository. Commits, pull requests, workflow runs, review findings, runtime logs, shell traces, test failures, repairs, and release failures may contribute evidence.
+
+Every signal is governed before it can teach Sergeant:
+
+```text
+repository event
+→ sanitized signal intake
+→ tenfold officer/private triage
+→ evidence_only / needs_lineage / candidate_ready / rejected
+→ frozen blind review
+→ fixing truth reveal
+→ Teacher / Prosecutor / Defender
+→ negative controls
+→ unrelated-language or unrelated-repository transfer
+→ hidden holdout
+→ owner-controlled promotion proposal
+```
+
+A bot commit, formatting change, shell transcript, successful build, or review comment is **not automatically a lesson**. It may be retained as evidence or sent for lineage recovery. A candidate needs exact repository and event provenance, a confirmed defective state, a verified fixing state, scored production paths, evidence references, and a blind-review boundary. No signal, candidate, or proposal has automatic promotion or merge authority.
+
+`.github/self-learning/cross-repository-sources.json` records sources whose access and evidence boundaries are already confirmed. It is not an exclusion list: another useful repository remains eligible when its provenance and access can be verified.
+
 ## Working-agent tenfold method
 
 Any AI or chat working on Sergeant should mirror the same discipline:
@@ -80,4 +104,4 @@ In particular:
 
 ## Completion standard
 
-A task is complete when the coordinated lanes have produced a source-grounded, internally consistent result; required checks have passed; officers or working agents have reconciled contradictions; risks and blockers are stated honestly; and no quality standard was dropped for speed.
+A task is complete when the coordinated lanes have produced a source-grounded, internally consistent result; required checks have passed; officers or working agents have reconciled contradictions; useful cross-repository signals have been retained, qualified, or rejected with evidence; risks and blockers are stated honestly; and no quality standard was dropped for speed.

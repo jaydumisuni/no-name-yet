@@ -1,0 +1,31 @@
+{
+  "schema_version": "sergeant.cross-repository-sources.v1",
+  "policy": {
+    "all_useful_repositories_may_contribute": true,
+    "sergeant_repository_only": false,
+    "retain_non_candidate_signals": true,
+    "automatic_promotions": 0,
+    "automatic_merges": 0,
+    "final_verdict": "Sergeant"
+  },
+  "confirmed_sources": [
+    {
+      "repository": "jaydumisuni/TechGuyCheckm8",
+      "source_class": "thetechguy-owned",
+      "languages": ["rust"],
+      "event_types": ["commit", "pull_request", "workflow_run", "review_finding", "test_failure", "repair"],
+      "collection_state": "enabled-for-signal-intake",
+      "learning_boundary": "behavioral defect/fix lineage required"
+    },
+    {
+      "repository": "jaydumisuni/lumi-dm",
+      "source_class": "thetechguy-owned",
+      "languages": ["python", "javascript"],
+      "event_types": ["commit", "pull_request", "workflow_run", "review_finding", "runtime_log", "shell_trace", "test_failure", "repair"],
+      "collection_state": "enabled-for-signal-intake",
+      "learning_boundary": "behavioral defect/fix lineage required"
+    }
+  ],
+  "external_candidate_pool": ".github/self-learning/week-1-pool.json",
+  "source_expansion": "Add any confirmed THETECHGUY or external repository when its access, provenance, languages, and evidence boundary are known."
+}

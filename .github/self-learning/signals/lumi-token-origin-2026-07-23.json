@@ -1,0 +1,36 @@
+{
+  "schema_version": "sergeant.cross-repository-learning-signal.v1",
+  "case_id": "learn-lumi-token-origin-20260723",
+  "repository": "jaydumisuni/lumi-dm",
+  "event_kind": "repair",
+  "source_url": "https://github.com/jaydumisuni/lumi-dm",
+  "source_event_url": "https://github.com/jaydumisuni/lumi-dm/commit/a8d572258a4d53e9620970e5236ab21aa903580f",
+  "defective_ref": "8f63f832112a2e0772e954c3e0319109ce21b6a9",
+  "fixing_ref": "a8d572258a4d53e9620970e5236ab21aa903580f",
+  "language": "javascript",
+  "scored_paths": [
+    "browser-extension/security-shim.js"
+  ],
+  "evidence_refs": [
+    "https://github.com/jaydumisuni/Sergeant/pull/143",
+    "https://github.com/jaydumisuni/Sergeant/actions/runs/30005308635",
+    "https://github.com/jaydumisuni/lumi-dm/commit/a8d572258a4d53e9620970e5236ab21aa903580f"
+  ],
+  "summary": "The pre-fix extension attached its bearer credential to any loopback-host API request instead of binding it to the exact configured Lumi server origin. Current model-free Sergeant returned the same generic missing-tests finding for the vulnerable snapshot and the fixed clean control.",
+  "defect_confirmed": true,
+  "fix_verified": true,
+  "blind_review_possible": true,
+  "behavior_change": true,
+  "security_or_integrity": true,
+  "cross_component": true,
+  "learning_objectives": [
+    "Bind credentials to the exact configured trusted destination rather than a broad host category or path prefix.",
+    "Distinguish vulnerable and repaired code states instead of emitting an identical generic assurance finding.",
+    "Create clean controls for same host with different port, scheme, subdomain, IPv4 or IPv6 loopback, malformed server configuration, redirects, Request objects, and existing credential headers."
+  ],
+  "authority": {
+    "may_auto_promote": false,
+    "may_auto_merge": false,
+    "final_verdict": "Sergeant"
+  }
+}

@@ -8,14 +8,17 @@ on:
       - ".github/workflows/controlled-self-learning-week-1.yml"
       - ".github/self-learning/**"
       - "main_review/adaptive_curriculum.py"
+      - "main_review/cross_repo_learning.py"
       - "main_review/hermes_learning.py"
       - "main_review/self_learning_queue.py"
+      - "scripts/classify_cross_repo_learning_signal.py"
       - "scripts/collect_github_learning_candidates.py"
       - "scripts/run_controlled_self_learning.py"
       - "scripts/export_learning_proposals.py"
       - "scripts/setup_hermes_learning_profiles.sh"
       - "tests/test_adaptive_curriculum.py"
       - "tests/test_controlled_self_learning_workflow.py"
+      - "tests/test_cross_repo_learning.py"
       - "tests/test_hermes_learning.py"
       - "tests/test_self_learning_queue.py"
 
@@ -69,6 +72,7 @@ jobs:
           python -m pytest -q \
             tests/test_adaptive_curriculum.py \
             tests/test_controlled_self_learning_workflow.py \
+            tests/test_cross_repo_learning.py \
             tests/test_hermes_learning.py \
             tests/test_self_learning_queue.py \
             tests/test_opaque_selector_pagination.py \
