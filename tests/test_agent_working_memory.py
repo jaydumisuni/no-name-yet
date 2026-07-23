@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from main_review.operational_contracts import (
+    MINIMUM_PRIVATE_FORCE,
+    PRIVATE_FORCE_MULTIPLIER,
+    private_force_size,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_MEMORY = ROOT / "AGENTS.md"
@@ -9,37 +15,70 @@ CLAUDE_MEMORY = ROOT / "CLAUDE.md"
 COPILOT_MEMORY = ROOT / ".github" / "copilot-instructions.md"
 
 
-def test_tenfold_method_is_an_execution_rule_not_product_architecture() -> None:
+def test_tenfold_method_is_core_sergeant_architecture_and_agent_method() -> None:
     memory = AGENT_MEMORY.read_text(encoding="utf-8")
 
-    assert "10-for-2 / tenfold method is an execution rule for the agent doing the work" in memory
-    assert "It is not a Sergeant product feature" in memory
-    assert "one normal lead worker" in memory
-    assert "spread the work across more parallel specialist roles" in memory
-    assert "cross-check the results through independent review lanes" in memory
+    assert "10-for-2 / tenfold method is a core Sergeant operating law" in memory
+    assert "also the working method agents should mirror" in memory
+    assert "It is not merely a prompt-writing shortcut" in memory
+    assert "Sergeant's speed in code review and controlled learning depends" in memory
+    assert "private force = normally justified human-equivalent workers × 10" in memory
     assert "finish faster without sacrificing quality" in memory
-    assert "Speed must come from parallel decomposition and clean coordination" in memory
 
 
-def test_agent_memory_preserves_the_users_exact_scope_boundary() -> None:
+def test_private_force_law_remains_tenfold_with_twenty_minimum_not_ceiling() -> None:
     memory = AGENT_MEMORY.read_text(encoding="utf-8")
 
-    assert "The user's exact wording is the requirement" in memory
-    assert '"Use 10-for-2" means' in memory
-    assert "It does **not** mean add another private-force implementation to Sergeant" in memory
-    assert "It does **not** authorize extra features, models, agents, branches, workflows, or storage" in memory
+    assert PRIVATE_FORCE_MULTIPLIER == 10
+    assert MINIMUM_PRIVATE_FORCE == 20
+    assert private_force_size(1) == 20
+    assert private_force_size(2) == 20
+    assert private_force_size(5) == 50
+    assert private_force_size(12) == 120
+    assert "Twenty is the minimum meaningful private formation" in memory
+    assert "it is not a mission ceiling" in memory
+    assert "another bounded private cell" in memory
 
 
-def test_major_agent_entry_points_share_one_canonical_memory() -> None:
+def test_memory_preserves_sergeant_command_hierarchy() -> None:
+    memory = AGENT_MEMORY.read_text(encoding="utf-8")
+
+    assert "Sergeant defines the mission, proof gates, and final verdict" in memory
+    assert "Cpl is the reasoning council and commands the operation" in memory
+    assert "permanent officers own specialist missions" in memory
+    assert "private packets cannot expand scope or issue verdicts" in memory
+    assert "Hermes transports orders, evidence, and preserved learning packets" in memory
+    assert "Hermes does not command" in memory
+
+
+def test_cross_repository_learning_is_allowed_but_governed() -> None:
+    memory = AGENT_MEMORY.read_text(encoding="utf-8")
+
+    assert "any useful repository" in memory
+    assert "including THETECHGUY projects and external repositories" in memory
+    assert "not only changes made inside the Sergeant repository" in memory
+    assert "defective commit or reproducible failing state" in memory
+    assert "fixing commit or independently verified correction" in memory
+    assert "freeze Sergeant's blind result" in memory
+    assert "unrelated-language or unrelated-repository transfer" in memory
+    assert "routine commit notification, shell transcript, successful build" in memory
+    assert "is not automatically a lesson" in memory
+    assert "No lesson is automatically promoted" in memory
+
+
+def test_major_agent_entry_points_share_the_full_doctrine() -> None:
     claude = CLAUDE_MEMORY.read_text(encoding="utf-8")
     copilot = COPILOT_MEMORY.read_text(encoding="utf-8")
 
     assert "[`AGENTS.md`](AGENTS.md)" in claude
     assert "[`AGENTS.md`](../AGENTS.md)" in copilot
     for text in (claude, copilot):
-        assert "one coordinating lead" in text
+        assert "core Sergeant" in text
+        assert "Cpl" in text
+        assert "officers" in text
+        assert "privates" in text
+        assert "2" in text and "20" in text
+        assert "external repository" in text
+        assert "No automatic" in text or "No lesson is automatically" in text
         assert "parallel" in text
-        assert "cross-check" in text
-        assert "without" in text
-        assert "Sergeant" in text
-        assert "product feature" in text
+        assert "cross-check" in text or "verification" in text
