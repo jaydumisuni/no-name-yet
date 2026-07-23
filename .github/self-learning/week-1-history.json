@@ -68,6 +68,32 @@
       "artifact_digest": "sha256:8f4abd06a6b5eee1f3a52af4fbc1ca9a0a45c7390ab512ef260224e568403048",
       "durable_copy": "google-drive:1cqN8sLaZBAMbnk5sAQSMvBeAYfE_Q4iQ",
       "durable_replay_verified": true
+    },
+    {
+      "round_id": "week-1-run-42",
+      "authority_head": "f8a2bae7aae531e505d64310361e06d16411bc9f",
+      "selected_languages": ["cpp", "ocaml", "ruby"],
+      "selected_repositories": ["bitcoin/bitcoin", "ocaml/dune", "rubocop/rubocop"],
+      "planned_cases": 3,
+      "confirmed_defects": 0,
+      "confirmed_defects_found": 0,
+      "false_positives": 0,
+      "provenance_complete": true,
+      "evidence_integrity": true,
+      "blind_findings": 0,
+      "worker_errors": 2,
+      "rejected_proposals": 1,
+      "truth_revealed_without_council": 2,
+      "council_complete_proposals": 0,
+      "accepted_proposals": 0,
+      "automatic_promotions": 0,
+      "automatic_merges": 0,
+      "publication_mode": "owner_controlled",
+      "artifact_size_bytes": 233301,
+      "artifact_digest": "sha256:ef8d0e35362c87bfa70982d0db767f52bc1ed46298f114b0f78b2b71dbd3bb06",
+      "durable_copy": "google-drive:1n_EUg_qXPw_y0Pt3bXXA4BY0RuOHW6JZ",
+      "durable_replay_verified": true,
+      "notes": "Bitcoin proposal rejected by Defender. Dune and RuboCop remained truth_revealed because isolated Prosecutor/Defender requests were rate-limited; no proposal was exported or accepted."
     }
   ],
   "language_history": [
@@ -78,7 +104,8 @@
     "cpp", "java", "python",
     "swift", "python", "julia",
     "go", "swift", "ocaml",
-    "go", "swift", "javascript"
+    "go", "swift", "javascript",
+    "cpp", "ocaml", "ruby"
   ],
   "accepted_lessons": 1,
   "accepted_lesson_ids": ["lumi-token-origin-20260723"],
