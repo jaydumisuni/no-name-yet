@@ -57,7 +57,10 @@
       "worker_errors": 0,
       "rejected_proposals": 1,
       "council_complete_proposals": 2,
-      "accepted_proposals": 0,
+      "accepted_proposals": 1,
+      "accepted_lesson_ids": ["lumi-token-origin-20260723"],
+      "promotion_mode": "owner_controlled",
+      "promotion_authority_head": "d026221f173d909a38c876cf79f95df86a1aa4af",
       "automatic_promotions": 0,
       "automatic_merges": 0,
       "publication_mode": "owner_controlled",
@@ -77,7 +80,9 @@
     "go", "swift", "ocaml",
     "go", "swift", "javascript"
   ],
-  "accepted_lessons": 0,
+  "accepted_lessons": 1,
+  "accepted_lesson_ids": ["lumi-token-origin-20260723"],
+  "owner_controlled_promotions": 1,
   "automatic_promotions": 0,
   "automatic_merges": 0
 }
