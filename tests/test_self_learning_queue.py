@@ -39,6 +39,27 @@ def test_queue_has_no_automatic_authority() -> None:
     }
 
 
+def test_queue_accepts_direct_event_lineage_without_source_pr() -> None:
+    queue = new_queue("week-1", authority_head="c" * 40, target_branch="train/week-1")
+    candidate = _candidate()
+    candidate.pop("source_pr")
+    candidate["source_event_url"] = "https://github.com/example/repo/commit/" + "b" * 40
+
+    case = add_case(queue, candidate)
+
+    assert case["source_event_url"].endswith("b" * 40)
+    assert case["state"] == "collected"
+
+
+def test_queue_requires_pr_or_direct_event_provenance() -> None:
+    queue = new_queue("week-1", authority_head="c" * 40, target_branch="train/week-1")
+    candidate = _candidate()
+    candidate.pop("source_pr")
+
+    with pytest.raises(QueueContractError, match="source_pr or source_event_url"):
+        add_case(queue, candidate)
+
+
 def test_truth_cannot_be_revealed_before_blind_freeze() -> None:
     queue = new_queue("week-1", authority_head="c" * 40, target_branch="train/week-1")
     add_case(queue, _candidate())
