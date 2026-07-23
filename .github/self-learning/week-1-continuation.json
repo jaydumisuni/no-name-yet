@@ -6,10 +6,10 @@
   "cross_repository_intake_pr": 142,
   "completed_rounds": ["week-1-run-9", "week-1-run-14", "week-1-run-29"],
   "remaining_controlled_rounds": 4,
-  "authorized_round": null,
-  "next_round_authorized": false,
+  "authorized_round": 4,
+  "next_round_authorized": true,
   "priority_candidates": [],
-  "priority_stage": "next_cross_repository_candidate_selection",
+  "priority_stage": "blind_cross_repository_collection",
   "accepted_lessons": 1,
   "accepted_lesson_ids": ["lumi-token-origin-20260723"],
   "owner_controlled_promotions": 1,
@@ -38,5 +38,5 @@
     "hidden_holdout_passed": true,
     "canonical_path_wired": true
   },
-  "notes": "Round 3 produced the first owner-controlled accepted lesson. The Lumi credential-origin rule is now implemented model-free through Medic and the canonical review path. Four controlled rounds remain. A new model-learning round still requires the self-learning-authorized label and a final commit subject beginning START_CONTROLLED_SELF_LEARNING. Automatic promotion and automatic merge remain disabled."
+  "notes": "Round 4 is explicitly authorized after the first accepted model-free lesson. The rotated pool begins with TypeScript, OCaml, and Go. Collection, blind freeze, Teacher, Prosecutor, Defender, controls, transfer, holdout, promotion and merge authority remain governed independently. Automatic promotion and automatic merge remain disabled."
 }
