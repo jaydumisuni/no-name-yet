@@ -75,10 +75,12 @@ def add_case(queue: dict[str, Any], candidate: Mapping[str, Any]) -> dict[str, A
         raise QueueContractError("candidate requires case_id")
     if any(row.get("case_id") == case_id for row in queue.get("cases", [])):
         raise QueueContractError(f"duplicate case id: {case_id}")
-    required = ("repository", "source_pr", "defective_ref", "fixing_ref", "scored_paths", "language")
+    required = ("repository", "defective_ref", "fixing_ref", "scored_paths", "language")
     missing = [field for field in required if not candidate.get(field)]
     if missing:
         raise QueueContractError(f"candidate {case_id} missing: {', '.join(missing)}")
+    if not candidate.get("source_pr") and not candidate.get("source_event_url"):
+        raise QueueContractError(f"candidate {case_id} requires source_pr or source_event_url")
     case = {
         **dict(candidate),
         "state": "collected",
