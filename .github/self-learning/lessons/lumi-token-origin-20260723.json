@@ -1,7 +1,7 @@
 {
   "schema_version": "sergeant.accepted-lesson.v1",
   "lesson_id": "lumi-token-origin-20260723",
-  "status": "promotion_ready",
+  "status": "accepted",
   "source": {
     "repository": "jaydumisuni/lumi-dm",
     "defective_ref": "8f63f832112a2e0772e954c3e0319109ce21b6a9",
@@ -44,8 +44,9 @@
       "tests/test_static_credential_destination_review.py",
       "tests/test_credential_destination_canonical_path.py"
     ],
-    "exact_head_workflows": {
-      "head": "48034efa92fa4976bcd7d52234e458f9ad82cefb",
+    "implementation_proof_head": "48034efa92fa4976bcd7d52234e458f9ad82cefb",
+    "promotion_authority_head": "d026221f173d909a38c876cf79f95df86a1aa4af",
+    "required_workflows": {
       "CI": "success",
       "Main Review": "success",
       "Multiplatform Proof": "success",
@@ -58,6 +59,7 @@
   },
   "authority": {
     "promotion_mode": "owner_controlled",
+    "accepted_by": "explicit_owner_instruction",
     "may_auto_promote": false,
     "may_auto_merge": false,
     "normal_review_models_required": false,
@@ -70,6 +72,6 @@
     "hidden_holdout_passed": true,
     "canonical_path_wired": true,
     "durable_evidence_verified": true,
-    "promotion_record_exact_head_pending": true
+    "promotion_record_exact_head_pending": false
   }
 }
