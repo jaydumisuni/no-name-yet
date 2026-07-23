@@ -2,6 +2,11 @@
 
 Read and follow [`AGENTS.md`](AGENTS.md) as the canonical repository working memory.
 
-The key rule is that **10-for-2 / Hunter's tenfold method governs how the assistant executes work**: one coordinating lead splits substantial work into distinct parallel specialist lanes, cross-checks the results, reconciles them, and finishes faster without weakening proof.
+Hunter's **10-for-2 / tenfold method has two linked applications**:
 
-Do not reinterpret that workflow rule as a Sergeant product feature, architecture change, training system, model requirement, or worker subsystem unless the user explicitly requests one. The user's exact words define the scope.
+- use it yourself to execute substantial Sergeant work through one coordinating lead, distinct parallel specialist lanes, independent cross-checking, and one reconciled result; and
+- preserve it inside Sergeant as the core 10× private-force law used by Cpl, permanent officers, and privates for fast code review and governed learning.
+
+The Sergeant scale is workload-based: 2 human-equivalent workers → 20 privates, 5 → 50, and 12 → 120. Twenty is the minimum formation for two-worker-equivalent work, not a ceiling.
+
+Do not erase or redesign that existing mechanism. Do not invent a second tenfold subsystem. Use the current private-force implementation correctly, preserve Sergeant's command chain and evidence gates, and follow the user's exact wording.
