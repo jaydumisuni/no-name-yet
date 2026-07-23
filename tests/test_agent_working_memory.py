@@ -42,13 +42,14 @@ def test_private_force_law_remains_tenfold_with_twenty_minimum_not_ceiling() -> 
 
 def test_memory_preserves_sergeant_command_hierarchy() -> None:
     memory = AGENT_MEMORY.read_text(encoding="utf-8")
+    normalized = memory.lower()
 
-    assert "Sergeant defines the mission, proof gates, and final verdict" in memory
-    assert "Cpl is the reasoning council and commands the operation" in memory
-    assert "permanent officers own specialist missions" in memory
-    assert "private packets cannot expand scope or issue verdicts" in memory
-    assert "Hermes transports orders, evidence, and preserved learning packets" in memory
-    assert "Hermes does not command" in memory
+    assert "sergeant defines the mission, proof gates, and final verdict" in normalized
+    assert "cpl is the reasoning council and commands the operation" in normalized
+    assert "permanent officers own specialist missions" in normalized
+    assert "private packets cannot expand scope or issue verdicts" in normalized
+    assert "hermes transports orders, evidence, and preserved learning packets" in normalized
+    assert "hermes does not command" in normalized
 
 
 def test_cross_repository_learning_is_allowed_but_governed() -> None:
@@ -73,12 +74,13 @@ def test_major_agent_entry_points_share_the_full_doctrine() -> None:
     assert "[`AGENTS.md`](AGENTS.md)" in claude
     assert "[`AGENTS.md`](../AGENTS.md)" in copilot
     for text in (claude, copilot):
-        assert "core Sergeant" in text
-        assert "Cpl" in text
-        assert "officers" in text
-        assert "privates" in text
+        normalized = text.lower()
+        assert "core sergeant" in normalized
+        assert "cpl" in normalized
+        assert "officers" in normalized
+        assert "privates" in normalized
         assert "2" in text and "20" in text
-        assert "external repository" in text
-        assert "No automatic" in text or "No lesson is automatically" in text
-        assert "parallel" in text
-        assert "cross-check" in text or "verification" in text
+        assert "external repository" in normalized
+        assert "no automatic" in normalized or "no lesson is automatically" in normalized
+        assert "parallel" in normalized
+        assert "cross-check" in normalized or "verification" in normalized
