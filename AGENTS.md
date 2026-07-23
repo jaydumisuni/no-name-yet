@@ -67,6 +67,34 @@ one coordinating lead
 9. Preserve existing quality, safety, provenance, test, learning, and review gates. Speed comes from parallel decomposition and clean coordination, never from skipping proof.
 10. Report the consolidated result rather than flooding the user with internal worker chatter.
 
+## External repository activity can teach Sergeant
+
+Useful fixes, review findings, failed workflows, corrected scripts, and implementation improvements from repositories outside `jaydumisuni/Sergeant` may become Sergeant learning inputs. THETECHGUY repositories such as TechGuyCheckm8, lumi-dm, Hunter, TechGuy Tool, TechGuy DM, TechGuy IMEI, and related projects are first-class discovery sources.
+
+A notification, pushed commit, bot comment, script execution, or green workflow is only a discovery signal. It does not become knowledge automatically.
+
+The governed intake is:
+
+```text
+capture defective or pre-fix state
+→ pin repository, commits, files, language, ownership/licence, and provenance
+→ freeze Sergeant's blind review before revealing the fix
+→ reveal and verify the fixing change
+→ derive a generalized candidate lesson
+→ Teacher proposes
+→ Prosecutor challenges scope and root cause
+→ Defender builds negative controls and attacks overfitting
+→ test transfer on unrelated repositories or languages where appropriate
+→ run hidden holdout
+→ admit only proven transferable value into Sergeant-owned rules, tests, benchmarks, tools, or durable memory
+```
+
+Formatting-only, generated-file, naming-only, and repository-specific changes may be rejected as non-learning material. Rejected lessons and their reasons must be retained because they strengthen false-positive control.
+
+Sergeant remains the final admission authority. External code, models, bots, reviewers, and repositories are candidate instructors or evidence sources, never automatic authority.
+
+See `docs/EXTERNAL_REPOSITORY_LEARNING_POLICY.md` for the minimum record and admission boundary.
+
 ## Interpretation boundary
 
 The user's exact wording is the requirement. Do not erase an existing Sergeant mechanism merely because the same phrase is also a working instruction.
@@ -77,7 +105,8 @@ In particular:
 - Inside Sergeant, the same rule is already the private-force scaling law used by officers and privates for review and learning.
 - It does not authorize uncontrolled scope growth, duplicate roles, automatic lesson promotion, automatic merge, or weaker evidence gates.
 - It does not require inventing a second tenfold subsystem; preserve and use Sergeant's existing private-force implementation correctly.
+- Useful engineering activity outside Sergeant may be candidate training evidence, but it still requires blind, provenance-bound, transfer-tested admission.
 
 ## Completion standard
 
-A task is complete when the coordinated lanes have produced a source-grounded, internally consistent result; required checks have passed; officers or working agents have reconciled contradictions; risks and blockers are stated honestly; and no quality standard was dropped for speed.
+A task is complete when the coordinated lanes have produced a source-grounded, internally consistent result; required checks have passed; officers or working agents have reconciled contradictions; useful external evidence has been classified correctly; risks and blockers are stated honestly; and no quality standard was dropped for speed.
