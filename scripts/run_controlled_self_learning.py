@@ -44,6 +44,22 @@ def _run(*args: str, cwd: Path | None = None, capture: bool = False) -> str:
     return completed.stdout if capture else ""
 
 
+def _source_fields(case: dict[str, Any]) -> dict[str, Any]:
+    """Bind either PR lineage or an exact direct-event URL without inventing one."""
+
+    source_pr = case.get("source_pr")
+    if isinstance(source_pr, int) and source_pr > 0:
+        return {"source_pr": source_pr}
+    source_event_url = str(case.get("source_event_url") or "").strip()
+    if not source_event_url:
+        raise ValueError(f"case {case.get('case_id')} requires source_pr or source_event_url")
+    return {
+        "source_pr": None,
+        "source_event_url": source_event_url,
+        "source_lineage": source_event_url,
+    }
+
+
 def _checkout(case: dict[str, Any], root: Path) -> Path:
     destination = root / case["case_id"]
     destination.mkdir(parents=True, exist_ok=False)
@@ -68,6 +84,16 @@ def _checkout(case: dict[str, Any], root: Path) -> Path:
 
 
 def _blind_manifest(case: dict[str, Any], checkout: Path, reviewer: str) -> dict[str, Any]:
+    manifest_case = {
+        "case_id": case["case_id"],
+        "repository": case["repository"],
+        **_source_fields(case),
+        "checkout_path": str(checkout),
+        "defective_ref": case["defective_ref"],
+        "fixing_ref": case["fixing_ref"],
+        "changed_files": list(case["scored_paths"]),
+        "workspace_policy": "static_first",
+    }
     return {
         "schema_version": "sergeant.review-training.v1",
         "set_id": f"self-learning-{case['case_id']}",
@@ -81,16 +107,7 @@ def _blind_manifest(case: dict[str, Any], checkout: Path, reviewer: str) -> dict
             "provenance_contract": "sergeant.training-provenance.v1",
             "reviewer_code_frozen_before_target_selection": reviewer,
         },
-        "cases": [{
-            "case_id": case["case_id"],
-            "repository": case["repository"],
-            "source_pr": case["source_pr"],
-            "checkout_path": str(checkout),
-            "defective_ref": case["defective_ref"],
-            "fixing_ref": case["fixing_ref"],
-            "changed_files": list(case["scored_paths"]),
-            "workspace_policy": "static_first",
-        }],
+        "cases": [manifest_case],
     }
 
 
@@ -107,10 +124,11 @@ def _truth_packet(case: dict[str, Any], checkout: Path, blind_result: dict[str, 
         "case_id": case["case_id"],
         "repository": case["repository"],
         "language": case["language"],
-        "source_pr": case["source_pr"],
+        **_source_fields(case),
         "defective_ref": case["defective_ref"],
         "fixing_ref": case["fixing_ref"],
         "scored_paths": case["scored_paths"],
+        "learning_objectives": list(case.get("learning_objectives", [])),
         "blind_summary": summary,
         "fixing_diff": diff,
         "instruction_boundary": {
