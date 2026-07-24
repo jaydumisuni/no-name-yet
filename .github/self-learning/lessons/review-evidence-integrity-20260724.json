@@ -1,7 +1,7 @@
 {
   "schema_version": "sergeant.accepted-lesson.v1",
   "lesson_id": "review-evidence-integrity-20260724",
-  "status": "promotion_ready",
+  "status": "accepted",
   "source": {
     "repository": "jaydumisuni/Sergeant",
     "battle_prs": [124, 125, 126, 127, 128],
@@ -47,7 +47,10 @@
     ],
     "immutability": "Historical frozen scores and failed selector attempts remain evidence and were not rewritten by the repair.",
     "exact_fix_head": "fd426867c3f01773519d743be2c4d0efe8a85cfd",
-    "merged_fix": "3b1f1b97f046e693261087169b1457e08011c5e3"
+    "merged_fix": "3b1f1b97f046e693261087169b1457e08011c5e3",
+    "retrospective_admission_proof_head": "8fae3921495ea8d0501f645a958878eb9ac81903",
+    "retrospective_proof_matrix": "CI, Main Review, Multiplatform Proof, Standalone Service Proof, Controlled Self-Learning Week 1 validation, Live GitHub Ingestion Proof, Reviewer Comparison Proof, Review Intelligence Proof, and Final Static Transfer Holdout passed.",
+    "external_review_disposition": "The underlying repair had a completed focused CodeRabbit review. CodeRabbit selected the retrospective harvest files, but the final incremental review was rate-limited; no additional completed review is claimed."
   },
   "authority": {
     "promotion_mode": "owner_controlled_retrospective",
@@ -62,6 +65,6 @@
     "clean_controls_present": true,
     "external_review_repair_present": true,
     "historical_exact_head_proof_present": true,
-    "retrospective_harvest_exact_head_pending": true
+    "retrospective_harvest_exact_head_pending": false
   }
 }
