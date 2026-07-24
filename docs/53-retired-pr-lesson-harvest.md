@@ -60,14 +60,16 @@ Lesson record: `.github/self-learning/lessons/preserve-before-delete-20260724.js
 
 ## Candidate lessons retained for governed follow-up
 
-### PR #107 — model-free editor battle
+### PRs #106 and #107 — model-free editor battle lineage
 
-Two useful CodeRabbit findings were preserved but are not promoted without fixing lineage and transfer proof:
+PR #106 exposed the original immutable target, but the round was invalidated after its branch head moved. PR #107 replaced it using independently verified identical target bytes at exact head `ea8f1590fc6fb7c27eb363eb854f173678c60b00`, and CodeRabbit reviewed that replacement.
+
+Two useful findings were preserved but are not promoted without fixing lineage and transfer proof:
 
 1. a parse failure must not silently substitute an empty model that can later overwrite the user's valid document;
 2. an expensive render path must not synchronously reload project context and catalogues on every keystroke.
 
-Status: `needs_lineage`.
+Status: `needs_lineage`. Both PR numbers are recorded in the candidate artifact so the original and reviewed-replacement provenance remain explicit.
 
 ### PR #108 — model-assisted battle
 
@@ -100,7 +102,7 @@ Candidate record: `.github/self-learning/retrospective-candidates-20260724.json`
 | #133 | benchmark only | Useful responsive interaction proof, but no complete fixing lineage. |
 | #124–#128 | accepted through later correction | CodeRabbit findings were verified and repaired through PR #130; no duplicate detector is added. |
 | #118–#113 | evidence only | Trigger/closure lanes preserve frozen scores and artifacts; their mechanisms are already represented by the parent campaign and transfer modules. |
-| #106/#107 | candidate | Real editor findings preserved; fixing lineage and transfer proof still required. |
+| #106/#107 | candidate with explicit lineage | PR #106 was the original invalidated battle; PR #107 reviewed identical target bytes and produced the retained findings. Fixing lineage and transfer proof are still required. |
 | #108 | candidate | Workflow, null-ordering, and atomicity findings preserved; no automatic promotion. |
 | #104, #97 | observer only | Comparison/certification observers add evidence, not a new transferable defect mechanism. |
 
