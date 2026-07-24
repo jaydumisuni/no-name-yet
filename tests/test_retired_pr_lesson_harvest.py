@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import json
 from pathlib import Path
 
@@ -14,6 +15,25 @@ RETROSPECTIVE_LESSONS = {
     "cpl-adjudication-noise-20260724": "cpl-adjudication-noise-20260724.json",
     "review-evidence-integrity-20260724": "review-evidence-integrity-20260724.json",
     "preserve-before-delete-20260724": "preserve-before-delete-20260724.json",
+}
+EXPECTED_CANDIDATE_IDS = {
+    "pr107-editor-invalid-fallback",
+    "pr107-keystroke-expensive-render",
+    "pr108-frozen-sha-enforcement",
+    "pr108-incomplete-council-success-gate",
+    "pr108-null-guard-before-side-effects",
+    "pr108-atomic-check-update",
+    "pr133-mobile-critical-control-proof",
+}
+EXPECTED_SOURCE_COUNTS = {107: 2, 108: 4, 133: 1}
+EXPECTED_REJECTED_DISPOSITIONS = {
+    ((141,), "duplicate"),
+    ((105,), "superseded"),
+    ((65, 47), "superseded"),
+    ((132,), "design_reference"),
+    ((124, 125, 126, 127, 128), "accepted_via_pr_130"),
+    ((118, 117, 116, 115, 114, 113), "evidence_only"),
+    ((104, 97), "observer_only"),
 }
 
 
@@ -54,6 +74,8 @@ def test_unproven_findings_remain_candidates_or_benchmarks() -> None:
     assert record["automatic_promotions"] == 0
     assert record["automatic_merges"] == 0
     assert len(candidates) == 7
+    assert {item["candidate_id"] for item in candidates} == EXPECTED_CANDIDATE_IDS
+    assert Counter(item["source_pr"] for item in candidates) == EXPECTED_SOURCE_COUNTS
     assert {item["status"] for item in candidates} == {"needs_lineage", "benchmark_only"}
     assert not any(item.get("status") == "accepted" for item in candidates)
     assert all(item.get("missing_gates") for item in candidates)
@@ -66,8 +88,14 @@ def test_unproven_findings_remain_candidates_or_benchmarks() -> None:
     assert invalid_fallback["original_battle_pr"] == 106
     assert invalid_fallback["reviewed_replacement_pr"] == 107
     assert expensive_render["source_prs"] == [106, 107]
-    assert by_id["pr108-frozen-sha-enforcement"]["source_pr"] == 108
     assert by_id["pr133-mobile-critical-control-proof"]["status"] == "benchmark_only"
+
+    actual_dispositions = {
+        (tuple(item["prs"]), item["disposition"])
+        for item in record["rejected_or_duplicate_sources"]
+    }
+    assert actual_dispositions == EXPECTED_REJECTED_DISPOSITIONS
+    assert all(item.get("reason") for item in record["rejected_or_duplicate_sources"])
 
 
 def test_harvest_accounts_for_every_branch_retirement_pr_group() -> None:
