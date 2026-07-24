@@ -18,15 +18,16 @@ RETROSPECTIVE_LESSONS = {
 
 
 def _read_json(path: Path) -> dict:
+    """Read one UTF-8 JSON record from the repository."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_retrospective_lessons_are_proof_bound_and_not_auto_promoted() -> None:
+def test_retrospective_lessons_are_accepted_proof_bound_and_not_automatic() -> None:
     for lesson_id, filename in RETROSPECTIVE_LESSONS.items():
         lesson = _read_json(LESSONS / filename)
         assert lesson["schema_version"] == "sergeant.accepted-lesson.v1"
         assert lesson["lesson_id"] == lesson_id
-        assert lesson["status"] == "promotion_ready"
+        assert lesson["status"] == "accepted"
         assert lesson["authority"]["promotion_mode"] == "owner_controlled_retrospective"
         assert lesson["authority"]["may_auto_promote"] is False
         assert lesson["authority"]["may_auto_merge"] is False
@@ -35,7 +36,11 @@ def test_retrospective_lessons_are_proof_bound_and_not_auto_promoted() -> None:
         assert lesson["promotion_gate"]["focused_regressions_present"] is True
         assert lesson["promotion_gate"]["clean_controls_present"] is True
         assert lesson["promotion_gate"]["historical_exact_head_proof_present"] is True
-        assert lesson["promotion_gate"]["retrospective_harvest_exact_head_pending"] is True
+        assert lesson["promotion_gate"]["retrospective_harvest_exact_head_pending"] is False
+        assert lesson["proof"]["retrospective_admission_proof_head"] == (
+            "8fae3921495ea8d0501f645a958878eb9ac81903"
+        )
+        assert "CodeRabbit" in lesson["proof"]["external_review_disposition"]
 
         for relative in lesson["implementation"]["files"]:
             assert (ROOT / relative).is_file(), relative
