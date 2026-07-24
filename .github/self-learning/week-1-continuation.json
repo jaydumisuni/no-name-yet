@@ -4,10 +4,10 @@
   "base_main": "3c5869b72198f7b5deaad93f0d701ccd5b4cc24b",
   "foundation_pr": 131,
   "cross_repository_intake_pr": 142,
-  "completed_rounds": ["week-1-run-9", "week-1-run-14", "week-1-run-29", "week-1-run-42"],
-  "remaining_controlled_rounds": 3,
-  "authorized_round": "day-5",
-  "next_round_authorized": true,
+  "completed_rounds": ["week-1-run-9", "week-1-run-14", "week-1-run-29", "week-1-run-42", "week-1-run-46"],
+  "remaining_controlled_rounds": 2,
+  "authorized_round": null,
+  "next_round_authorized": false,
   "priority_candidates": [],
   "priority_stage": "select_next_multilingual_round_from_rotated_pool",
   "accepted_lessons": 1,
@@ -18,20 +18,24 @@
   "normal_review_models_enabled": false,
   "proposal_publication": "owner_controlled",
   "latest_round": {
-    "round_id": "week-1-run-42",
-    "authority_head": "f8a2bae7aae531e505d64310361e06d16411bc9f",
-    "selected_languages": ["cpp", "ocaml", "ruby"],
-    "selected_repositories": ["bitcoin/bitcoin", "ocaml/dune", "rubocop/rubocop"],
+    "round_id": "week-1-run-46",
+    "day": 5,
+    "authority_head": "9486736fc8de29c2af3854f2cbeba401137e4bbc",
+    "selected_languages": ["cpp", "nim", "ruby"],
+    "selected_repositories": ["bitcoin/bitcoin", "nim-lang/nimble", "rubocop/rubocop"],
     "state_counts": {
-      "rejected": 1,
-      "truth_revealed": 2
+      "rejected": 3
     },
-    "worker_error_cases": 2,
+    "planned_cases": 3,
+    "candidate_shortfall": false,
+    "worker_error_cases": 0,
     "proposal_count": 0,
-    "artifact_size_bytes": 233301,
-    "artifact_sha256": "ef8d0e35362c87bfa70982d0db767f52bc1ed46298f114b0f78b2b71dbd3bb06",
-    "durable_copy": "google-drive:1n_EUg_qXPw_y0Pt3bXXA4BY0RuOHW6JZ",
-    "durable_replay_verified": true
+    "artifact_size_bytes": 283079,
+    "artifact_sha256": "52869b392270d19ed0bcb4cdc90c54982aba3b36f223e98b58504b79d7a5be2c",
+    "github_artifact_id": 8588590240,
+    "durable_copy": "google-drive:16GcMKYIxlpZ3yccoP1iKPAstOln39iji",
+    "durable_replay_verified": true,
+    "byte_identical_replay_verified": true
   },
   "latest_promotion": {
     "lesson_id": "lumi-token-origin-20260723",
@@ -42,5 +46,5 @@
     "hidden_holdout_passed": true,
     "canonical_path_wired": true
   },
-  "notes": "Round 4 is durably preserved and recorded once in history. Day 5 is authorized for a fresh multilingual round. Current tier remains unchanged because the last three-round performance window does not satisfy the adaptive promotion recall threshold. Models remain disabled in normal review, and no workflow has promotion or merge authority."
+  "notes": "Day 5 is now counted complete after independent GitHub and Google Drive downloads matched at 283079 bytes, SHA-256 52869b392270d19ed0bcb4cdc90c54982aba3b36f223e98b58504b79d7a5be2c, and exact raw bytes. All three proposed lessons were rejected by Defender. Two controlled rounds remain. A later round still requires explicit label and START_CONTROLLED_SELF_LEARNING commit authorization."
 }
