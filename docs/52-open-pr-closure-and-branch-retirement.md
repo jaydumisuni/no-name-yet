@@ -10,7 +10,7 @@ Closing and preserving history are not sufficient by themselves. Before branch d
 
 - **#141 — external-repository learning memory:** superseded by `AGENTS.md`, `docs/51-cross-repository-learning-intake.md`, `main_review/cross_repo_learning.py`, the governed source registry, tests, and the completed Week 1 records now on `main`.
 - **#105 — deterministic permanent-officer council:** superseded by the permanent officer implementation, doctrine, tests, and campaign integration on `main`.
-- **#96 — Cpl finding adjudication experiment:** the proven finding-reconciliation and noise-governance lesson was implemented and merged through PR #102. The old diverged branch must not be merged, but its generalized lesson is preserved in `.github/self-learning/lessons/cpl-adjudication-noise-20260724.json`.
+- **#96 — Cpl finding adjudication experiment:** the proven finding-reconciliation and noise-governance lesson was implemented and merged through PR #102. The old diverged branch must not be merged, but the closed PR remains a future design reference for model-council adjudication if models are re-enabled, while its generalized proven lesson is preserved in `.github/self-learning/lessons/cpl-adjudication-noise-20260724.json`.
 - **#65 — Sergeant 0.3.2 Command Center hardening:** superseded by later integrated Command Center and 0.4.1 work.
 - **#47 — V2 public wording:** superseded by current README, CLI branding, and later release documentation.
 
