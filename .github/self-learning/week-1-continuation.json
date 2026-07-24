@@ -6,10 +6,10 @@
   "cross_repository_intake_pr": 142,
   "completed_rounds": ["week-1-run-9", "week-1-run-14", "week-1-run-29", "week-1-run-42"],
   "remaining_controlled_rounds": 3,
-  "authorized_round": null,
-  "next_round_authorized": false,
+  "authorized_round": "day-5",
+  "next_round_authorized": true,
   "priority_candidates": [],
-  "priority_stage": "review_rate_limited_cases_and_select_next_round",
+  "priority_stage": "select_next_multilingual_round_from_rotated_pool",
   "accepted_lessons": 1,
   "accepted_lesson_ids": ["lumi-token-origin-20260723"],
   "owner_controlled_promotions": 1,
@@ -42,5 +42,5 @@
     "hidden_holdout_passed": true,
     "canonical_path_wired": true
   },
-  "notes": "Round 4 is durably preserved. Bitcoin was rejected by Defender. Dune and RuboCop remained at truth_revealed because isolated Prosecutor/Defender requests were rate-limited, so no proposal or lesson was accepted. Three controlled rounds remain. A future model-learning round still requires explicit label and START_CONTROLLED_SELF_LEARNING commit authorization."
+  "notes": "Round 4 is durably preserved and recorded once in history. Day 5 is authorized for a fresh multilingual round. Current tier remains unchanged because the last three-round performance window does not satisfy the adaptive promotion recall threshold. Models remain disabled in normal review, and no workflow has promotion or merge authority."
 }
