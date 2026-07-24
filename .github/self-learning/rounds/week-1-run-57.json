@@ -1,0 +1,81 @@
+{
+  "schema_version": "sergeant.controlled-learning-round-record.v1",
+  "round_id": "week-1-run-57",
+  "day": 7,
+  "authority_head": "73ff13e2900e9c1349b581726c2dff2889be788a",
+  "target_branch": "train/controlled-learning-week-1-continuation",
+  "github_run_id": 30076534648,
+  "counted_as_completed_round": true,
+  "selected_cases": [
+    {
+      "case_id": "learn-ad4c9023d789",
+      "repository": "JuliaData/DataFrames.jl",
+      "language": "julia",
+      "private_count": 40,
+      "defective_ref": "96839313f523e98b894459f4bba959c21febd7f3",
+      "fixing_ref": "34d87369bd563cf81b63e99d16a5013d6c4024b3",
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "state": "truth_revealed",
+      "worker_errors": {
+        "teacher": "HTTP 429 Too Many Requests"
+      }
+    },
+    {
+      "case_id": "learn-5fb013a5ae30",
+      "repository": "grafana/grafana",
+      "language": "go",
+      "private_count": 70,
+      "defective_ref": "6f47bfc7643062bd9fe6459e09fc024066ecc590",
+      "fixing_ref": "ca30b490d1f8bbc1e253192258c658eddaa35c1a",
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "state": "truth_revealed",
+      "worker_errors": {
+        "teacher": "HTTP 429 Too Many Requests"
+      }
+    },
+    {
+      "case_id": "learn-2c260073b43e",
+      "repository": "mirage/ocaml-cohttp",
+      "language": "ocaml",
+      "private_count": 90,
+      "defective_ref": "12ca7f04a79e5a63a909667646dcd3eb19f547ed",
+      "fixing_ref": "64c57114cbc9eb43679ffe47264902cc7c3ca6de",
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "state": "rejected",
+      "reason": "Defender found that transfer encoding remained observable through headers and the accessor, with no demonstrated behavioral regression or concrete broken input/output case."
+    }
+  ],
+  "state_counts": {
+    "rejected": 1,
+    "truth_revealed": 2
+  },
+  "planned_cases": 3,
+  "planned_private_count": 200,
+  "candidate_shortfall": false,
+  "worker_error_cases": 2,
+  "proposal_count": 0,
+  "accepted_proposals": 0,
+  "automatic_promotions": 0,
+  "automatic_merges": 0,
+  "artifact": {
+    "github_actions_artifact_id": 8590175080,
+    "name": "controlled-self-learning-week-1-run-57",
+    "size_bytes": 275849,
+    "sha256": "066ae470b7155279816bc084beeb1755a4e6fdfbbb1e24a01633338e71ee7c6b",
+    "google_drive_file_id": "1hzhBwDWn1BEureVOWLjYC3zc9DP9UpU_",
+    "google_drive_size_bytes": 275849,
+    "google_drive_sha256": "066ae470b7155279816bc084beeb1755a4e6fdfbbb1e24a01633338e71ee7c6b",
+    "byte_identical_replay_verified": true,
+    "content_replay_verified": true
+  },
+  "authority": {
+    "normal_review_models_enabled": false,
+    "promotion_mode": "owner_controlled",
+    "automatic_promotion_authority": false,
+    "automatic_merge_authority": false
+  },
+  "next_gate": "The controlled week may close after this exact replay record. The two rate-limited cases remain incomplete evidence and the rejected OCaml proposal must not be promoted."
+}

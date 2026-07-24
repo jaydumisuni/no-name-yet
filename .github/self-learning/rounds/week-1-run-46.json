@@ -1,0 +1,71 @@
+{
+  "schema_version": "sergeant.controlled-learning-round-record.v1",
+  "round_id": "week-1-run-46",
+  "day": 5,
+  "authority_head": "9486736fc8de29c2af3854f2cbeba401137e4bbc",
+  "target_branch": "train/controlled-learning-week-1-continuation",
+  "github_run_id": 30072416936,
+  "selected_cases": [
+    {
+      "case_id": "learn-61f8d18b9773",
+      "repository": "bitcoin/bitcoin",
+      "language": "cpp",
+      "defective_ref": "1af46cff947802828ee15dccc0ea1d603074cde7",
+      "fixing_ref": "c0bfe72f6e1f63e05772eda959137b3d0bbbf6c3",
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "council_state": "rejected",
+      "reason": "Defender found no proven behavioral defect or downstream breakage from the string_view API change."
+    },
+    {
+      "case_id": "learn-c5fab3ee3f29",
+      "repository": "nim-lang/nimble",
+      "language": "nim",
+      "defective_ref": "a399f502dec7ffcd905c1cf54b13274ad990bada",
+      "fixing_ref": "30524f71b5dfc807d56ee6affaa7c730094dbcc1",
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "council_state": "rejected",
+      "reason": "Defender found no evidence that binDir had previously violated a behavioral contract."
+    },
+    {
+      "case_id": "learn-d79233a4196f",
+      "repository": "rubocop/rubocop",
+      "language": "ruby",
+      "defective_ref": "71133c2b313b4dec22ce7ad964970cf43b84ed20",
+      "fixing_ref": "8d653bba28f02bccd38b90eed88a58168f9cc3c0",
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "council_state": "rejected",
+      "reason": "Teacher and Prosecutor generalized inconsistent mechanisms, and Defender did not establish a sufficiently evidenced reusable lesson."
+    }
+  ],
+  "state_counts": {
+    "rejected": 3
+  },
+  "planned_cases": 3,
+  "candidate_shortfall": false,
+  "worker_error_cases": 0,
+  "proposal_count": 0,
+  "accepted_proposals": 0,
+  "automatic_promotions": 0,
+  "automatic_merges": 0,
+  "artifact": {
+    "github_actions_artifact_id": 8588590240,
+    "name": "controlled-self-learning-week-1-run-46",
+    "size_bytes": 283079,
+    "sha256": "52869b392270d19ed0bcb4cdc90c54982aba3b36f223e98b58504b79d7a5be2c",
+    "google_drive_file_id": "16GcMKYIxlpZ3yccoP1iKPAstOln39iji",
+    "google_drive_size_bytes": 283079,
+    "google_drive_sha256": "52869b392270d19ed0bcb4cdc90c54982aba3b36f223e98b58504b79d7a5be2c",
+    "byte_identical_replay_verified": true,
+    "content_replay_verified": true
+  },
+  "authority": {
+    "normal_review_models_enabled": false,
+    "promotion_mode": "owner_controlled",
+    "automatic_promotion_authority": false,
+    "automatic_merge_authority": false
+  },
+  "next_gate": "Day 5 may be counted complete only after this exact GitHub-to-Drive digest and byte replay. A later round still requires a fresh self-learning-authorized label and START_CONTROLLED_SELF_LEARNING commit."
+}

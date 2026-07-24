@@ -16,7 +16,7 @@
     "https://github.com/jaydumisuni/Sergeant/actions/runs/30005308635",
     "https://github.com/jaydumisuni/lumi-dm/commit/a8d572258a4d53e9620970e5236ab21aa903580f"
   ],
-  "summary": "The pre-fix extension attached its bearer credential to any loopback-host API request instead of binding it to the exact configured Lumi server origin. Current model-free Sergeant returned the same generic missing-tests finding for the vulnerable snapshot and the fixed clean control.",
+  "summary": "The pre-fix extension attached its bearer credential to any loopback-host API request instead of binding it to the exact configured Lumi server origin. The frozen model-free review approved the vulnerable snapshot with no admitted findings, while isolated Teacher, Prosecutor and Defender workers later generalized the destination-binding lesson.",
   "defect_confirmed": true,
   "fix_verified": true,
   "blind_review_possible": true,
@@ -28,6 +28,37 @@
     "Distinguish vulnerable and repaired code states instead of emitting an identical generic assurance finding.",
     "Create clean controls for same host with different port, scheme, subdomain, IPv4 or IPv6 loopback, malformed server configuration, redirects, Request objects, and existing credential headers."
   ],
+  "intake_signal_digest": "a65aa78e63d4dfba99e1e273dc6cd1439cdf4a7d8a9edada9433bbbc5888dfcd",
+  "learning_state": "council_complete",
+  "training_round": "week-1-run-29",
+  "training_authority_head": "1cb6a528b0d497fc7146c17b316cdee5e1f1d3ab",
+  "blind_result": {
+    "verdict": "APPROVE",
+    "admitted_findings": 0,
+    "advisory_findings": 0,
+    "model_calls": 0
+  },
+  "council": {
+    "teacher": "complete",
+    "prosecutor": "complete",
+    "defender": "complete",
+    "defender_verdict": "supports",
+    "proposal_state": "council_complete"
+  },
+  "generalized_candidate_lesson": "Authentication credentials must be attached only when a parsed request destination exactly matches an explicitly configured trusted origin. Host categories, loopback status, path prefixes, similar schemes, subdomains, or alternate ports are insufficient trust boundaries.",
+  "promotion_requirements": {
+    "executable_negative_controls": "pending",
+    "clean_counterexamples": "pending",
+    "unrelated_transfer": "pending",
+    "hidden_holdout": "pending"
+  },
+  "artifact": {
+    "size_bytes": 278541,
+    "sha256": "8f4abd06a6b5eee1f3a52af4fbc1ca9a0a45c7390ab512ef260224e568403048",
+    "google_drive_file_id": "1cqN8sLaZBAMbnk5sAQSMvBeAYfE_Q4iQ",
+    "recovery_replay_verified": true
+  },
+  "accepted_lesson": false,
   "authority": {
     "may_auto_promote": false,
     "may_auto_merge": false,

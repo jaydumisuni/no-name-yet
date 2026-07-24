@@ -1,0 +1,74 @@
+{
+  "schema_version": "sergeant.controlled-learning-round-record.v1",
+  "round_id": "week-1-run-29",
+  "authority_head": "1cb6a528b0d497fc7146c17b316cdee5e1f1d3ab",
+  "target_branch": "train/controlled-learning-week-1-continuation",
+  "selected_cases": [
+    {
+      "case_id": "learn-b4647b541555",
+      "repository": "prometheus/prometheus",
+      "language": "go",
+      "private_count": 20,
+      "blind_verdict": "APPROVE",
+      "council_state": "rejected",
+      "reason": "Defender disproved the proposed lesson"
+    },
+    {
+      "case_id": "learn-0e620d48e9cb",
+      "repository": "realm/realm-swift",
+      "language": "swift",
+      "private_count": 20,
+      "blind_verdict": "APPROVE",
+      "council_state": "council_complete"
+    },
+    {
+      "case_id": "learn-lumi-token-origin-20260723",
+      "repository": "jaydumisuni/lumi-dm",
+      "language": "javascript",
+      "private_count": 60,
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "council_state": "council_complete",
+      "teacher_confidence": 0.98,
+      "prosecutor_confidence": 0.98,
+      "defender_confidence": 1.0,
+      "defender_verdict": "supports",
+      "generalized_candidate_lesson": "Attach authentication credentials only when the parsed request destination exactly matches an explicitly configured trusted origin. Broad loopback, hostname, path-prefix, scheme, subdomain, or alternate-port checks are insufficient credential boundaries.",
+      "positive_control_scope": [
+        "exact configured origin and API path",
+        "Request object at exact configured origin",
+        "existing Authorization header remains unmodified"
+      ],
+      "negative_control_scope": [
+        "same host with different port",
+        "same host with different scheme",
+        "subdomain",
+        "IPv4 and IPv6 loopback aliases",
+        "malformed configured server",
+        "non-API path",
+        "redirect and destination changes"
+      ],
+      "transfer_languages_proposed": ["python", "go", "rust", "java", "csharp"],
+      "accepted_lesson": false,
+      "controls_status": "pending",
+      "transfer_status": "pending",
+      "hidden_holdout_status": "pending"
+    }
+  ],
+  "state_counts": {
+    "council_complete": 2,
+    "rejected": 1
+  },
+  "proposal_count": 2,
+  "worker_error_cases": 0,
+  "automatic_promotions": 0,
+  "automatic_merges": 0,
+  "artifact": {
+    "github_actions_artifact_id": 8565215414,
+    "size_bytes": 278541,
+    "sha256": "8f4abd06a6b5eee1f3a52af4fbc1ca9a0a45c7390ab512ef260224e568403048",
+    "google_drive_file_id": "1cqN8sLaZBAMbnk5sAQSMvBeAYfE_Q4iQ",
+    "google_drive_recovery_replay_verified": true
+  },
+  "next_gate": "Implement executable controls, then require unrelated transfer and hidden holdout before any permanent detector or officer is admitted."
+}

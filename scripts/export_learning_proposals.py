@@ -11,6 +11,16 @@ from typing import Any
 ALLOWED_STATES = {"council_complete", "controls_passed", "transfer_passed", "promotion_ready"}
 
 
+def _source_fields(case: dict[str, Any]) -> dict[str, Any]:
+    source_pr = case.get("source_pr")
+    source_event_url = str(case.get("source_event_url") or "").strip()
+    if isinstance(source_pr, int) and source_pr > 0:
+        return {"source_pr": source_pr, "source_event_url": source_event_url or None}
+    if source_event_url:
+        return {"source_pr": None, "source_event_url": source_event_url}
+    raise ValueError(f"case {case.get('case_id')} lacks source_pr or source_event_url")
+
+
 def export(queue: dict[str, Any], output: Path) -> dict[str, Any]:
     root = output / str(queue["week_id"])
     root.mkdir(parents=True, exist_ok=True)
@@ -29,7 +39,7 @@ def export(queue: dict[str, Any], output: Path) -> dict[str, Any]:
             "authority_head": queue["authority_head"],
             "case_id": case["case_id"],
             "repository": case["repository"],
-            "source_pr": case["source_pr"],
+            **_source_fields(case),
             "language": case["language"],
             "defective_ref": case["defective_ref"],
             "fixing_ref": case["fixing_ref"],

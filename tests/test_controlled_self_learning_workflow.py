@@ -41,6 +41,15 @@ def test_round_authorization_precedes_and_gates_candidate_collection() -> None:
     assert 'echo "candidate_count=0" >> "$GITHUB_OUTPUT"' in validate
 
 
+def test_authorized_collection_includes_governed_direct_event_signals() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    validate = _job_block(workflow, "validate", next_job="learn")
+
+    assert "--signals-dir .github/self-learning/signals" in validate
+    assert "--pool-json .github/self-learning/week-1-pool.json" in validate
+    assert validate.index("--signals-dir") < validate.index("--pool-json")
+
+
 def test_model_free_review_and_bounded_worker_permissions_are_preserved() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     learn = _job_block(workflow, "learn", next_job="publish")

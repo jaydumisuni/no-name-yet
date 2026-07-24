@@ -11,6 +11,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from main_review.cross_repo_learning import CrossRepositorySignalError, classify_signal
+
 try:
     from scripts import select_opaque_transfer_candidates as base
     from scripts.select_opaque_transfer_candidates_v8 import _qualifies_v8
@@ -20,6 +22,14 @@ except ImportError:  # Direct execution as python scripts/<name>.py.
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 MAX_CANDIDATES_PER_REPOSITORY = 8
+PROCESSED_SIGNAL_STATES = {
+    "council_complete",
+    "controls_passed",
+    "transfer_passed",
+    "promotion_ready",
+    "accepted",
+    "rejected",
+}
 LIFECYCLE_WORDS = {
     "async", "await", "thread", "lock", "queue", "session", "runtime",
     "endpoint", "connection", "stream", "socket", "lifecycle", "state",
@@ -57,6 +67,73 @@ def _lifecycle_risk(paths: list[str]) -> bool:
     for path in paths:
         words.update(re.split(r"[^a-z0-9]+", path.lower()))
     return bool(words & LIFECYCLE_WORDS)
+
+
+def _bounded_positive_int(value: object, fallback: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return max(1, fallback)
+    return max(1, number)
+
+
+def _bounded_novelty(value: object, fallback: float = 0.85) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = fallback
+    return max(0.0, min(1.0, number))
+
+
+def _signal_candidates(signals_dir: Path | None) -> list[dict[str, Any]]:
+    """Load unprocessed, provenance-complete direct-event candidates."""
+
+    if signals_dir is None or not signals_dir.is_dir():
+        return []
+    selected: list[dict[str, Any]] = []
+    for path in sorted(signals_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"invalid learning signal {path}: {error}") from error
+        if not isinstance(payload, dict):
+            raise ValueError(f"learning signal must be an object: {path}")
+        learning_state = str(payload.get("learning_state") or "collected").strip().lower()
+        if learning_state in PROCESSED_SIGNAL_STATES:
+            continue
+        try:
+            classification = classify_signal(payload)
+        except CrossRepositorySignalError as error:
+            raise ValueError(f"invalid learning signal {path}: {error}") from error
+        if classification.get("disposition") != "candidate_ready":
+            continue
+        candidate = dict(classification["candidate"])
+        scored_paths = list(candidate["scored_paths"])
+        candidate.update({
+            "changed_files": _bounded_positive_int(payload.get("changed_files"), len(scored_paths)),
+            "changed_lines": _bounded_positive_int(payload.get("changed_lines"), len(scored_paths) * 40),
+            "package_count": _bounded_positive_int(payload.get("package_count"), _package_count(scored_paths)),
+            "dependency_depth": max(0, int(payload.get("dependency_depth", _dependency_depth(scored_paths)) or 0)),
+            "cross_component": bool(payload.get("cross_component")),
+            "concurrency_or_lifecycle": bool(payload.get("concurrency_or_lifecycle")),
+            "security_or_integrity": bool(payload.get("security_or_integrity")),
+            "defect_novelty": _bounded_novelty(payload.get("defect_novelty")),
+            "signal_digest": classification["signal_digest"],
+            "signal_path": path.as_posix(),
+            "learning_objectives": [
+                str(item).strip()
+                for item in payload.get("learning_objectives", [])
+                if str(item).strip()
+            ],
+            "direct_event_candidate": True,
+        })
+        selected.append(candidate)
+    selected.sort(key=lambda row: (
+        -float(row.get("defect_novelty", 0.0) or 0.0),
+        str(row.get("repository") or ""),
+        str(row.get("case_id") or ""),
+    ))
+    return selected
 
 
 def _candidate_for_repo(
@@ -129,7 +206,10 @@ def _candidate_for_repo(
     return None
 
 
-def collect(*, reviewer: str, week_id: str, pool: list[dict[str, Any]], limit: int) -> dict[str, Any]:
+def collect(
+    *, reviewer: str, week_id: str, pool: list[dict[str, Any]], limit: int,
+    signals_dir: Path | None = None,
+) -> dict[str, Any]:
     reviewer = reviewer.lower().strip()
     if not _SHA.fullmatch(reviewer):
         raise ValueError("reviewer must be a full frozen commit SHA")
@@ -144,7 +224,19 @@ def collect(*, reviewer: str, week_id: str, pool: list[dict[str, Any]], limit: i
 
     used = base._prior_repositories(week_id)
     selected: list[dict[str, Any]] = []
+    direct_candidates = _signal_candidates(signals_dir)
+    for candidate in direct_candidates:
+        if len(selected) >= limit:
+            break
+        case_id = str(candidate.get("case_id") or "")
+        if case_id and any(row.get("case_id") == case_id for row in selected):
+            continue
+        selected.append(candidate)
+        used.add(str(candidate["repository"]))
+
     for lane in pool:
+        if len(selected) >= limit:
+            break
         language = str(lane.get("language") or lane.get("lane") or "unknown").strip().lower()
         suffixes = {str(value).lower() for value in lane.get("suffixes", [])}
         repositories = [str(value) for value in lane.get("repos", [])]
@@ -162,8 +254,6 @@ def collect(*, reviewer: str, week_id: str, pool: list[dict[str, Any]], limit: i
                 selected.append(candidate)
                 used.add(repository)
                 break
-        if len(selected) >= limit:
-            break
 
     return {
         "schema_version": "sergeant.github-learning-candidates.v1",
@@ -176,6 +266,7 @@ def collect(*, reviewer: str, week_id: str, pool: list[dict[str, Any]], limit: i
         "feature_enablement_without_defect_rejected": True,
         "production_source_only": True,
         "max_candidates_per_repository": MAX_CANDIDATES_PER_REPOSITORY,
+        "direct_signal_candidate_count": sum(1 for row in selected if row.get("direct_event_candidate") is True),
         "candidate_count": len(selected),
         "candidates": selected,
     }
@@ -186,6 +277,7 @@ def main() -> int:
     parser.add_argument("--reviewer", required=True)
     parser.add_argument("--week-id", required=True)
     parser.add_argument("--pool-json", type=Path, required=True)
+    parser.add_argument("--signals-dir", type=Path, default=Path(".github/self-learning/signals"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=6)
     args = parser.parse_args()
@@ -197,10 +289,15 @@ def main() -> int:
         week_id=args.week_id,
         pool=pool,
         limit=max(1, min(12, args.limit)),
+        signals_dir=args.signals_dir,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"week_id": args.week_id, "candidate_count": packet["candidate_count"]}, sort_keys=True))
+    print(json.dumps({
+        "week_id": args.week_id,
+        "candidate_count": packet["candidate_count"],
+        "direct_signal_candidate_count": packet["direct_signal_candidate_count"],
+    }, sort_keys=True))
     return 0
 
 

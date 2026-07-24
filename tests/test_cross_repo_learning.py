@@ -11,6 +11,9 @@ from main_review.cross_repo_learning import (
     to_queue_candidate,
 )
 from main_review.self_learning_queue import QueueContractError, add_case, new_queue
+from scripts.collect_github_learning_candidates import _signal_candidates
+from scripts.export_learning_proposals import export as export_proposals
+from scripts.run_controlled_self_learning import _blind_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -123,12 +126,77 @@ def test_real_lumi_token_origin_miss_is_candidate_ready_but_unpromoted() -> None
     assert candidate["private_count"] == 40
     assert signal["authority"]["may_auto_promote"] is False
     assert signal["authority"]["may_auto_merge"] is False
+    assert signal["accepted_lesson"] is False
 
     queue = new_queue("week-1-lumi", authority_head="d" * 40, target_branch="train/cross-repo")
     case = add_case(queue, candidate)
     assert case["state"] == "collected"
     assert queue["authority"]["may_auto_promote"] is False
     assert queue["authority"]["may_auto_merge"] is False
+
+
+def test_direct_signal_collector_prioritizes_an_unprocessed_lumi_case(tmp_path: Path) -> None:
+    signals = tmp_path / "signals"
+    signals.mkdir()
+    signal = json.loads(LUMI_TOKEN_ORIGIN_SIGNAL.read_text(encoding="utf-8"))
+    signal["learning_state"] = "collected"
+    (signals / "lumi.json").write_text(json.dumps(signal), encoding="utf-8")
+
+    candidates = _signal_candidates(signals)
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["case_id"] == "learn-lumi-token-origin-20260723"
+    assert candidate["direct_event_candidate"] is True
+    assert candidate["source_event_url"].endswith("a8d572258a4d53e9620970e5236ab21aa903580f")
+    assert candidate["provenance_complete"] is True
+    assert candidate["security_or_integrity"] is True
+    assert candidate["learning_objectives"]
+
+
+def test_processed_direct_signal_is_not_retrained_in_the_next_round(tmp_path: Path) -> None:
+    signals = tmp_path / "signals"
+    signals.mkdir()
+    signal = json.loads(LUMI_TOKEN_ORIGIN_SIGNAL.read_text(encoding="utf-8"))
+    assert signal["learning_state"] == "council_complete"
+    (signals / "lumi.json").write_text(json.dumps(signal), encoding="utf-8")
+
+    assert _signal_candidates(signals) == []
+
+
+def test_direct_event_lineage_survives_blind_manifest_and_proposal_export(tmp_path: Path) -> None:
+    signal = json.loads(LUMI_TOKEN_ORIGIN_SIGNAL.read_text(encoding="utf-8"))
+    candidate = classify_signal(signal)["candidate"]
+    assert candidate is not None
+
+    manifest = _blind_manifest(candidate, tmp_path / "checkout", "f" * 40)
+    manifest_case = manifest["cases"][0]
+    assert manifest_case["source_pr"] is None
+    assert manifest_case["source_lineage"] == signal["source_event_url"]
+    assert manifest_case["source_event_url"] == signal["source_event_url"]
+
+    queue = {
+        "week_id": "week-direct",
+        "authority_head": "f" * 40,
+        "cases": [{
+            **candidate,
+            "state": "council_complete",
+            "artifacts": {
+                "blind_result": {"digest": "blind"},
+                "truth_packet": {"digest": "truth"},
+            },
+            "workers": {},
+        }],
+    }
+    index = export_proposals(queue, tmp_path / "proposals")
+    assert index["proposal_count"] == 1
+    proposal = json.loads(
+        (tmp_path / "proposals" / "week-direct" / f"{candidate['case_id']}.json").read_text(encoding="utf-8")
+    )
+    assert proposal["source_pr"] is None
+    assert proposal["source_event_url"] == signal["source_event_url"]
+    assert proposal["authority"]["may_auto_promote"] is False
+    assert proposal["authority"]["may_auto_merge"] is False
 
 
 def test_direct_candidate_conversion_fails_without_full_learning_boundary() -> None:

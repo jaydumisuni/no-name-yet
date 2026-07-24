@@ -116,6 +116,7 @@ jobs:
           python scripts/collect_github_learning_candidates.py \
             --reviewer "${AUTHORITY_HEAD}" \
             --week-id "${WEEK_ID}" \
+            --signals-dir .github/self-learning/signals \
             --pool-json .github/self-learning/week-1-pool.json \
             --limit 6 \
             --output "build/${WEEK_ID}/candidates.json" \

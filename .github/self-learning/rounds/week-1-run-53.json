@@ -1,0 +1,77 @@
+{
+  "schema_version": "sergeant.controlled-learning-round-record.v1",
+  "round_id": "week-1-run-53",
+  "day": 6,
+  "authority_head": "65cc6004754a7e83b1f6e8719000d0c398eae02f",
+  "target_branch": "train/controlled-learning-week-1-continuation",
+  "github_run_id": 30076017656,
+  "counted_as_completed_round": true,
+  "selected_cases": [
+    {
+      "case_id": "learn-d52e78d491d1",
+      "repository": "livebook-dev/livebook",
+      "language": "elixir",
+      "private_count": 40,
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "state": "truth_revealed",
+      "worker_errors": {
+        "defender": "HTTP 429 Too Many Requests"
+      }
+    },
+    {
+      "case_id": "learn-8329087d2398",
+      "repository": "emqx/emqx",
+      "language": "erlang",
+      "private_count": 40,
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "state": "truth_revealed",
+      "worker_errors": {
+        "teacher": "HTTP 429 Too Many Requests"
+      }
+    },
+    {
+      "case_id": "learn-8293bcde8fe9",
+      "repository": "pallets/flask",
+      "language": "python",
+      "private_count": 20,
+      "blind_verdict": "APPROVE",
+      "blind_admitted_findings": 0,
+      "state": "truth_revealed",
+      "worker_errors": {
+        "prosecutor": "HTTP 429 Too Many Requests",
+        "defender": "HTTP 429 Too Many Requests"
+      }
+    }
+  ],
+  "state_counts": {
+    "truth_revealed": 3
+  },
+  "planned_cases": 3,
+  "planned_private_count": 100,
+  "candidate_shortfall": false,
+  "worker_error_cases": 3,
+  "proposal_count": 0,
+  "accepted_proposals": 0,
+  "automatic_promotions": 0,
+  "automatic_merges": 0,
+  "artifact": {
+    "github_actions_artifact_id": 8589935198,
+    "name": "controlled-self-learning-week-1-run-53",
+    "size_bytes": 182369,
+    "sha256": "c3e4cbc931f6b259377281aaee9f335a9c80076f5865f51afd8ef7a39da06793",
+    "google_drive_file_id": "16i25KdtyNe4GYuqdR6spOC9Cwj5eetFh",
+    "google_drive_size_bytes": 182369,
+    "google_drive_sha256": "c3e4cbc931f6b259377281aaee9f335a9c80076f5865f51afd8ef7a39da06793",
+    "byte_identical_replay_verified": true,
+    "content_replay_verified": true
+  },
+  "authority": {
+    "normal_review_models_enabled": false,
+    "promotion_mode": "owner_controlled",
+    "automatic_promotion_authority": false,
+    "automatic_merge_authority": false
+  },
+  "next_gate": "The round is complete as preserved learning evidence, but no proposal may advance because every case has an incomplete isolated council caused by provider rate limits."
+}

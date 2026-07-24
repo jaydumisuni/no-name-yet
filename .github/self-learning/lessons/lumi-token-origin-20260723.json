@@ -1,0 +1,77 @@
+{
+  "schema_version": "sergeant.accepted-lesson.v1",
+  "lesson_id": "lumi-token-origin-20260723",
+  "status": "accepted",
+  "source": {
+    "repository": "jaydumisuni/lumi-dm",
+    "defective_ref": "8f63f832112a2e0772e954c3e0319109ce21b6a9",
+    "fixing_ref": "a8d572258a4d53e9620970e5236ab21aa903580f",
+    "scored_paths": ["browser-extension/security-shim.js"],
+    "blind_authority_head": "1cb6a528b0d497fc7146c17b316cdee5e1f1d3ab",
+    "blind_result": "APPROVE with zero admitted findings",
+    "learning_artifact_sha256": "8f4abd06a6b5eee1f3a52af4fbc1ca9a0a45c7390ab512ef260224e568403048",
+    "durable_evidence": "google-drive:1cqN8sLaZBAMbnk5sAQSMvBeAYfE_Q4iQ"
+  },
+  "generalized_rule": "Before attaching an Authorization credential to an outgoing request, bind the request destination to the exact configured trusted origin, including scheme, host, and port. Broad host categories, loopback membership, suffix matches, and path prefixes are insufficient trust boundaries.",
+  "implementation": {
+    "officer": "Medic",
+    "root_cause": "credential-attached-without-exact-destination-binding",
+    "detector": "main_review/static_credential_destination_review.py",
+    "canonical_path": "main_review/static_js_auth_context_review.py -> main_review/static_js_auth_chrome_review.py -> main_review/static_status_review.py -> external/static pr-review",
+    "candidate_implementation_head": "48034efa92fa4976bcd7d52234e458f9ad82cefb"
+  },
+  "proof": {
+    "positive_controls": [
+      "real Lumi pre-fix JavaScript snapshot",
+      "unrelated TypeScript host-category/path-prefix transfer",
+      "unrelated Python hostname/path-prefix transfer"
+    ],
+    "clean_controls": [
+      "real Lumi exact configured-origin repair",
+      "Python scheme/netloc equality",
+      "broad URL check without credential sink",
+      "fixed constant service client"
+    ],
+    "hidden_holdout": [
+      "MJS exact-origin alias clean control",
+      "MJS broad internal-subdomain allowlist defect"
+    ],
+    "canonical_integration": [
+      "canonical external review admits the real pre-fix root",
+      "canonical external review keeps the repaired snapshot clean"
+    ],
+    "tests": [
+      "tests/test_static_credential_destination_review.py",
+      "tests/test_credential_destination_canonical_path.py"
+    ],
+    "implementation_proof_head": "48034efa92fa4976bcd7d52234e458f9ad82cefb",
+    "promotion_authority_head": "d026221f173d909a38c876cf79f95df86a1aa4af",
+    "required_workflows": {
+      "CI": "success",
+      "Main Review": "success",
+      "Multiplatform Proof": "success",
+      "Standalone Service Proof": "success",
+      "Live GitHub Ingestion Proof": "success",
+      "Reviewer Comparison Proof": "success",
+      "Review Intelligence Proof": "success",
+      "Final Static Transfer Holdout": "success"
+    }
+  },
+  "authority": {
+    "promotion_mode": "owner_controlled",
+    "accepted_by": "explicit_owner_instruction",
+    "may_auto_promote": false,
+    "may_auto_merge": false,
+    "normal_review_models_required": false,
+    "final_verdict": "Sergeant"
+  },
+  "promotion_gate": {
+    "controls_passed": true,
+    "unrelated_repository_transfer_passed": true,
+    "unrelated_language_transfer_passed": true,
+    "hidden_holdout_passed": true,
+    "canonical_path_wired": true,
+    "durable_evidence_verified": true,
+    "promotion_record_exact_head_pending": false
+  }
+}
