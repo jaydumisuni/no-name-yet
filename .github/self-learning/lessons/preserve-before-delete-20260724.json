@@ -1,0 +1,65 @@
+{
+  "schema_version": "sergeant.accepted-lesson.v1",
+  "lesson_id": "preserve-before-delete-20260724",
+  "status": "accepted",
+  "source": {
+    "repository": "jaydumisuni/Sergeant",
+    "evidence_pr": 135,
+    "defective_ref": "44c8f47f4bb50a73ef3b4d81d7b849a5aab37dfd",
+    "fixing_ref": "e6413dcde505e42d5c4ae62653ceb0d9e3755591",
+    "merge_ref": "4ec6553ef287a660e923b8d9b5802e506907c37b",
+    "preserved_artifacts": 29,
+    "preserved_bytes": 13772291,
+    "deletions_authorized": 0
+  },
+  "generalized_rule": "A successful copy is not destructive-cleanup authority. Before deleting an artifact, workflow run, branch-only evidence item, or other recovery source, require a complete provenance ledger, matching byte length and cryptographic digest, successful recovery replay, content-equivalence proof, and explicit owner authorization naming the exact item.",
+  "implementation": {
+    "officer": "Auditor",
+    "root_cause": "destructive-cleanup-authorized-before-recovery-equivalence",
+    "files": [
+      "docs/50-actions-evidence-preservation.md",
+      "evidence/actions/2026-07-22-preservation-ledger.json",
+      "evidence/actions/2026-07-22-recovery-replay.json",
+      "main_review/actions_evidence.py",
+      "scripts/validate_actions_evidence.py"
+    ],
+    "tests": ["tests/test_actions_evidence.py"]
+  },
+  "proof": {
+    "positive_controls": [
+      "missing durable copy",
+      "size mismatch",
+      "digest mismatch",
+      "missing recovery replay",
+      "missing content-equivalence proof",
+      "missing exact owner authorization"
+    ],
+    "clean_controls": [
+      "complete preservation ledger with matching sizes and SHA-256 digests",
+      "replayed durable copy with matching content",
+      "explicitly named cleanup item after every prerequisite passes"
+    ],
+    "historical_result": "29 of 29 preserved artifacts matched recorded size and digest while cleanup and workflow-run deletion remained unauthorized.",
+    "exact_fix_head": "e6413dcde505e42d5c4ae62653ceb0d9e3755591",
+    "merged_fix": "4ec6553ef287a660e923b8d9b5802e506907c37b",
+    "retrospective_admission_proof_head": "8fae3921495ea8d0501f645a958878eb9ac81903",
+    "retrospective_proof_matrix": "CI, Main Review, Multiplatform Proof, Standalone Service Proof, Controlled Self-Learning Week 1 validation, Live GitHub Ingestion Proof, Reviewer Comparison Proof, Review Intelligence Proof, and Final Static Transfer Holdout passed.",
+    "external_review_disposition": "CodeRabbit selected the harvest files but the final incremental review was rate-limited; no completed new external review is claimed."
+  },
+  "authority": {
+    "promotion_mode": "owner_controlled_retrospective",
+    "accepted_by": "explicit_owner_instruction_to_inspect_and_add_proven_lessons",
+    "may_auto_promote": false,
+    "may_auto_merge": false,
+    "cleanup_authority": "explicit_owner_instruction_for_each_exact_item",
+    "final_verdict": "Sergeant"
+  },
+  "promotion_gate": {
+    "existing_model_free_implementation_verified": true,
+    "focused_regressions_present": true,
+    "clean_controls_present": true,
+    "durable_recovery_replay_present": true,
+    "historical_exact_head_proof_present": true,
+    "retrospective_harvest_exact_head_pending": false
+  }
+}

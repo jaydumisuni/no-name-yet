@@ -1,0 +1,70 @@
+{
+  "schema_version": "sergeant.accepted-lesson.v1",
+  "lesson_id": "review-evidence-integrity-20260724",
+  "status": "accepted",
+  "source": {
+    "repository": "jaydumisuni/Sergeant",
+    "battle_prs": [124, 125, 126, 127, 128],
+    "fixing_pr": 130,
+    "defective_ref": "4ec6553ef287a660e923b8d9b5802e506907c37b",
+    "fixing_ref": "fd426867c3f01773519d743be2c4d0efe8a85cfd",
+    "merge_ref": "3b1f1b97f046e693261087169b1457e08011c5e3",
+    "external_review": "CodeRabbit findings verified and repaired; malformed-row regression added after the focused repair review."
+  },
+  "generalized_rule": "Review and learning pipelines must treat evidence completeness, mandatory provenance, exact feature-state propagation, checkout semantics, and machine-readable output purity as correctness boundaries. Missing pages, malformed rows, optionalized provenance, partial checkout, or mixed logs and JSON must fail closed rather than produce a successful-looking result.",
+  "implementation": {
+    "officers": ["Auditor", "Judge", "Engineer"],
+    "root_cause": "incomplete-or-ambiguous-review-evidence-accepted-as-valid",
+    "files": [
+      "scripts/select_opaque_transfer_candidates.py",
+      "scripts/select_opaque_transfer_candidates_v8.py",
+      "main_review/training_manifest_provenance.py",
+      ".github/workflows/model-free-core-transfer-31.yml",
+      ".github/workflows/model-free-core-transfer-31-learned.yml"
+    ],
+    "tests": [
+      "tests/test_opaque_selector_pagination.py",
+      "tests/test_opaque_selector_v8.py",
+      "tests/test_training_manifest_provenance.py",
+      "tests/test_transfer_31_workflow_integrity.py"
+    ]
+  },
+  "proof": {
+    "positive_controls": [
+      "paginated changed-file retrieval",
+      "valid list containing a malformed file row",
+      "untouched-transfer record attempting to omit mandatory provenance",
+      "selector evidence missing a feature-enablement flag",
+      "exact learned-closure path requiring non-cone sparse checkout",
+      "workflow output containing logs before JSON"
+    ],
+    "clean_controls": [
+      "complete paginated retrieval below the GitHub boundary",
+      "well-formed file rows",
+      "provenance-complete transfer record",
+      "fully propagated selector evidence",
+      "pure JSON summary separated from diagnostic logs"
+    ],
+    "immutability": "Historical frozen scores and failed selector attempts remain evidence and were not rewritten by the repair.",
+    "exact_fix_head": "fd426867c3f01773519d743be2c4d0efe8a85cfd",
+    "merged_fix": "3b1f1b97f046e693261087169b1457e08011c5e3",
+    "retrospective_admission_proof_head": "8fae3921495ea8d0501f645a958878eb9ac81903",
+    "retrospective_proof_matrix": "CI, Main Review, Multiplatform Proof, Standalone Service Proof, Controlled Self-Learning Week 1 validation, Live GitHub Ingestion Proof, Reviewer Comparison Proof, Review Intelligence Proof, and Final Static Transfer Holdout passed.",
+    "external_review_disposition": "The underlying repair had a completed focused CodeRabbit review. CodeRabbit selected the retrospective harvest files, but the final incremental review was rate-limited; no additional completed review is claimed."
+  },
+  "authority": {
+    "promotion_mode": "owner_controlled_retrospective",
+    "accepted_by": "explicit_owner_instruction_to_inspect_and_add_proven_lessons",
+    "may_auto_promote": false,
+    "may_auto_merge": false,
+    "final_verdict": "Sergeant"
+  },
+  "promotion_gate": {
+    "existing_model_free_implementation_verified": true,
+    "focused_regressions_present": true,
+    "clean_controls_present": true,
+    "external_review_repair_present": true,
+    "historical_exact_head_proof_present": true,
+    "retrospective_harvest_exact_head_pending": false
+  }
+}

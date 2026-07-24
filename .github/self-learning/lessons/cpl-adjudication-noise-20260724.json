@@ -1,0 +1,65 @@
+{
+  "schema_version": "sergeant.accepted-lesson.v1",
+  "lesson_id": "cpl-adjudication-noise-20260724",
+  "status": "accepted",
+  "source": {
+    "repository": "jaydumisuni/Sergeant",
+    "evidence_pr": 96,
+    "fixing_pr": 102,
+    "defective_ref": "2a5f799591ebcc9071202b5576cd8ddcf39762df",
+    "fixing_ref": "b7b471bafadc062c95eae7a910a9a0702a8d8ed5",
+    "merge_ref": "3c6be1f063ac0f21f5519041b0f564bc59735833",
+    "blind_result": {
+      "recall": 1.0,
+      "false_negatives": 0,
+      "precision_before_correction": 0.538,
+      "verdict_accuracy_before_correction": 0.6
+    }
+  },
+  "generalized_rule": "Reconcile Cpl and model findings against deterministic Sergeant evidence before they affect the action gate. Matching reports are confirmations, minor or unsupported reports remain advisory, and a novel blocker or major requires verified evidence and independent support. Recompute the verdict after adjudication while preserving raw reports separately for audit.",
+  "implementation": {
+    "officer": "Cpl council under Sergeant authority",
+    "root_cause": "unadjudicated-council-findings-multiply-noise-and-distort-verdict",
+    "files": [
+      "main_review/cpl_council.py",
+      "main_review/cpl_noise.py",
+      "main_review/cpl_runtime.py",
+      "main_review/llm_review.py",
+      "main_review/pr_reviewer.py",
+      "main_review/review_benchmark.py"
+    ],
+    "tests": ["tests/test_cpl_noise_governor.py"]
+  },
+  "proof": {
+    "positive_controls": [
+      "deterministic findings restated by council models",
+      "failed model pass requiring reroute",
+      "rejected finding leaving a stale pass verdict"
+    ],
+    "clean_controls": [
+      "verified novel major with independent support remains actionable",
+      "minor and note findings remain visible as advisories",
+      "raw findings and route failures remain auditable"
+    ],
+    "replay": "Previous live findings were replayed through the corrected governor and reclassified as confirmations or advisories where deterministic Sergeant had already proved the same root.",
+    "exact_fix_head": "b7b471bafadc062c95eae7a910a9a0702a8d8ed5",
+    "merged_fix": "3c6be1f063ac0f21f5519041b0f564bc59735833",
+    "retrospective_admission_proof_head": "8fae3921495ea8d0501f645a958878eb9ac81903",
+    "retrospective_proof_matrix": "CI, Main Review, Multiplatform Proof, Standalone Service Proof, Controlled Self-Learning Week 1 validation, Live GitHub Ingestion Proof, Reviewer Comparison Proof, Review Intelligence Proof, and Final Static Transfer Holdout passed.",
+    "external_review_disposition": "CodeRabbit selected the harvest files but the final incremental review was rate-limited; no completed new external review is claimed."
+  },
+  "authority": {
+    "promotion_mode": "owner_controlled_retrospective",
+    "accepted_by": "explicit_owner_instruction_to_inspect_and_add_proven_lessons",
+    "may_auto_promote": false,
+    "may_auto_merge": false,
+    "final_verdict": "Sergeant"
+  },
+  "promotion_gate": {
+    "existing_model_free_implementation_verified": true,
+    "focused_regressions_present": true,
+    "clean_controls_present": true,
+    "historical_exact_head_proof_present": true,
+    "retrospective_harvest_exact_head_pending": false
+  }
+}

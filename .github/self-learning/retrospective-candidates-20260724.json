@@ -1,0 +1,169 @@
+{
+  "schema_version": "sergeant.retrospective-learning-candidates.v1",
+  "created_from_main": "747cbcca0f9b0626212bcbbb2646ff17305e7e70",
+  "automatic_promotions": 0,
+  "automatic_merges": 0,
+  "candidates": [
+    {
+      "candidate_id": "pr107-editor-invalid-fallback",
+      "source_pr": 107,
+      "source_prs": [106, 107],
+      "original_battle_pr": 106,
+      "reviewed_replacement_pr": 107,
+      "lineage_note": "PR 106 exposed the original immutable target but was invalidated after branch movement; PR 107 reviewed independently verified identical target bytes at the same exact head.",
+      "source_head": "ea8f1590fc6fb7c27eb363eb854f173678c60b00",
+      "path": "battlefield/model-free-core-round-1/src/configurator/customEditor.ts",
+      "status": "needs_lineage",
+      "officer": "Auditor",
+      "candidate_rule": "A parser failure must not be converted to an empty valid model when downstream editing or saving can overwrite the original document. Preserve the last valid state or expose an explicit invalid state.",
+      "evidence": "CodeRabbit major finding on the immutable model-free battle target reviewed through replacement PR 107.",
+      "missing_gates": [
+        "verified fixing commit",
+        "positive and clean controls",
+        "unrelated repository or language transfer",
+        "hidden holdout",
+        "canonical detector integration"
+      ]
+    },
+    {
+      "candidate_id": "pr107-keystroke-expensive-render",
+      "source_pr": 107,
+      "source_prs": [106, 107],
+      "original_battle_pr": 106,
+      "reviewed_replacement_pr": 107,
+      "lineage_note": "PR 106 exposed the original immutable target but was invalidated after branch movement; PR 107 reviewed independently verified identical target bytes at the same exact head.",
+      "source_head": "ea8f1590fc6fb7c27eb363eb854f173678c60b00",
+      "path": "battlefield/model-free-core-round-1/src/configurator/customEditor.ts",
+      "status": "needs_lineage",
+      "officer": "Mechanic",
+      "candidate_rule": "A text-change handler must not synchronously reload expensive project context or catalogues on every keystroke; cache, invalidate on source changes, or debounce the render path.",
+      "evidence": "CodeRabbit major performance finding on the immutable model-free battle target reviewed through replacement PR 107.",
+      "missing_gates": [
+        "verified fixing commit",
+        "measured or structurally proven expensive source-to-handler path",
+        "clean controls for cheap per-keystroke rendering",
+        "unrelated transfer",
+        "hidden holdout"
+      ]
+    },
+    {
+      "candidate_id": "pr108-frozen-sha-enforcement",
+      "source_pr": 108,
+      "source_head": "0c4104da6bb2104608dfc4a0066896bdbb47296f",
+      "path": ".github/workflows/model-assisted-battle-round-1.yml",
+      "status": "needs_lineage",
+      "officer": "Judge",
+      "candidate_rule": "A frozen evidence workflow must compare its actual base and head SHAs with the approved immutable values before diffing, scoring, or certifying target bytes.",
+      "evidence": "CodeRabbit major integrity finding; the workflow recorded event SHAs but did not enforce them.",
+      "missing_gates": [
+        "verified fixing commit",
+        "workflow positive and clean controls",
+        "transfer to another frozen workflow",
+        "hidden holdout"
+      ]
+    },
+    {
+      "candidate_id": "pr108-incomplete-council-success-gate",
+      "source_pr": 108,
+      "source_head": "0c4104da6bb2104608dfc4a0066896bdbb47296f",
+      "path": ".github/workflows/model-assisted-battle-round-1.yml",
+      "status": "needs_lineage",
+      "officer": "Judge",
+      "candidate_rule": "A council proof cannot pass from model-presence alone. It must require a successful review exit, complete council, zero provider errors, and zero unresolved final gaps.",
+      "evidence": "CodeRabbit major finding on the final validation block.",
+      "missing_gates": [
+        "verified fixing commit",
+        "negative controls for incomplete and errored runs",
+        "canonical workflow detector or validator",
+        "hidden holdout"
+      ]
+    },
+    {
+      "candidate_id": "pr108-null-guard-before-side-effects",
+      "source_pr": 108,
+      "source_head": "0c4104da6bb2104608dfc4a0066896bdbb47296f",
+      "path": "battlefield/model-assisted-core-round-1/app/src/main/java/com/almothafar/simplebatterynotifier/receiver/BatteryLevelReceiver.java",
+      "status": "needs_lineage",
+      "officer": "Medic",
+      "candidate_rule": "Validate a nullable reading before passing it to rate tracking, persistence, notification, or any other downstream side effect.",
+      "evidence": "CodeRabbit major stability finding: downstream calls occurred before the null guard.",
+      "missing_gates": [
+        "verified fixing commit",
+        "Java and unrelated-language controls",
+        "clean non-null path",
+        "hidden holdout"
+      ]
+    },
+    {
+      "candidate_id": "pr108-atomic-check-update",
+      "source_pr": 108,
+      "source_head": "0c4104da6bb2104608dfc4a0066896bdbb47296f",
+      "path": "battlefield/model-assisted-core-round-1/app/src/main/java/com/almothafar/simplebatterynotifier/receiver/PowerConnectionReceiver.java",
+      "status": "needs_lineage",
+      "officer": "Mechanic",
+      "candidate_rule": "A duplicate-state comparison and state update must execute as one atomic operation; synchronizing only the setter does not protect the preceding read/check.",
+      "evidence": "CodeRabbit major concurrency finding on a check-then-synchronized-write sequence.",
+      "missing_gates": [
+        "verified fixing commit",
+        "positive concurrency controls",
+        "clean atomic helper controls",
+        "unrelated transfer",
+        "hidden holdout"
+      ]
+    },
+    {
+      "candidate_id": "pr133-mobile-critical-control-proof",
+      "source_pr": 133,
+      "source_head": "82ba6cfa5a20217b8607a24f9ae029cae0588a2d",
+      "target_repository": "Hunter preview evidence",
+      "target_ref": "8f50b90dc082b056bbfb007322e9c7bb4a904fd8",
+      "status": "benchmark_only",
+      "officer": "Inspector",
+      "candidate_rule": "Critical mobile controls must be visible, non-overlapping, reachable, and behaviorally exercised at the target viewport; source presence and desktop rendering are insufficient proof.",
+      "evidence": "390x844 proof covered the notification bell, search/profile overlap, duplicate headers, sidebar opening, and notification preview behavior.",
+      "missing_gates": [
+        "verified fixing ref",
+        "replayed fixed control",
+        "portable UI proof contract",
+        "unrelated application transfer"
+      ]
+    }
+  ],
+  "rejected_or_duplicate_sources": [
+    {
+      "prs": [141],
+      "disposition": "duplicate",
+      "reason": "Governed cross-repository intake landed through PR 142 and is present on main."
+    },
+    {
+      "prs": [105],
+      "disposition": "superseded",
+      "reason": "Permanent deterministic officer formation and tests landed through later council and campaign integration."
+    },
+    {
+      "prs": [65, 47],
+      "disposition": "superseded",
+      "reason": "Current Command Center, package, README, and release state are newer and preserve no unique defect lineage from these branches."
+    },
+    {
+      "prs": [132],
+      "disposition": "design_reference",
+      "reason": "The stale release candidate must be rebuilt from current main and is not accepted training truth."
+    },
+    {
+      "prs": [124, 125, 126, 127, 128],
+      "disposition": "accepted_via_pr_130",
+      "reason": "Verified CodeRabbit integrity findings were repaired, tested, and merged; the consolidated accepted lesson is recorded separately."
+    },
+    {
+      "prs": [118, 117, 116, 115, 114, 113],
+      "disposition": "evidence_only",
+      "reason": "Trigger and learned-closure lanes preserve immutable campaign evidence; no separate product lesson remains beyond the integrated transfer modules."
+    },
+    {
+      "prs": [104, 97],
+      "disposition": "observer_only",
+      "reason": "The branches observe or preserve comparison/certification evidence and introduce no new transferable defect mechanism."
+    }
+  ]
+}
