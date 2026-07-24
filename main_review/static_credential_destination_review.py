@@ -91,7 +91,7 @@ def _credential_destination_findings(path: str, text: str) -> list[dict[str, Any
     if sink is None:
         return []
     broad = _first(_BROAD_DESTINATION_CHECKS, text)
-    if broad is None or _has_exact_destination_binding(text, suffix):
+    if broad is None or _has_exact_destination_binding(text[: sink.start()], suffix):
         return []
 
     sink_line = _line(text, sink.start())
