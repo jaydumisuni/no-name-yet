@@ -1,7 +1,7 @@
 {
   "schema_version": "sergeant.accepted-lesson.v1",
   "lesson_id": "preserve-before-delete-20260724",
-  "status": "promotion_ready",
+  "status": "accepted",
   "source": {
     "repository": "jaydumisuni/Sergeant",
     "evidence_pr": 135,
@@ -41,7 +41,10 @@
     ],
     "historical_result": "29 of 29 preserved artifacts matched recorded size and digest while cleanup and workflow-run deletion remained unauthorized.",
     "exact_fix_head": "e6413dcde505e42d5c4ae62653ceb0d9e3755591",
-    "merged_fix": "4ec6553ef287a660e923b8d9b5802e506907c37b"
+    "merged_fix": "4ec6553ef287a660e923b8d9b5802e506907c37b",
+    "retrospective_admission_proof_head": "8fae3921495ea8d0501f645a958878eb9ac81903",
+    "retrospective_proof_matrix": "CI, Main Review, Multiplatform Proof, Standalone Service Proof, Controlled Self-Learning Week 1 validation, Live GitHub Ingestion Proof, Reviewer Comparison Proof, Review Intelligence Proof, and Final Static Transfer Holdout passed.",
+    "external_review_disposition": "CodeRabbit selected the harvest files but the final incremental review was rate-limited; no completed new external review is claimed."
   },
   "authority": {
     "promotion_mode": "owner_controlled_retrospective",
@@ -57,6 +60,6 @@
     "clean_controls_present": true,
     "durable_recovery_replay_present": true,
     "historical_exact_head_proof_present": true,
-    "retrospective_harvest_exact_head_pending": true
+    "retrospective_harvest_exact_head_pending": false
   }
 }
