@@ -1,0 +1,63 @@
+{
+  "schema_version": "sergeant.controlled-learning-round-record.v1",
+  "round_id": "week-1-run-50",
+  "day": 6,
+  "authority_head": "f694d17afb54fba7d01a3c6777a81c4e4752bf3d",
+  "target_branch": "train/controlled-learning-week-1-continuation",
+  "github_run_id": 30075431647,
+  "counted_as_completed_round": false,
+  "integrity_status": "replay_rejected",
+  "replay_reason": "All three selected case IDs were already reviewed in week-1-run-46, so this attempt is not a fresh controlled multilingual round.",
+  "selected_cases": [
+    {
+      "case_id": "learn-61f8d18b9773",
+      "repository": "bitcoin/bitcoin",
+      "language": "cpp",
+      "previous_round": "week-1-run-46",
+      "state": "rejected"
+    },
+    {
+      "case_id": "learn-c5fab3ee3f29",
+      "repository": "nim-lang/nimble",
+      "language": "nim",
+      "previous_round": "week-1-run-46",
+      "state": "rejected"
+    },
+    {
+      "case_id": "learn-d79233a4196f",
+      "repository": "rubocop/rubocop",
+      "language": "ruby",
+      "previous_round": "week-1-run-46",
+      "state": "council_complete"
+    }
+  ],
+  "state_counts": {
+    "council_complete": 1,
+    "rejected": 2
+  },
+  "planned_cases": 3,
+  "worker_error_cases": 0,
+  "proposal_count": 1,
+  "accepted_proposals": 0,
+  "automatic_promotions": 0,
+  "automatic_merges": 0,
+  "proposal_disposition": "blocked_as_duplicate_training_evidence",
+  "artifact": {
+    "github_actions_artifact_id": 8589725061,
+    "name": "controlled-self-learning-week-1-run-50",
+    "size_bytes": 285630,
+    "sha256": "6738da376846b44a3f7e67a59332d6093b50b2d9d8c17f118c168b066a97e246",
+    "google_drive_file_id": "16yjnmHmGTvo_gOAntWoQYalLnTt-eWj2",
+    "google_drive_size_bytes": 285630,
+    "google_drive_sha256": "6738da376846b44a3f7e67a59332d6093b50b2d9d8c17f118c168b066a97e246",
+    "byte_identical_replay_verified": true,
+    "content_replay_verified": true
+  },
+  "authority": {
+    "normal_review_models_enabled": false,
+    "promotion_mode": "owner_controlled",
+    "automatic_promotion_authority": false,
+    "automatic_merge_authority": false
+  },
+  "next_gate": "Rotate the candidate pool away from previously reviewed repositories, then require a fresh START_CONTROLLED_SELF_LEARNING authorization for the replacement day-6 round."
+}
