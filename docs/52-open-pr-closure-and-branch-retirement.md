@@ -23,7 +23,7 @@ Closing and preserving history are not sufficient by themselves. Before branch d
 - **#133** Hunter mobile header/notification evidence — preserved as a benchmark-only learning candidate.
 - **#128, #127, #126, #125, #124** CodeRabbit transfer battle lanes — their verified integrity findings were repaired through PR #130 and are preserved in `.github/self-learning/lessons/review-evidence-integrity-20260724.json`.
 - **#118, #117, #116, #115, #114, #113** isolated transfer evidence and learned-closure lanes.
-- **#106/#107** immutable model-free battle round 1 — useful editor findings are retained as `needs_lineage` candidates.
+- **#106/#107** model-free battle round 1 — PR #106 was the original immutable target and was invalidated after its branch moved; PR #107 was the replacement that reviewed independently verified identical target bytes at exact head `ea8f1590fc6fb7c27eb363eb854f173678c60b00`. The useful editor findings are retained as `needs_lineage` candidates with both PRs recorded.
 - **#108** model-assisted battle — useful workflow, null-ordering, and atomicity findings are retained as `needs_lineage` candidates.
 - **#104** PR #103 reviewer-comparison observer.
 - **#97** certified-roster benchmark observer.
