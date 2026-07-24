@@ -59,7 +59,13 @@ def test_unproven_findings_remain_candidates_or_benchmarks() -> None:
     assert all(item.get("missing_gates") for item in candidates)
 
     by_id = {item["candidate_id"]: item for item in candidates}
-    assert by_id["pr107-editor-invalid-fallback"]["source_pr"] == 107
+    invalid_fallback = by_id["pr107-editor-invalid-fallback"]
+    expensive_render = by_id["pr107-keystroke-expensive-render"]
+    assert invalid_fallback["source_pr"] == 107
+    assert invalid_fallback["source_prs"] == [106, 107]
+    assert invalid_fallback["original_battle_pr"] == 106
+    assert invalid_fallback["reviewed_replacement_pr"] == 107
+    assert expensive_render["source_prs"] == [106, 107]
     assert by_id["pr108-frozen-sha-enforcement"]["source_pr"] == 108
     assert by_id["pr133-mobile-critical-control-proof"]["status"] == "benchmark_only"
 
@@ -80,6 +86,8 @@ def test_harvest_accounts_for_every_branch_retirement_pr_group() -> None:
         "#104, #97",
     ):
         assert token in text
+    assert "PR #106 was the original invalidated battle" in text
+    assert "PR #107 reviewed identical target bytes" in text
     assert "Closing a pull request preserves its Git history, but preservation alone is not learning." in text
     assert "Automatic promotion and automatic merge remain forbidden." in text
 
